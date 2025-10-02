@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import asyncio
 from collections import deque
 from contextlib import asynccontextmanager
@@ -12,6 +13,7 @@ import httpx
 try:  # pragma: no cover - optional dependency
     from prometheus_client import Counter, Histogram
 except ModuleNotFoundError:  # pragma: no cover - fallback in tests
+
     class _NoopMetric:
         def labels(self, *args: Any, **kwargs: Any) -> "_NoopMetric":
             return self
@@ -27,6 +29,7 @@ except ModuleNotFoundError:  # pragma: no cover - fallback in tests
 
     def Histogram(*_args: Any, **_kwargs: Any) -> _NoopMetric:  # type: ignore
         return _NoopMetric()
+
 
 HTTP_REQUESTS = Counter(
     "ingest_http_requests_total",
@@ -131,10 +134,23 @@ class AsyncHttpClient:
                 raise last_error
             raise RuntimeError("Retry loop exhausted")
 
-    async def get(self, url: str, *, params: Mapping[str, Any] | None = None, headers: Mapping[str, str] | None = None) -> httpx.Response:
+    async def get(
+        self,
+        url: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> httpx.Response:
         return await self._execute("GET", url, params=params, headers=headers)
 
-    async def post(self, url: str, *, data: Any | None = None, json: Any | None = None, headers: Mapping[str, str] | None = None) -> httpx.Response:
+    async def post(
+        self,
+        url: str,
+        *,
+        data: Any | None = None,
+        json: Any | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> httpx.Response:
         return await self._execute("POST", url, data=data, json=json, headers=headers)
 
     @asynccontextmanager
@@ -148,14 +164,32 @@ class AsyncHttpClient:
                 response.raise_for_status()
                 yield response
 
-    async def get_json(self, url: str, *, params: Mapping[str, Any] | None = None, headers: Mapping[str, str] | None = None) -> Any:
+    async def get_json(
+        self,
+        url: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> Any:
         response = await self.get(url, params=params, headers=headers)
         return response.json()
 
-    async def get_text(self, url: str, *, params: Mapping[str, Any] | None = None, headers: Mapping[str, str] | None = None) -> str:
+    async def get_text(
+        self,
+        url: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> str:
         response = await self.get(url, params=params, headers=headers)
         return response.text
 
-    async def get_bytes(self, url: str, *, params: Mapping[str, Any] | None = None, headers: Mapping[str, str] | None = None) -> bytes:
+    async def get_bytes(
+        self,
+        url: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> bytes:
         response = await self.get(url, params=params, headers=headers)
         return response.content

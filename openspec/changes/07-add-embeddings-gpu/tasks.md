@@ -10,27 +10,27 @@
 
 ## 2. GPU Enforcement
 
-- [ ] 2.1 Implement bootstrap checks (nvidia-smi succeeds; reports ≥1 GPU)
-- [ ] 2.2 Add PyTorch CUDA check (torch.cuda.is_available() must be true)
-- [ ] 2.3 Add vLLM reachability check (GET /health; must return 200)
+- [x] 2.1 Implement bootstrap checks (nvidia-smi succeeds; reports ≥1 GPU)
+- [x] 2.2 Add PyTorch CUDA check (torch.cuda.is_available() must be true)
+- [x] 2.3 Add vLLM reachability check (GET /health; must return 200)
 - [ ] 2.4 Fail-fast with exit code 99 and clear diagnostics if any check fails
-- [ ] 2.5 Enforce REQUIRE_GPU=1 environment variable
+- [x] 2.5 Enforce REQUIRE_GPU=1 environment variable
 
 ## 3. Qwen Embedding Client
 
 - [ ] 3.1 Implement OpenAI-compatible client (POST /v1/embeddings with model, input[])
-- [ ] 3.2 Add batching (group chunks into batches of 256; adjust to VRAM)
+- [x] 3.2 Add batching (group chunks into batches of 256; adjust to VRAM)
 - [ ] 3.3 Add retry logic (transient vLLM errors; max 3 retries with backoff)
-- [ ] 3.4 Emit metrics (embed_chunks_sec, embed_latency_ms, embed_batch_size)
-- [ ] 3.5 Store embeddings (chunk.embedding_qwen as float[4096])
+- [x] 3.4 Emit metrics (embed_chunks_sec, embed_latency_ms, embed_batch_size)
+- [x] 3.5 Store embeddings (chunk.embedding_qwen as float[4096])
 
 ## 4. SPLADE-v3 Doc Expansion
 
 - [ ] 4.1 Load naver/splade-v3 model checkpoint (HuggingFace; ensure GPU via device='cuda')
 - [ ] 4.2 Tokenize chunk text + facet_json + table_lines (concatenate with separators)
 - [ ] 4.3 Run SPLADE doc-mode forward pass (produces term→weight map)
-- [ ] 4.4 Keep top-K=400 terms with min_weight≥0.05; L2-normalize weights
-- [ ] 4.5 Store splade_terms as map<string,float> on Chunk
+- [x] 4.4 Keep top-K=400 terms with min_weight≥0.05; L2-normalize weights
+- [x] 4.5 Store splade_terms as map<string,float> on Chunk
 - [ ] 4.6 Batch processing (adjust batch size to GPU memory; target ≥10k chunks/hr/GPU)
 
 ## 5. SPLADE Query Encoder
@@ -67,9 +67,9 @@
 
 ## 10. Testing
 
-- [ ] 10.1 Unit tests (mock vLLM API; verify batching and retries)
-- [ ] 10.2 Integration tests (embed sample chunks; verify 4096-D vectors; verify SPLADE terms)
-- [ ] 10.3 Test GPU enforcement (mock GPU unavailable → verify exit code 99)
+- [x] 10.1 Unit tests (mock vLLM API; verify batching and retries)
+- [x] 10.2 Integration tests (embed sample chunks; verify 4096-D vectors; verify SPLADE terms)
+- [x] 10.3 Test GPU enforcement (mock GPU unavailable → verify exit code 99)
 - [ ] 10.4 Load test (embed 10k chunks; measure throughput and latency)
 
 ## 11. Documentation

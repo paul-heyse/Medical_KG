@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Medical Concept",
+  "type": "object",
+  "required": [
+    "iri",
+    "ontology",
+    "family",
+    "label",
+    "preferred_term",
+    "synonyms",
+    "codes",
+    "xrefs",
+    "parents",
+    "ancestors",
+    "attributes",
+    "license_bucket",
+    "provenance"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "iri": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^https?://"
+    },
+    "ontology": {
+      "type": "string",
+      "minLength": 1
+    },
+    "family": {
+      "type": "string",
+      "enum": [
+        "condition",
+        "phenotype",
+        "lab",
+        "drug",
+        "substance",
+        "outcome",
+        "adverse_event",
+        "device",
+        "literature_id"
+      ]
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1
+    },
+    "preferred_term": {
+      "type": "string",
+      "minLength": 1
+    },
+    "definition": {
+      "type": ["string", "null"]
+    },
+    "synonyms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["value", "type"],
+        "additionalProperties": false,
+        "properties": {
+          "value": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "narrow",
+              "broad",
+              "related",
+              "brand",
+              "abbrev"
+            ]
+          }
+        }
+      },
+      "uniqueItems": true
+    },
+    "codes": {
+      "type": "object",
+      "patternProperties": {
+        "^[A-Za-z0-9_.-]+$": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "xrefs": {
+      "type": "object",
+      "patternProperties": {
+        "^[A-Za-z0-9_.-]+$": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "parents": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^https?://"
+      },
+      "uniqueItems": true
+    },
+    "ancestors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^https?://"
+      },
+      "uniqueItems": true
+    },
+    "same_as": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^https?://"
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "attributes": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "semantic_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "retired", "deprecated"],
+      "default": "active"
+    },
+    "retired_date": {
+      "type": ["string", "null"],
+      "format": "date"
+    },
+    "embedding_qwen": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "number"
+      }
+    },
+    "splade_terms": {
+      "type": ["object", "null"],
+      "patternProperties": {
+        "^[A-Za-z0-9_.-]+$": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "release": {
+      "type": "object",
+      "required": ["version", "released_at"],
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "released_at": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "license_bucket": {
+      "type": "string",
+      "enum": ["open", "permissive", "restricted", "proprietary"]
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["source", "loader_version"],
+      "additionalProperties": true,
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "loader_version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+<document>
+  <setid root="11111111-2222-3333-4444-555555555555" />
+  <effectiveTime value="20240101" />
+  <title>DrugY Injection</title>
+  <section>
+    <code code="34067-9" />
+    <title>INDICATIONS AND USAGE</title>
+    <text>This drug is indicated for...</text>
+  </section>
+</document>

@@ -1,0 +1,6 @@
+{
+  "code": "1A00",
+  "title": {"@value": "Cholera"},
+  "definition": {"@value": "An infection"},
+  "browserUrl": "https://icd.who.int/browse11/l-m/en#/http://id.who.int/icd/entity/10001123"
+}

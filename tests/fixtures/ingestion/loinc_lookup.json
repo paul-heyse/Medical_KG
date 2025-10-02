@@ -1,0 +1,9 @@
+{
+  "parameter": {
+    "code": "4548-4"
+  },
+  "display": "Hematocrit [Volume Fraction] of Blood",
+  "property": "Frac",
+  "system": "Blood",
+  "method": "Automated"
+}

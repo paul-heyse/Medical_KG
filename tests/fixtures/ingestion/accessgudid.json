@@ -1,0 +1,9 @@
+{
+  "udi": {
+    "deviceIdentifier": "00380740000011",
+    "brandName": "DeviceX",
+    "versionOrModelNumber": "Model1",
+    "companyName": "DeviceCorp",
+    "deviceDescription": "A medical device"
+  }
+}

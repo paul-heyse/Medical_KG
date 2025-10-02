@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from collections.abc import AsyncIterator
 from typing import Any
-
-from bs4 import BeautifulSoup
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
@@ -77,25 +76,26 @@ class PmcAdapter(HttpAdapter):
     async def fetch(self, set_spec: str, *, metadata_prefix: str = "oai_dc") -> AsyncIterator[Any]:
         params = {"verb": "ListRecords", "set": set_spec, "metadataPrefix": metadata_prefix}
         xml = await self.fetch_text(PMC_LIST_URL, params=params)
-        soup = BeautifulSoup(xml, "xml")
-        for record in soup.find_all("record"):
+        root = ET.fromstring(xml)
+        for record in root.findall(".//record"):
             yield record
 
     def parse(self, raw: Any) -> Document:
         header = raw.find("header")
-        identifier = header.find("identifier").text  # type: ignore[assignment]
-        pmcid = identifier.split(":")[-1]
+        identifier_text = header.findtext("identifier", default="") if header is not None else ""
+        pmcid = identifier_text.split(":")[-1] if identifier_text else "unknown"
         metadata = raw.find("metadata")
-        title = metadata.find("title").text if metadata else ""
-        description = metadata.find("description").text if metadata else ""
+        title = metadata.findtext("title", default="") if metadata is not None else ""
+        description = metadata.findtext("description", default="") if metadata is not None else ""
         payload = {
             "pmcid": pmcid,
             "title": normalize_text(title),
             "description": normalize_text(description),
         }
         content = canonical_json(payload)
-        doc_id = self.build_doc_id(identifier=pmcid, version=header.find("datestamp").text, content=content)  # type: ignore[arg-type]
-        meta = {"title": payload["title"], "datestamp": header.find("datestamp").text}
+        datestamp = header.findtext("datestamp", default="unknown") if header is not None else "unknown"
+        doc_id = self.build_doc_id(identifier=pmcid, version=datestamp, content=content)
+        meta = {"title": payload["title"], "datestamp": datestamp}
         return Document(doc_id=doc_id, source=self.source, content=payload["description"] or payload["title"], metadata=meta, raw=payload)
 
     def validate(self, document: Document) -> None:

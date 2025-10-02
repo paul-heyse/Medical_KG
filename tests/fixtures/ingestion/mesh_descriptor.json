@@ -1,0 +1,19 @@
+{
+  "descriptor": {
+    "descriptorUI": "D012345",
+    "descriptorName": {"string": "Sepsis"},
+    "conceptList": {
+      "concept": [
+        {
+          "conceptUI": "M123",
+          "termList": {
+            "term": [
+              {"string": "Sepsis"},
+              {"string": "Septicemia"}
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

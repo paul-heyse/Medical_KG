@@ -1,0 +1,13 @@
+{
+  "result": {
+    "uids": ["12345678"],
+    "12345678": {
+      "uid": "12345678",
+      "title": "Lactate Guided Therapy",
+      "elocationid": "Lactate normalization in sepsis",
+      "pubdate": "2024 Jan",
+      "fulljournalname": "Critical Care",
+      "sortpubdate": "2024/01/01"
+    }
+  }
+}

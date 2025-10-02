@@ -1,11 +1,9 @@
-from __future__ import annotations
-
 import asyncio
 from typing import Any
 
-import httpx
 import pytest
 
+import httpx
 from Medical_KG.ingestion.http_client import AsyncHttpClient, RateLimit
 
 

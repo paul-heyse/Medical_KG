@@ -97,11 +97,36 @@
     },
     "reranker": {
       "enabled": true,
-      "top_n": 50
+      "top_n": 50,
+      "slo_ms": 1200.0
     },
     "neighbor_merge": {
       "min_cosine": 0.82,
       "max_tokens": 1800
+    },
+    "indices": {
+      "bm25": "chunks_v1",
+      "splade": "chunks_splade_v1",
+      "dense": "chunk_qwen_idx",
+      "paragraph": "paragraphs_v1",
+      "section": "sections_v1"
+    },
+    "top_k": {
+      "default": 20,
+      "max": 200
+    },
+    "cache": {
+      "query_seconds": 60,
+      "embedding_seconds": 60,
+      "expansion_seconds": 60
+    },
+    "multi_granularity": {
+      "enabled": true,
+      "indexes": {
+        "chunk": "chunks_v1",
+        "paragraph": "paragraphs_v1",
+        "section": "sections_v1"
+      }
     }
   },
   "extraction": {
@@ -223,5 +248,17 @@
   },
   "licensing": {
     "policy_path": "policy.yaml"
+  },
+  "pipelines": {
+    "pdf": {
+      "ledger_path": "./data/ledger.jsonl",
+      "artifact_dir": "./data/mineru",
+      "require_gpu": true
+    }
+  },
+  "entity_linking": {
+    "acceptance_threshold": 0.7,
+    "rrf_k": 60,
+    "max_batch": 300
   }
 }

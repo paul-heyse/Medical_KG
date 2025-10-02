@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from Medical_KG.briefing import router as briefing_router
 from Medical_KG.config.manager import ConfigError, ConfigManager
 
 _security = HTTPBearer(auto_error=False)
@@ -30,6 +31,8 @@ def create_app(manager: ConfigManager | None = None) -> FastAPI:
                 status_code = status.HTTP_400_BAD_REQUEST
             raise HTTPException(status_code=status_code, detail=message) from exc
         return {"config_version": manager.version.raw, "hash": manager.version.hash}
+
+    app.include_router(briefing_router)
 
     return app
 

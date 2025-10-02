@@ -1,0 +1,10 @@
+{
+  "value": [
+    {
+      "Indicator": "Life expectancy",
+      "Value": "72.3",
+      "SpatialDim": "USA",
+      "TimeDim": "2022"
+    }
+  ]
+}

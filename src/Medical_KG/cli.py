@@ -2,12 +2,17 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import sys
 from pathlib import Path
 from typing import Optional
 
 from Medical_KG.config.manager import ConfigError, ConfigManager, ConfigValidator, mask_secrets
+from Medical_KG.ingestion.adapters.base import AdapterContext
+from Medical_KG.ingestion.http_client import AsyncHttpClient
+from Medical_KG.ingestion.ledger import IngestionLedger
+from Medical_KG.ingestion.registry import available_sources, get_adapter
 
 
 def _load_manager(config_dir: Optional[Path]) -> ConfigManager:
@@ -56,6 +61,38 @@ def _command_policy(args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_ingest(args: argparse.Namespace) -> int:
+    if args.source not in available_sources():
+        print(f"Unknown source '{args.source}'. Known sources: {', '.join(available_sources())}")
+        return 1
+
+    ledger = IngestionLedger(args.ledger)
+    context = AdapterContext(ledger=ledger)
+    client = AsyncHttpClient()
+    adapter = get_adapter(args.source, context, client)
+
+    async def _run() -> None:
+        try:
+            if args.batch:
+                with args.batch.open() as handle:
+                    for line in handle:
+                        if not line.strip():
+                            continue
+                        params = json.loads(line)
+                        results = await adapter.run(**params)
+                        if args.auto:
+                            print(json.dumps([res.document.doc_id for res in results]))
+            else:
+                results = await adapter.run()
+                if args.auto:
+                    print(json.dumps([res.document.doc_id for res in results]))
+        finally:
+            await client.aclose()
+
+    asyncio.run(_run())
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="med", description="Medical KG command-line tools")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -77,6 +114,18 @@ def build_parser() -> argparse.ArgumentParser:
     policy = config_subparsers.add_parser("policy", help="Display licensing policy")
     policy.add_argument("--config-dir", type=Path, default=None, help="Config directory")
     policy.set_defaults(func=_command_policy)
+
+    ingest = subparsers.add_parser("ingest", help="Run data ingestion for a source")
+    ingest.add_argument("source", choices=available_sources(), help="Source identifier")
+    ingest.add_argument("--batch", type=Path, default=None, help="NDJSON batch parameters")
+    ingest.add_argument("--auto", action="store_true", help="Emit doc IDs for downstream automation")
+    ingest.add_argument(
+        "--ledger",
+        type=Path,
+        default=Path(".ingest-ledger.jsonl"),
+        help="Path to ingestion ledger JSONL",
+    )
+    ingest.set_defaults(func=_command_ingest)
 
     return parser
 

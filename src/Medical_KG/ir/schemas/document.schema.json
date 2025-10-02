@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://medical-kg.dev/schemas/document.v1.schema.json",
+  "type": "object",
+  "required": ["doc_id", "source", "uri", "language", "text", "raw_text", "blocks", "tables", "span_map"],
+  "properties": {
+    "doc_id": {"type": "string"},
+    "source": {"type": "string"},
+    "uri": {"type": "string"},
+    "language": {"type": "string", "pattern": "^[a-z]{2}$"},
+    "text": {"type": "string"},
+    "raw_text": {"type": "string"},
+    "blocks": {
+      "type": "array",
+      "items": {"$ref": "block.schema.json"}
+    },
+    "tables": {
+      "type": "array",
+      "items": {"$ref": "table.schema.json"}
+    },
+    "span_map": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["raw_start", "raw_end", "canonical_start", "canonical_end", "transform"],
+        "properties": {
+          "raw_start": {"type": "integer", "minimum": 0},
+          "raw_end": {"type": "integer", "minimum": 0},
+          "canonical_start": {"type": "integer", "minimum": 0},
+          "canonical_end": {"type": "integer", "minimum": 0},
+          "transform": {"type": "string"}
+        }
+      }
+    },
+    "provenance": {"type": "object"}
+  },
+  "additionalProperties": false
+}

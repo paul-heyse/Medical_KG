@@ -1,0 +1,2 @@
+[console_scripts]
+med = Medical_KG.cli:main

@@ -2,30 +2,30 @@
 
 ## 1. Domain Profiles & Configuration
 
-- [ ] 1.1 Define YAML profiles (IMRaD, Registry, SPL, Guideline) with target_tokens, overlap_pct, tau_coh
-- [ ] 1.2 Implement profile selector (based on Document.source_system and media_type)
-- [ ] 1.3 Add per-profile boundary rules (hard starts: heading depth change, registry section change, SPL LOINC change)
+- [x] 1.1 Define YAML profiles (IMRaD, Registry, SPL, Guideline) with target_tokens, overlap_pct, tau_coh
+- [x] 1.2 Implement profile selector (based on Document.source_system and media_type)
+- [x] 1.3 Add per-profile boundary rules (hard starts: heading depth change, registry section change, SPL LOINC change)
 
 ## 2. Clinical Intent Tagger
 
-- [ ] 2.1 Implement keyword heuristics for strong cues ("Inclusion Criteria", "Primary Outcome", "Adverse Events")
+- [x] 2.1 Implement keyword heuristics for strong cues ("Inclusion Criteria", "Primary Outcome", "Adverse Events")
 - [ ] 2.2 Train light classifier on Qwen sentence embeddings (weak supervision from keywords)
-- [ ] 2.3 Tag sentences with clinical intent (pico_*, adverse_event, dose, eligibility, recommendation, lab_value)
-- [ ] 2.4 Override with section-based hints (e.g., SPL Adverse Reactions section → adverse_event)
+- [x] 2.3 Tag sentences with clinical intent (pico_*, adverse_event, dose, eligibility, recommendation, lab_value)
+- [x] 2.4 Override with section-based hints (e.g., SPL Adverse Reactions section → adverse_event)
 
 ## 3. Coherence-Based Chunker
 
-- [ ] 3.1 Implement sentence splitting (spaCy or nltk)
+- [x] 3.1 Implement sentence splitting (spaCy or nltk)
 - [ ] 3.2 Compute sentence embeddings via vLLM (Qwen3-Embedding-8B; batch API)
-- [ ] 3.3 Implement chunking algorithm (accumulate sentences; check coherence drop, token limit, intent switch)
-- [ ] 3.4 Add overlap strategy (carry forward last 15% sentences unless boundary aligns with heading)
-- [ ] 3.5 Enforce hard boundaries (heading, section, table start, eligibility kind switch)
+- [x] 3.3 Implement chunking algorithm (accumulate sentences; check coherence drop, token limit, intent switch)
+- [x] 3.4 Add overlap strategy (carry forward last 15% sentences unless boundary aligns with heading)
+- [x] 3.5 Enforce hard boundaries (heading, section, table start, eligibility kind switch)
 
 ## 4. Table Atomic Chunking
 
-- [ ] 4.1 Treat tables as atomic chunks (never split rows)
+- [x] 4.1 Treat tables as atomic chunks (never split rows)
 - [ ] 4.2 Generate table_digest via LLM (scope, metrics, units, arms, deltas) ≤200 tokens
-- [ ] 4.3 Store table_html + table_digest in Chunk meta
+- [x] 4.3 Store table_html + table_digest in Chunk meta
 
 ## 5. Guardrails & Special Cases
 
@@ -36,10 +36,10 @@
 
 ## 6. Facet Summary Generation
 
-- [ ] 6.1 Detect dominant intent per chunk (majority vote of sentence tags)
-- [ ] 6.2 Route to appropriate facet extractor (LLM with strict JSON schema)
-- [ ] 6.3 Validate facet JSON (schema + token budget ≤120)
-- [ ] 6.4 Store facet_json + facet_type on Chunk
+- [x] 6.1 Detect dominant intent per chunk (majority vote of sentence tags)
+- [x] 6.2 Route to appropriate facet extractor (LLM with strict JSON schema)
+- [x] 6.3 Validate facet JSON (schema + token budget ≤120)
+- [x] 6.4 Store facet_json + facet_type on Chunk
 - [ ] 6.5 Compute facet embedding (Qwen) if enabled
 
 ## 7. Embeddings & Indexing (GPU-only)
@@ -58,7 +58,7 @@
 
 ## 9. Evaluation & Robustness
 
-- [ ] 9.1 Compute intrinsic metrics (intra-coherence median, inter-coherence median, boundary alignment %)
+- [x] 9.1 Compute intrinsic metrics (intra-coherence median, inter-coherence median, boundary alignment %)
 - [ ] 9.2 Compute extrinsic metrics (Recall@20, nDCG@10 on dev set per intent)
 - [ ] 9.3 Implement neighbor-merge at query time (adjacent micro-chunks with min_cosine ≥ 0.60)
 - [ ] 9.4 Monitor size distribution (< 10% chunks < 120 tokens; 0 chunks > 1200 tokens)

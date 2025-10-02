@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Iterable, Iterator, TextIO
+from typing import Any, Iterator, TextIO
 
 
 class _JsonLinesWriter:

@@ -1,0 +1,541 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Medical KG Configuration",
+  "type": "object",
+  "required": [
+    "config_version",
+    "feature_flags",
+    "sources",
+    "chunking",
+    "embeddings",
+    "retrieval",
+    "extraction",
+    "kg",
+    "catalog",
+    "apis",
+    "observability",
+    "licensing"
+  ],
+  "properties": {
+    "config_version": {
+      "type": "string",
+      "description": "Semantic identifier for the configuration payload"
+    },
+    "feature_flags": {
+      "$ref": "#/definitions/featureFlags"
+    },
+    "sources": {
+      "type": "object",
+      "description": "Upstream data sources and credentials",
+      "additionalProperties": {
+        "$ref": "#/definitions/sourceConfig"
+      },
+      "minProperties": 1
+    },
+    "chunking": {
+      "type": "object",
+      "properties": {
+        "profiles": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/chunkingProfile"
+          },
+          "minProperties": 1
+        }
+      },
+      "required": ["profiles"],
+      "additionalProperties": false
+    },
+    "embeddings": {
+      "$ref": "#/definitions/embeddingsConfig"
+    },
+    "retrieval": {
+      "$ref": "#/definitions/retrievalConfig"
+    },
+    "extraction": {
+      "$ref": "#/definitions/extractionConfig"
+    },
+    "kg": {
+      "$ref": "#/definitions/kgConfig"
+    },
+    "catalog": {
+      "$ref": "#/definitions/catalogConfig"
+    },
+    "apis": {
+      "$ref": "#/definitions/apiConfig"
+    },
+    "observability": {
+      "$ref": "#/definitions/observabilityConfig"
+    },
+    "licensing": {
+      "$ref": "#/definitions/licensingConfig"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "rateLimitConfig": {
+      "type": "object",
+      "properties": {
+        "requests_per_minute": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Requests allowed per minute"
+        },
+        "burst": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Burst capacity"
+        }
+      },
+      "required": ["requests_per_minute", "burst"],
+      "additionalProperties": false
+    },
+    "retryConfig": {
+      "type": "object",
+      "properties": {
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum retry attempts"
+        },
+        "backoff_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Base exponential backoff in seconds"
+        }
+      },
+      "required": ["max_attempts", "backoff_seconds"],
+      "additionalProperties": false
+    },
+    "sourceConfig": {
+      "type": "object",
+      "properties": {
+        "base_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Base URL for the data source"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Secret placeholder for API key"
+        },
+        "rate_limit": {
+          "$ref": "#/definitions/rateLimitConfig"
+        },
+        "retry": {
+          "$ref": "#/definitions/retryConfig"
+        }
+      },
+      "required": ["base_url", "rate_limit", "retry"],
+      "additionalProperties": false
+    },
+    "chunkingProfile": {
+      "type": "object",
+      "properties": {
+        "target_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Desired tokens per chunk"
+        },
+        "overlap": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Token overlap between chunks"
+        },
+        "tau_coh": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Semantic coherence threshold"
+        }
+      },
+      "required": ["target_tokens", "overlap", "tau_coh"],
+      "additionalProperties": false
+    },
+    "embeddingsConfig": {
+      "type": "object",
+      "properties": {
+        "vllm_api_base": {
+          "type": "string",
+          "description": "Base URL for vLLM endpoint"
+        },
+        "model": {
+          "type": "string",
+          "description": "Embedding model identifier"
+        },
+        "batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Batch size for embeddings"
+        },
+        "splade_top_k": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Top-K sparse terms to keep"
+        },
+        "require_gpu": {
+          "type": "boolean",
+          "description": "Whether GPU is required"
+        }
+      },
+      "required": [
+        "vllm_api_base",
+        "model",
+        "batch_size",
+        "splade_top_k",
+        "require_gpu"
+      ],
+      "additionalProperties": false
+    },
+    "fusionWeights": {
+      "type": "object",
+      "properties": {
+        "bm25": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "BM25 weight"
+        },
+        "splade": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "SPLADE weight"
+        },
+        "dense": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Dense retriever weight"
+        }
+      },
+      "required": ["bm25", "splade", "dense"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "description": "Fusion weights must sum to 1.0",
+          "properties": {
+            "bm25": {},
+            "splade": {},
+            "dense": {}
+          },
+          "unevaluatedProperties": false
+        }
+      ]
+    },
+    "fusionConfig": {
+      "type": "object",
+      "properties": {
+        "weights": {
+          "$ref": "#/definitions/fusionWeights"
+        },
+        "rrf_k": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "RRF k parameter"
+        }
+      },
+      "required": ["weights", "rrf_k"],
+      "additionalProperties": false
+    },
+    "rerankerConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "top_n": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["enabled", "top_n"],
+      "additionalProperties": false
+    },
+    "neighborMergeConfig": {
+      "type": "object",
+      "properties": {
+        "min_cosine": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["min_cosine", "max_tokens"],
+      "additionalProperties": false
+    },
+    "retrievalConfig": {
+      "type": "object",
+      "properties": {
+        "fusion": {
+          "$ref": "#/definitions/fusionConfig"
+        },
+        "reranker": {
+          "$ref": "#/definitions/rerankerConfig"
+        },
+        "neighbor_merge": {
+          "$ref": "#/definitions/neighborMergeConfig"
+        }
+      },
+      "required": ["fusion", "reranker", "neighbor_merge"],
+      "additionalProperties": false
+    },
+    "extractorConfig": {
+      "type": "object",
+      "properties": {
+        "intent": {
+          "type": "string",
+          "description": "Intent label",
+          "enum": [
+            "pico",
+            "endpoint",
+            "ae",
+            "dose",
+            "eligibility",
+            "general"
+          ]
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Prompt for extractor"
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "confidence_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "intent",
+        "prompt",
+        "temperature",
+        "max_tokens",
+        "confidence_threshold"
+      ],
+      "additionalProperties": false
+    },
+    "extractionConfig": {
+      "type": "object",
+      "properties": {
+        "pico": { "$ref": "#/definitions/extractorConfig" },
+        "effects": { "$ref": "#/definitions/extractorConfig" },
+        "adverse_events": { "$ref": "#/definitions/extractorConfig" },
+        "dosing": { "$ref": "#/definitions/extractorConfig" },
+        "eligibility": { "$ref": "#/definitions/extractorConfig" }
+      },
+      "required": [
+        "pico",
+        "effects",
+        "adverse_events",
+        "dosing",
+        "eligibility"
+      ],
+      "additionalProperties": false
+    },
+    "kgConfig": {
+      "type": "object",
+      "properties": {
+        "neo4j_uri": {
+          "type": "string",
+          "description": "Neo4j URI"
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "batch_size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "shacl_enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "neo4j_uri",
+        "username",
+        "password",
+        "batch_size",
+        "shacl_enabled"
+      ],
+      "additionalProperties": false
+    },
+    "catalogVocabularyConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "requires_license": { "type": "boolean" },
+        "refresh_cron": { "type": "string" },
+        "territory": { "type": ["string", "null"] }
+      },
+      "required": ["enabled", "requires_license", "refresh_cron"],
+      "additionalProperties": false
+    },
+    "catalogConfig": {
+      "type": "object",
+      "properties": {
+        "vocabs": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/definitions/catalogVocabularyConfig"
+          }
+        },
+        "license_policy": {
+          "type": "string",
+          "description": "Relative path to policy.yaml"
+        }
+      },
+      "required": ["vocabs", "license_policy"],
+      "additionalProperties": false
+    },
+    "apiRateLimit": {
+      "type": "object",
+      "properties": {
+        "requests_per_minute": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "burst": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["requests_per_minute", "burst"],
+      "additionalProperties": false
+    },
+    "apiAuthConfig": {
+      "type": "object",
+      "properties": {
+        "issuer": { "type": "string" },
+        "audience": { "type": "string" },
+        "admin_scope": { "type": "string" },
+        "jwt_secret": { "type": "string" },
+        "token_ttl_seconds": {
+          "type": "integer",
+          "minimum": 60
+        }
+      },
+      "required": [
+        "issuer",
+        "audience",
+        "admin_scope",
+        "jwt_secret",
+        "token_ttl_seconds"
+      ],
+      "additionalProperties": false
+    },
+    "apiConfig": {
+      "type": "object",
+      "properties": {
+        "rate_limits": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/apiRateLimit"
+          }
+        },
+        "auth": { "$ref": "#/definitions/apiAuthConfig" },
+        "cors": {
+          "type": "object",
+          "properties": {
+            "allowed_origins": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Allowed CORS origins"
+            }
+          },
+          "required": ["allowed_origins"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["rate_limits", "auth", "cors"],
+      "additionalProperties": false
+    },
+    "loggingConfig": {
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": ["debug", "info", "warn", "error"],
+          "description": "Log level"
+        }
+      },
+      "required": ["level"],
+      "additionalProperties": false
+    },
+    "metricsConfig": {
+      "type": "object",
+      "properties": {
+        "push_interval_seconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["push_interval_seconds"],
+      "additionalProperties": false
+    },
+    "tracingConfig": {
+      "type": "object",
+      "properties": {
+        "endpoint": { "type": "string" },
+        "sample_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": ["endpoint", "sample_rate"],
+      "additionalProperties": false
+    },
+    "observabilityConfig": {
+      "type": "object",
+      "properties": {
+        "logging": { "$ref": "#/definitions/loggingConfig" },
+        "metrics": { "$ref": "#/definitions/metricsConfig" },
+        "tracing": { "$ref": "#/definitions/tracingConfig" }
+      },
+      "required": ["logging", "metrics", "tracing"],
+      "additionalProperties": false
+    },
+    "licensingConfig": {
+      "type": "object",
+      "properties": {
+        "policy_path": {
+          "type": "string",
+          "description": "Path to policy.yaml"
+        }
+      },
+      "required": ["policy_path"],
+      "additionalProperties": false
+    },
+    "featureFlags": {
+      "type": "object",
+      "properties": {
+        "splade_enabled": { "type": "boolean" },
+        "reranker_enabled": { "type": "boolean" },
+        "extraction_experimental_enabled": { "type": "boolean" }
+      },
+      "required": [
+        "splade_enabled",
+        "reranker_enabled",
+        "extraction_experimental_enabled"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

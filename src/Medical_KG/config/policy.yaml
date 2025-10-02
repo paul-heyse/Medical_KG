@@ -1,0 +1,26 @@
+{
+  "vocabs": {
+    "SNOMED": {
+      "licensed": false,
+      "territory": "US"
+    },
+    "MedDRA": {
+      "licensed": true,
+      "territory": "US"
+    },
+    "LOINC": {
+      "licensed": true
+    },
+    "RxNorm": {
+      "licensed": true
+    },
+    "HPO": {
+      "licensed": true
+    }
+  },
+  "actions": {
+    "redact_unlicensed_codes": true,
+    "block_kg_write_without_provenance": true,
+    "fail_on_unlicensed_usage": true
+  }
+}

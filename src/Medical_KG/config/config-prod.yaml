@@ -1,0 +1,62 @@
+{
+  "observability": {
+    "logging": {
+      "level": "warn"
+    },
+    "metrics": {
+      "push_interval_seconds": 10
+    },
+    "tracing": {
+      "sample_rate": 0.05
+    }
+  },
+  "sources": {
+    "pubmed": {
+      "api_key": "${NCBI_PROD_KEY}"
+    },
+    "pmc": {
+      "api_key": "${PMC_PROD_KEY}"
+    },
+    "clinicaltrials": {
+      "api_key": "${CTGOV_PROD_KEY}"
+    },
+    "dailymed": {
+      "api_key": "${OPEN_FDA_PROD_KEY}"
+    }
+  },
+  "feature_flags": {
+    "extraction_experimental_enabled": false
+  },
+  "kg": {
+    "neo4j_uri": "neo4j+s://prod.neo4j.medical-kg.internal:7687",
+    "username": "${NEO4J_PROD_USER}",
+    "password": "${NEO4J_PROD_PASSWORD}"
+  },
+  "catalog": {
+    "vocabs": {
+      "snomed": {
+        "enabled": true
+      },
+      "meddra": {
+        "enabled": true
+      }
+    }
+  },
+  "apis": {
+    "rate_limits": {
+      "public": {
+        "requests_per_minute": 60,
+        "burst": 30
+      },
+      "partner": {
+        "requests_per_minute": 240,
+        "burst": 120
+      }
+    },
+    "cors": {
+      "allowed_origins": [
+        "https://app.medical-kg.com"
+      ]
+    }
+  }
+}

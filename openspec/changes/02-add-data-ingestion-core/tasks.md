@@ -2,11 +2,11 @@
 
 ## 1. Foundation
 
-- [ ] 1.1 Create HTTP client with retries, rate limiting, per-host throttling (`connectors/http_client.py`)
-- [ ] 1.2 Implement ledger system (states: pdf_downloaded, auto_inflight, auto_done, *_failed) with JSONL persistence
-- [ ] 1.3 Create base Adapter interface (`fetch`, `parse`, `validate`, `write`)
-- [ ] 1.4 Implement content hashing (SHA256) and doc_id generation (`{source}:{id}#{version}:{hash12}`)
-- [ ] 1.5 Create normalization utilities (UTF-8, NFKC, whitespace, de-hyphenation, language detection)
+- [x] 1.1 Create HTTP client with retries, rate limiting, per-host throttling (`connectors/http_client.py`)
+- [x] 1.2 Implement ledger system (states: pdf_downloaded, auto_inflight, auto_done, *_failed) with JSONL persistence
+- [x] 1.3 Create base Adapter interface (`fetch`, `parse`, `validate`, `write`)
+- [x] 1.4 Implement content hashing (SHA256) and doc_id generation (`{source}:{id}#{version}:{hash12}`)
+- [x] 1.5 Create normalization utilities (UTF-8, NFKC, whitespace, de-hyphenation, language detection)
 - [ ] 1.6 Add test fixtures for each source (sample responses)
 
 ## 2. Literature & Preprints

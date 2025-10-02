@@ -1,0 +1,51 @@
+{
+  "feature_flags": {
+    "extraction_experimental_enabled": true
+  },
+  "observability": {
+    "logging": {
+      "level": "debug"
+    }
+  },
+  "sources": {
+    "pubmed": {
+      "rate_limit": {
+        "requests_per_minute": 120,
+        "burst": 30
+      }
+    },
+    "pmc": {
+      "rate_limit": {
+        "requests_per_minute": 90,
+        "burst": 20
+      }
+    },
+    "clinicaltrials": {
+      "base_url": "https://sandbox.api.clinicaltrials.gov/api/v2",
+      "api_key": "${CTGOV_SANDBOX_KEY}"
+    },
+    "dailymed": {
+      "api_key": "${OPEN_FDA_SANDBOX_KEY}"
+    }
+  },
+  "kg": {
+    "neo4j_uri": "bolt://localhost:7687"
+  },
+  "catalog": {
+    "vocabs": {
+      "snomed": {
+        "enabled": false
+      },
+      "meddra": {
+        "enabled": false
+      }
+    }
+  },
+  "apis": {
+    "cors": {
+      "allowed_origins": [
+        "http://localhost:3000"
+      ]
+    }
+  }
+}

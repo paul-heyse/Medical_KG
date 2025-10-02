@@ -5,13 +5,20 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from Medical_KG.config.manager import ConfigError, ConfigManager
+from Medical_KG.retrieval import RetrievalService, create_router
 
 _security = HTTPBearer(auto_error=False)
 
 
-def create_app(manager: ConfigManager | None = None) -> FastAPI:
+def create_app(
+    manager: ConfigManager | None = None,
+    retrieval_service: RetrievalService | None = None,
+) -> FastAPI:
     manager = manager or ConfigManager()
     app = FastAPI(title="Medical KG", version=manager.version.raw)
+
+    if retrieval_service is not None:
+        app.include_router(create_router(retrieval_service))
 
     @app.post("/admin/reload", tags=["admin"], summary="Hot reload configuration")
     async def reload_config(credentials: HTTPAuthorizationCredentials = Depends(_security)) -> dict:

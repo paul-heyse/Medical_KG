@@ -14,7 +14,9 @@
     "catalog",
     "apis",
     "observability",
-    "licensing"
+    "licensing",
+    "pipelines",
+    "entity_linking"
   ],
   "properties": {
     "config_version": {
@@ -69,6 +71,12 @@
     },
     "licensing": {
       "$ref": "#/definitions/licensingConfig"
+    },
+    "pipelines": {
+      "$ref": "#/definitions/pipelineConfig"
+    },
+    "entity_linking": {
+      "$ref": "#/definitions/entityLinkingConfig"
     }
   },
   "additionalProperties": false,
@@ -247,9 +255,13 @@
         "top_n": {
           "type": "integer",
           "minimum": 1
+        },
+        "slo_ms": {
+          "type": "number",
+          "minimum": 0
         }
       },
-      "required": ["enabled", "top_n"],
+      "required": ["enabled", "top_n", "slo_ms"],
       "additionalProperties": false
     },
     "neighborMergeConfig": {
@@ -279,9 +291,66 @@
         },
         "neighbor_merge": {
           "$ref": "#/definitions/neighborMergeConfig"
+        },
+        "indices": {
+          "type": "object",
+          "properties": {
+            "bm25": { "type": "string" },
+            "splade": { "type": "string" },
+            "dense": { "type": "string" },
+            "paragraph": { "type": "string" },
+            "section": { "type": "string" }
+          },
+          "required": ["bm25", "splade", "dense"],
+          "additionalProperties": false
+        },
+        "top_k": {
+          "type": "object",
+          "properties": {
+            "default": { "type": "integer", "minimum": 1 },
+            "max": { "type": "integer", "minimum": 1 }
+          },
+          "required": ["default", "max"],
+          "additionalProperties": false
+        },
+        "cache": {
+          "type": "object",
+          "properties": {
+            "query_seconds": { "type": "integer", "minimum": 1 },
+            "embedding_seconds": { "type": "integer", "minimum": 1 },
+            "expansion_seconds": { "type": "integer", "minimum": 1 }
+          },
+          "required": ["query_seconds", "embedding_seconds", "expansion_seconds"],
+          "additionalProperties": false
+        },
+        "multi_granularity": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "indexes": {
+              "type": "object",
+              "properties": {
+                "chunk": { "type": "string" },
+                "paragraph": { "type": "string" },
+                "section": { "type": "string" }
+              },
+              "required": ["chunk"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["enabled", "indexes"],
+          "additionalProperties": false
         }
       },
-      "required": ["fusion", "reranker", "neighbor_merge"],
+      "required": [
+        "fusion",
+        "reranker",
+        "neighbor_merge",
+        "indices",
+        "top_k",
+        "cache",
+        "multi_granularity"
+      ],
       "additionalProperties": false
     },
     "extractorConfig": {
@@ -535,6 +604,43 @@
         "reranker_enabled",
         "extraction_experimental_enabled"
       ],
+      "additionalProperties": false
+    },
+    "pipelineConfig": {
+      "type": "object",
+      "properties": {
+        "pdf": {
+          "type": "object",
+          "properties": {
+            "ledger_path": { "type": "string" },
+            "artifact_dir": { "type": "string" },
+            "require_gpu": { "type": "boolean" }
+          },
+          "required": ["ledger_path", "artifact_dir", "require_gpu"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["pdf"],
+      "additionalProperties": false
+    },
+    "entityLinkingConfig": {
+      "type": "object",
+      "properties": {
+        "acceptance_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "rrf_k": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_batch": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["acceptance_threshold", "rrf_k", "max_batch"],
       "additionalProperties": false
     }
   }

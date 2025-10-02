@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping
 
 
@@ -10,6 +11,7 @@ def validate_constraints(payload: Mapping[str, Any]) -> None:
     _check_positive_numbers(payload, errors)
     _check_chunking(payload, errors)
     _check_retrieval(payload, errors)
+    _check_pipelines(payload, errors)
     if errors:
         raise ValueError("; ".join(errors))
 
@@ -38,11 +40,27 @@ def _check_chunking(payload: Mapping[str, Any], errors: List[str]) -> None:
 
 
 def _check_retrieval(payload: Mapping[str, Any], errors: List[str]) -> None:
-    weights = payload.get("retrieval", {}).get("fusion", {}).get("weights", {})
+    retrieval = payload.get("retrieval", {})
+    weights = retrieval.get("fusion", {}).get("weights", {})
     if weights:
         total = sum(weights.values())
         if abs(total - 1.0) > 0.01:
             errors.append("retrieval.fusion.weights must sum to 1.0±0.01")
+    cache = retrieval.get("cache", {})
+    for field in ("query_seconds", "embedding_seconds", "expansion_seconds"):
+        value = cache.get(field)
+        if isinstance(value, int) and value <= 0:
+            errors.append(f"retrieval.cache.{field} must be positive")
+
+
+def _check_pipelines(payload: Mapping[str, Any], errors: List[str]) -> None:
+    pdf = payload.get("pipelines", {}).get("pdf", {})
+    ledger_path = pdf.get("ledger_path")
+    artifact_dir = pdf.get("artifact_dir")
+    if ledger_path and not isinstance(ledger_path, str):
+        errors.append("pipelines.pdf.ledger_path must be a string path")
+    if artifact_dir and not isinstance(artifact_dir, str):
+        errors.append("pipelines.pdf.artifact_dir must be a string path")
 
 
 @dataclass
@@ -98,6 +116,15 @@ class Config:
 
     def data(self) -> Dict[str, Any]:
         return self.payload
+
+    def retrieval_runtime(self) -> Mapping[str, Any]:
+        return self.payload["retrieval"]
+
+    def pdf_pipeline(self) -> Mapping[str, Any]:
+        return self.payload["pipelines"]["pdf"]
+
+    def entity_linking(self) -> Mapping[str, Any]:
+        return self.payload["entity_linking"]
 
 
 @dataclass

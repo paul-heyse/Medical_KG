@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from typing import Any, Mapping
 
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter

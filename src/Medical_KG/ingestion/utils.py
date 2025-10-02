@@ -8,7 +8,6 @@ from typing import Any, Mapping
 
 from langdetect import detect
 
-
 LANGUAGE_PATTERN = re.compile(r"^[a-z]{2}")
 
 

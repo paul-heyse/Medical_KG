@@ -3,8 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Mapping
+from typing import Any
 
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion.models import Document, IngestionResult

@@ -1,0 +1,9 @@
+{
+  "properties": {
+    "rxcui": "1234",
+    "name": "DrugX",
+    "synonym": "DrugX Syn",
+    "tty": "IN",
+    "ndc": "12345-678"
+  }
+}

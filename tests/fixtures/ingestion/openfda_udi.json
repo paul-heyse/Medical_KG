@@ -1,0 +1,14 @@
+{
+  "results": [
+    {
+      "udi_di": "00380740000011",
+      "device_name": "DeviceX",
+      "device_class": "2",
+      "openfda": {
+        "device_name": ["DeviceX"],
+        "fein": ["123456789"],
+        "medical_specialty_description": ["Cardiovascular"]
+      }
+    }
+  ]
+}

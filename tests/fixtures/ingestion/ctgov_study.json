@@ -1,0 +1,46 @@
+{
+  "protocolSection": {
+    "identificationModule": {
+      "nctId": "NCT01234567",
+      "briefTitle": "Study of Lactate"
+    },
+    "statusModule": {
+      "overallStatus": "Completed"
+    },
+    "descriptionModule": {
+      "briefSummary": "A study on lactate clearance.",
+      "detailedDescription": "Detailed description"
+    },
+    "designModule": {
+      "phases": ["Phase 2"],
+      "studyType": "Interventional"
+    },
+    "armsInterventionsModule": {
+      "arms": [
+        {
+          "armId": "A1",
+          "name": "Treatment",
+          "type": "Experimental",
+          "description": "Lactate guided therapy"
+        }
+      ]
+    },
+    "eligibilityModule": {
+      "eligibilityCriteria": "Inclusion: Age > 18\nExclusion: Pregnancy"
+    },
+    "outcomesModule": {
+      "primaryOutcomes": [
+        {
+          "measure": "Mortality",
+          "description": "28-day mortality",
+          "timeFrame": "28 days"
+        }
+      ]
+    }
+  },
+  "derivedSection": {
+    "miscInfoModule": {
+      "version": "2024-01-01"
+    }
+  }
+}

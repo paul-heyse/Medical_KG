@@ -23,6 +23,7 @@ from Medical_KG.pdf import (
     PdfPipeline,
     ensure_gpu,
 )
+from Medical_KG.security.licenses import LicenseRegistry
 
 
 def _load_manager(config_dir: Optional[Path]) -> ConfigManager:
@@ -77,6 +78,17 @@ def _command_policy(args: argparse.Namespace) -> int:
         territory = config.get("territory") or "-"
         licensed = "licensed" if config.get("licensed", False) else "unlicensed"
         print(f"{vocab}: {licensed} ({territory})")
+    return 0
+
+
+def _command_licensing_validate(args: argparse.Namespace) -> int:
+    path = args.licenses
+    try:
+        LicenseRegistry.from_yaml(path)
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"Licenses invalid: {exc}")
+        return 1
+    print("Licenses valid")
     return 0
 
 
@@ -262,6 +274,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to ingestion ledger JSONL",
     )
     ingest.set_defaults(func=_command_ingest)
+
+    # Licensing commands
+    licensing = subparsers.add_parser("licensing", help="Licensing commands")
+    licensing_subparsers = licensing.add_subparsers(dest="licensing_command", required=True)
+    licensing_validate = licensing_subparsers.add_parser("validate", help="Validate licenses.yml")
+    licensing_validate.add_argument("--licenses", type=Path, default=Path("licenses.yml"))
+    licensing_validate.set_defaults(func=_command_licensing_validate)
 
     return parser
 

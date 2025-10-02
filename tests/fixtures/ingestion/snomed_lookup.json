@@ -1,0 +1,10 @@
+{
+  "display": "Diabetes mellitus",
+  "code": "44054006",
+  "designation": [
+    {"value": "Diabetes"}
+  ],
+  "property": [
+    {"code": "inactive", "valueBoolean": false}
+  ]
+}

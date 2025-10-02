@@ -18,31 +18,31 @@
 
 ## 3. LLM Facet Generators
 
-- [ ] 3.1 PICO facet prompt (extract compact PICO; use exact words; ≤120 tokens; include evidence_spans)
-- [ ] 3.2 Endpoint facet prompt (extract single outcome + metric; capture type, value, CI, p, N; ≤120 tokens)
-- [ ] 3.3 AE facet prompt (map AE term to MedDRA PT; include grade if present; extract arm, count, denom; ≤120 tokens)
-- [ ] 3.4 Dose facet prompt (extract dosing regimen; normalize to UCUM; ≤120 tokens)
-- [ ] 3.5 Global rules (no inference; return only JSON; include evidence_spans; omit if not verbatim; ≤120 tokens)
+- [x] 3.1 PICO facet prompt (extract compact PICO; use exact words; ≤120 tokens; include evidence_spans)
+- [x] 3.2 Endpoint facet prompt (extract single outcome + metric; capture type, value, CI, p, N; ≤120 tokens)
+- [x] 3.3 AE facet prompt (map AE term to MedDRA PT; include grade if present; extract arm, count, denom; ≤120 tokens)
+- [x] 3.4 Dose facet prompt (extract dosing regimen; normalize to UCUM; ≤120 tokens)
+- [x] 3.5 Global rules (no inference; return only JSON; include evidence_spans; omit if not verbatim; ≤120 tokens)
 - [x] 3.6 Implement generators (temperature=0.1; max_tokens=300 to allow buffer; retry on invalid JSON)
 
 ## 4. Token Budget Enforcement
 
-- [ ] 4.1 Count tokens using Qwen tokenizer after LLM generation
-- [ ] 4.2 If >120 tokens: drop optional fields (priority: narrative text → codes → model → arm sizes → alternates)
-- [ ] 4.3 Compress ranges (CI as numbers only; remove spaces)
-- [ ] 4.4 Abbreviate routes (PO, IV)
-- [ ] 4.5 Never drop evidence_spans (hard requirement)
-- [ ] 4.6 Fail validation if still >120 after compression
+- [x] 4.1 Count tokens using Qwen tokenizer after LLM generation
+- [x] 4.2 If >120 tokens: drop optional fields (priority: narrative text → codes → model → arm sizes → alternates)
+- [x] 4.3 Compress ranges (CI as numbers only; remove spaces)
+- [x] 4.4 Abbreviate routes (PO, IV)
+- [x] 4.5 Never drop evidence_spans (hard requirement)
+- [x] 4.6 Fail validation if still >120 after compression
 
 ## 5. Normalizers (Post-LLM)
 
-- [ ] 5.1 Numbers: parse "0.61–0.95" → ci_low=0.61, ci_high=0.95; "p<0.001" → ".<0.001"
-- [ ] 5.2 Units: map to UCUM; keep verbatim in evidence
-- [ ] 5.3 Routes: normalize synonyms; keep verbatim in evidence
-- [ ] 5.4 Drugs: resolve_drug(label) → RxCUI/UNII with confidence; attach to drug_codes
-- [ ] 5.5 Outcomes/Labs: resolve_lab(name) → LOINC if known
-- [ ] 5.6 AEs: resolve_meddra(term) → PT
-- [ ] 5.7 Drop auto-codes with __confidence < 0.5
+- [x] 5.1 Numbers: parse "0.61–0.95" → ci_low=0.61, ci_high=0.95; "p<0.001" → ".<0.001"
+- [x] 5.2 Units: map to UCUM; keep verbatim in evidence
+- [x] 5.3 Routes: normalize synonyms; keep verbatim in evidence
+- [x] 5.4 Drugs: resolve_drug(label) → RxCUI/UNII with confidence; attach to drug_codes
+- [x] 5.5 Outcomes/Labs: resolve_lab(name) → LOINC if known
+- [x] 5.6 AEs: resolve_meddra(term) → PT
+- [x] 5.7 Drop auto-codes with __confidence < 0.5
 
 ## 6. Storage (Neo4j)
 
@@ -88,9 +88,9 @@
 ## 12. Testing
 
 - [x] 12.1 Unit tests for each facet generator (sample chunks → verify JSON conforms to schema)
-- [ ] 12.2 Unit tests for token budget enforcement (oversized facet → verify compression + validation)
-- [ ] 12.3 Integration test (chunk → detect intent → generate facet → validate → store → index)
-- [ ] 12.4 Test deduplication (two chunks with same endpoint → verify only one marked is_primary)
+- [x] 12.2 Unit tests for token budget enforcement (oversized facet → verify compression + validation)
+- [x] 12.3 Integration test (chunk → detect intent → generate facet → validate → store → index)
+- [x] 12.4 Test deduplication (two chunks with same endpoint → verify only one marked is_primary)
 - [x] 12.5 Test retrieval boost (facet query → verify facet-tagged chunks rank higher)
 
 ## 13. Documentation

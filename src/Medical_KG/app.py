@@ -1,10 +1,12 @@
 """FastAPI application exposing configuration hot-reload endpoint."""
 from __future__ import annotations
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from Medical_KG.config.manager import ConfigError, ConfigManager
+from Medical_KG.api.routes import ApiRouter
+from uuid import uuid4
 
 _security = HTTPBearer(auto_error=False)
 
@@ -12,6 +14,20 @@ _security = HTTPBearer(auto_error=False)
 def create_app(manager: ConfigManager | None = None) -> FastAPI:
     manager = manager or ConfigManager()
     app = FastAPI(title="Medical KG", version=manager.version.raw)
+
+    api_router = ApiRouter()
+    app.include_router(api_router)
+    app.state.api_router = api_router
+
+    @app.middleware("http")
+    async def add_request_context(request: Request, call_next):
+        request_id = request.headers.get("x-request-id") or str(uuid4())
+        traceparent = request.headers.get("traceparent")
+        response = await call_next(request)
+        response.headers.setdefault("x-request-id", request_id)
+        if traceparent:
+            response.headers.setdefault("traceparent", traceparent)
+        return response
 
     @app.post("/admin/reload", tags=["admin"], summary="Hot reload configuration")
     async def reload_config(credentials: HTTPAuthorizationCredentials = Depends(_security)) -> dict:

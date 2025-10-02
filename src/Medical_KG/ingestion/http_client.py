@@ -86,7 +86,13 @@ class AsyncHttpClient:
         default_rate: RateLimit | None = None,
         headers: MutableMapping[str, str] | None = None,
     ) -> None:
-        self._client = httpx.AsyncClient(timeout=timeout, headers=headers, http2=True)
+        try:
+            import h2  # type: ignore  # noqa: F401
+
+            http2_enabled = True
+        except ImportError:  # pragma: no cover - optional dependency
+            http2_enabled = False
+        self._client = httpx.AsyncClient(timeout=timeout, headers=headers, http2=http2_enabled)
         self._limits = limits or {}
         self._default_rate = default_rate or RateLimit(rate=5, per=1.0)
         self._limiters: Dict[str, _SimpleLimiter] = {}

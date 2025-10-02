@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://medical-kg.ai/schemas/facet.dose.v1.json",
+  "title": "Dose Facet",
+  "type": "object",
+  "required": ["type", "drug_label", "evidence_spans"],
+  "properties": {
+    "type": {"const": "dose"},
+    "drug_label": {"type": "string"},
+    "drug_codes": {
+      "type": "array",
+      "items": {"$ref": "facet.common.v1.json#/properties/Code"}
+    },
+    "amount": {"type": "number", "minimum": 0},
+    "unit": {"type": "string"},
+    "route": {"type": "string"},
+    "frequency_per_day": {"type": "number", "minimum": 0},
+    "duration_days": {"type": "number", "minimum": 0},
+    "loinc_section": {"type": "string"},
+    "evidence_spans": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "facet.common.v1.json#/properties/EvidenceSpan"}
+    },
+    "token_budget": {"type": "integer", "minimum": 1},
+    "is_primary": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}

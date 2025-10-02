@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://medical-kg.ai/schemas/extraction/effects.v1.json",
+  "title": "Effect Extraction",
+  "type": "object",
+  "required": ["type", "name", "measure_type", "value", "evidence_spans"],
+  "properties": {
+    "type": {"const": "effects"},
+    "name": {"type": "string"},
+    "measure_type": {"type": "string", "enum": ["HR", "RR", "OR", "MD", "SMD"]},
+    "value": {"type": "number"},
+    "ci_low": {"type": "number"},
+    "ci_high": {"type": "number"},
+    "p_value": {"type": "string"},
+    "n_total": {"type": "integer", "minimum": 0},
+    "arm_sizes": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+    "model": {"type": "string"},
+    "time_unit_ucum": {"type": "string"},
+    "evidence_spans": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "../facets/facet.common.v1.json#/properties/EvidenceSpan"}
+    },
+    "__confidence": {"type": "number", "minimum": 0, "maximum": 1}
+  },
+  "additionalProperties": false
+}

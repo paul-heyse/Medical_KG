@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://medical-kg.ai/schemas/extraction/dose.v1.json",
+  "title": "Dose Extraction",
+  "type": "object",
+  "required": ["type", "evidence_spans"],
+  "properties": {
+    "type": {"const": "dose"},
+    "drug": {"$ref": "../facets/facet.common.v1.json#/properties/Code"},
+    "amount": {"type": "number", "minimum": 0},
+    "unit": {"type": "string"},
+    "route": {"type": "string"},
+    "frequency_per_day": {"type": "number", "minimum": 0},
+    "duration_days": {"type": "number", "minimum": 0},
+    "evidence_spans": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "../facets/facet.common.v1.json#/properties/EvidenceSpan"}
+    },
+    "__confidence": {"type": "number", "minimum": 0, "maximum": 1}
+  },
+  "additionalProperties": false
+}

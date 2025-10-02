@@ -18,27 +18,27 @@
 
 ## 3. Idempotency
 
-- [ ] 3.1 Accept Idempotency-Key header (UUIDv4)
-- [ ] 3.2 Store hash(body + key) in cache (Redis/DB; TTL 24h)
-- [ ] 3.3 Return cached result if key+body match within 24h
-- [ ] 3.4 Return 409 Conflict if key exists with different body
+- [x] 3.1 Accept Idempotency-Key header (UUIDv4)
+- [x] 3.2 Store hash(body + key) in cache (Redis/DB; TTL 24h)
+- [x] 3.3 Return cached result if key+body match within 24h
+- [x] 3.4 Return 409 Conflict if key exists with different body
 
 ## 4. Rate Limiting
 
-- [ ] 4.1 Implement rate limiter (per API key or client_id; configurable limits per scope)
-- [ ] 4.2 Return X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset headers
-- [ ] 4.3 Return 429 Too Many Requests with Retry-After header
+- [x] 4.1 Implement rate limiter (per API key or client_id; configurable limits per scope)
+- [x] 4.2 Return X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset headers
+- [x] 4.3 Return 429 Too Many Requests with Retry-After header
 
 ## 5. Tracing & Request ID
 
-- [ ] 5.1 Accept traceparent header (W3C Trace Context)
-- [ ] 5.2 Generate x-request-id (UUIDv4) if not provided
+- [x] 5.1 Accept traceparent header (W3C Trace Context)
+- [x] 5.2 Generate x-request-id (UUIDv4) if not provided
 - [ ] 5.3 Propagate both to all downstream services
 - [ ] 5.4 Log correlation IDs in all log entries
 
 ## 6. Licensing Enforcement
 
-- [ ] 6.1 Accept X-License-Tier header (internal, member, affiliate, public)
+- [x] 6.1 Accept X-License-Tier header (internal, member, affiliate, public)
 - [ ] 6.2 Filter SNOMED/MedDRA/UMLS labels/definitions per tier (return IDs always; redact text if unlicensed)
 - [ ] 6.3 Log redaction events with caller info
 - [ ] 6.4 Return partial results with warning if some data redacted
@@ -59,11 +59,11 @@
 - [ ] 8.4 POST /ingest/pdf (body: {uri, doc_key}; return: {status, ledger_state})
 - [ ] 8.5 POST /chunk (body: {doc_ids[], profile?}; return: {chunk_ids[], stats})
 - [ ] 8.6 POST /embed (body: {object_ids[], object_type: chunk|facet|concept}; return: {embedded_count, failed[]})
-- [ ] 8.7 POST /retrieve (body: {query, intent?, filters?, topK?, rerank_enabled?}; return: {results[], query_meta})
+- [x] 8.7 POST /retrieve (body: {query, intent?, filters?, topK?, rerank_enabled?}; return: {results[], query_meta})
 - [ ] 8.8 POST /map/candidates (body: {doc_id, chunk_id, mentions[]}; return: {candidates[]})
 - [ ] 8.9 POST /map/el (body: {mention, candidates[], context}; return: {chosen_id, ontology, score, evidence_span, alternates[]})
-- [ ] 8.10 POST /extract/pico (body: {chunk_ids[]}; return: {extractions[]})
-- [ ] 8.11 POST /extract/effects, /extract/ae, /extract/dose, /extract/eligibility (similar structure)
+- [x] 8.10 POST /extract/pico (body: {chunk_ids[]}; return: {extractions[]})
+- [x] 8.11 POST /extract/effects, /extract/ae, /extract/dose, /extract/eligibility (similar structure)
 - [ ] 8.12 POST /kg/write (body: {nodes[], edges[], provenance}; return: {written_count, failed[]})
 - [ ] 8.13 POST /catalog/refresh (body: {sources[]?}; return: {status, refresh_id})
 - [ ] 8.14 GET /health (return: {status: ok|degraded|down, services{}, timestamp})
@@ -91,10 +91,10 @@
 
 ## 12. Testing
 
-- [ ] 12.1 Unit tests for each handler (mock services; verify request/response shapes)
+- [x] 12.1 Unit tests for each handler (mock services; verify request/response shapes)
 - [ ] 12.2 Integration tests (hit real endpoints; verify E2E flows)
 - [ ] 12.3 Test auth (valid/invalid tokens, missing scopes)
-- [ ] 12.4 Test idempotency (same key+body → same result; different body → 409)
+- [x] 12.4 Test idempotency (same key+body → same result; different body → 409)
 - [ ] 12.5 Test rate limiting (exceed limit → 429)
 - [ ] 12.6 Test error handling (malformed JSON, validation errors, upstream timeouts)
 - [ ] 12.7 Load test (100 QPS; measure P95 latency per endpoint)

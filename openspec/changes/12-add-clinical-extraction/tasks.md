@@ -2,12 +2,12 @@
 
 ## 1. JSON Schema Definitions
 
-- [ ] 1.1 Define facets.common.v1.json (Span, Code shared types)
-- [ ] 1.2 Define pico.v1.json (population, interventions[], comparators[], outcomes[], timeframe, evidence_spans[])
-- [ ] 1.3 Define effects.v1.json (type HR/RR/OR/MD/SMD, value, ci_low, ci_high, p_value, n_total, arm_sizes, model, time_unit_ucum, evidence_spans[])
-- [ ] 1.4 Define ae.v1.json (term, meddra_pt, grade 1-5, count, denom, arm, serious, onset_days, evidence_spans[])
-- [ ] 1.5 Define dose.v1.json (drug{rxcui, label}, amount, unit UCUM, route, frequency_per_day, duration_days, evidence_spans[])
-- [ ] 1.6 Define eligibility.v1.json (type inclusion/exclusion, criteria[]{text, logic{age, lab, condition, temporal}}, evidence_spans[])
+- [x] 1.1 Define facets.common.v1.json (Span, Code shared types)
+- [x] 1.2 Define pico.v1.json (population, interventions[], comparators[], outcomes[], timeframe, evidence_spans[])
+- [x] 1.3 Define effects.v1.json (type HR/RR/OR/MD/SMD, value, ci_low, ci_high, p_value, n_total, arm_sizes, model, time_unit_ucum, evidence_spans[])
+- [x] 1.4 Define ae.v1.json (term, meddra_pt, grade 1-5, count, denom, arm, serious, onset_days, evidence_spans[])
+- [x] 1.5 Define dose.v1.json (drug{rxcui, label}, amount, unit UCUM, route, frequency_per_day, duration_days, evidence_spans[])
+- [x] 1.6 Define eligibility.v1.json (type inclusion/exclusion, criteria[]{text, logic{age, lab, condition, temporal}}, evidence_spans[])
 
 ## 2. LLM Extractor Prompts
 
@@ -20,11 +20,11 @@
 
 ## 3. LLM Extractor Implementation
 
-- [ ] 3.1 Implement PICO extractor (temperature=0.1; max_tokens=900)
-- [ ] 3.2 Implement Effects extractor (temperature=0.0; max_tokens=700)
-- [ ] 3.3 Implement AE extractor (temperature=0.1; max_tokens=700)
-- [ ] 3.4 Implement Dose extractor (temperature=0.1; max_tokens=600)
-- [ ] 3.5 Implement Eligibility extractor (temperature=0.1; max_tokens=800)
+- [x] 3.1 Implement PICO extractor (temperature=0.1; max_tokens=900)
+- [x] 3.2 Implement Effects extractor (temperature=0.0; max_tokens=700)
+- [x] 3.3 Implement AE extractor (temperature=0.1; max_tokens=700)
+- [x] 3.4 Implement Dose extractor (temperature=0.1; max_tokens=600)
+- [x] 3.5 Implement Eligibility extractor (temperature=0.1; max_tokens=800)
 - [ ] 3.6 Add retry logic (invalid JSON → repair pass with error feedback; max 2 retries)
 
 ## 4. Normalizers
@@ -47,10 +47,10 @@
 
 ## 6. Span-Grounding Validation
 
-- [ ] 6.1 Every extraction must include evidence_spans[] with ≥1 span
-- [ ] 6.2 Each span must have doc_id, start, end (integers), quote (string)
-- [ ] 6.3 Validate start < end; start/end within chunk text length
-- [ ] 6.4 Reject extractions with missing evidence_spans (hard requirement)
+- [x] 6.1 Every extraction must include evidence_spans[] with ≥1 span
+- [x] 6.2 Each span must have doc_id, start, end (integers), quote (string)
+- [x] 6.3 Validate start < end; start/end within chunk text length
+- [x] 6.4 Reject extractions with missing evidence_spans (hard requirement)
 
 ## 7. SHACL-Style Pre-KG Checks
 

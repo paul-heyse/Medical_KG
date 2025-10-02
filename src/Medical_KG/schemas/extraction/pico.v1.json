@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://medical-kg.ai/schemas/extraction/pico.v1.json",
+  "title": "PICO Extraction",
+  "type": "object",
+  "required": ["type", "population", "evidence_spans"],
+  "properties": {
+    "type": {"const": "pico"},
+    "population": {"type": "string"},
+    "interventions": {"type": "array", "items": {"type": "string"}},
+    "comparators": {"type": "array", "items": {"type": "string"}},
+    "outcomes": {"type": "array", "items": {"type": "string"}},
+    "timeframe": {"type": "string"},
+    "evidence_spans": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "../facets/facet.common.v1.json#/properties/EvidenceSpan"}
+    },
+    "__confidence": {"type": "number", "minimum": 0, "maximum": 1}
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://medical-kg.ai/schemas/facet.pico.v1.json",
+  "title": "PICO Facet",
+  "type": "object",
+  "required": ["type", "evidence_spans"],
+  "properties": {
+    "type": {"const": "pico"},
+    "population": {"type": "string"},
+    "interventions": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "comparators": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "outcomes": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "timeframe": {"type": "string"},
+    "evidence_spans": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "facet.common.v1.json#/properties/EvidenceSpan"}
+    },
+    "token_budget": {"type": "integer", "minimum": 1},
+    "is_primary": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}

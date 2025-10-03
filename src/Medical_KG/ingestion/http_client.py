@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -126,9 +127,13 @@ class AsyncHttpClient:
                     response.raise_for_status()
                     return response
                 except httpx.HTTPError as exc:  # pragma: no cover - exercised via tests
+                    status = getattr(getattr(exc, "response", None), "status_code", None)
+                    if status not in {429, 502, 503, 504}:
+                        raise
                     last_error = exc
                     HTTP_REQUESTS.labels(method, parsed.netloc, exc.__class__.__name__).inc()
-                    await asyncio.sleep(backoff)
+                    jitter = random.uniform(0, backoff / 2)
+                    await asyncio.sleep(backoff + jitter)
                     backoff = min(backoff * 2, 5.0)
             if last_error:
                 raise last_error
@@ -193,3 +198,10 @@ class AsyncHttpClient:
     ) -> bytes:
         response = await self.get(url, params=params, headers=headers)
         return response.content
+
+    def set_rate_limit(self, host: str, limit: RateLimit) -> None:
+        """Override the per-host rate limit."""
+
+        self._limits[host] = limit
+        if host in self._limiters:
+            self._limiters[host] = _SimpleLimiter(limit.rate, limit.per)

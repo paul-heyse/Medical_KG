@@ -1,0 +1,48 @@
+<PubmedArticleSet>
+  <PubmedArticle>
+    <MedlineCitation>
+      <PMID>12345678</PMID>
+      <Article>
+        <ArticleTitle>Lactate Guided Therapy</ArticleTitle>
+        <Abstract>
+          <AbstractText Label="Background">Background context</AbstractText>
+          <AbstractText>Sepsis patients benefit from guided therapy.</AbstractText>
+        </Abstract>
+        <AuthorList>
+          <Author>
+            <LastName>Smith</LastName>
+            <ForeName>Jane</ForeName>
+          </Author>
+          <Author>
+            <CollectiveName>Sepsis Collaborative</CollectiveName>
+          </Author>
+        </AuthorList>
+        <Journal>
+          <JournalIssue>
+            <PubDate>
+              <Year>2024</Year>
+            </PubDate>
+          </JournalIssue>
+          <Title>Critical Care</Title>
+        </Journal>
+        <PublicationTypeList>
+          <PublicationType>Journal Article</PublicationType>
+        </PublicationTypeList>
+      </Article>
+      <MeshHeadingList>
+        <MeshHeading>
+          <DescriptorName>Sepsis</DescriptorName>
+        </MeshHeading>
+        <MeshHeading>
+          <DescriptorName>Lactic Acid</DescriptorName>
+        </MeshHeading>
+      </MeshHeadingList>
+    </MedlineCitation>
+    <PubmedData>
+      <ArticleIdList>
+        <ArticleId IdType="pmc">PMC1234567</ArticleId>
+        <ArticleId IdType="doi">10.1000/abc123</ArticleId>
+      </ArticleIdList>
+    </PubmedData>
+  </PubmedArticle>
+</PubmedArticleSet>

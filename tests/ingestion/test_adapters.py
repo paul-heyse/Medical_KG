@@ -1,6 +1,7 @@
 import asyncio
 import json
 from pathlib import Path
+from urllib.parse import urlparse
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.clinical import (
@@ -38,15 +39,31 @@ def test_pubmed_adapter_parses_fixture(monkeypatch, tmp_path: Path) -> None:
             return json.loads(Path("tests/fixtures/ingestion/pubmed_search.json").read_text())
         return json.loads(Path("tests/fixtures/ingestion/pubmed_summary.json").read_text())
 
+    async def fake_fetch_text(url: str, *, params: dict | None = None, headers: dict | None = None) -> str:
+        assert "efetch" in url
+        return Path("tests/fixtures/ingestion/pubmed_fetch.xml").read_text()
+
     monkeypatch.setattr(adapter, "fetch_json", fake_fetch_json)
+    monkeypatch.setattr(adapter, "fetch_text", fake_fetch_text)
 
     async def _exec() -> None:
         results = await adapter.run(term="lactate")
         assert len(results) == 1
         assert results[0].document.metadata["title"].startswith("Lactate")
+        assert results[0].document.raw["pmcid"] == "PMC1234567"
+        assert "Sepsis" in results[0].document.raw["mesh_terms"]
+        assert results[0].document.raw["doi"] == "10.1000/abc123"
+        assert "Jane Smith" in results[0].document.raw["authors"][0]
         await client.aclose()
 
     _run(_exec())
+
+    client_with_key = AsyncHttpClient()
+    adapter_with_key = PubMedAdapter(context, client_with_key, api_key="token")
+    host = urlparse("https://eutils.ncbi.nlm.nih.gov").netloc
+    assert adapter.client._limits[host].rate == 3
+    assert adapter_with_key.client._limits[host].rate == 10
+    _run(adapter_with_key.client.aclose())
 
 
 def test_clinicaltrials_adapter_validates_nct(tmp_path: Path) -> None:

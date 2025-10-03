@@ -7,14 +7,14 @@
 - [x] 1.3 Create base Adapter interface (`fetch`, `parse`, `validate`, `write`)
 - [x] 1.4 Implement content hashing (SHA256) and doc_id generation (`{source}:{id}#{version}:{hash12}`)
 - [x] 1.5 Create normalization utilities (UTF-8, NFKC, whitespace, de-hyphenation, language detection)
-- [ ] 1.6 Add test fixtures for each source (sample responses)
+- [x] 1.6 Add test fixtures for each source (sample responses)
 
 ## 2. Literature & Preprints
 
-- [ ] 2.1 Implement PubMed E-utilities adapter (ESearch, EFetch, ESummary with usehistory paging)
-- [ ] 2.2 Implement PMC OAI-PMH adapter (ListRecords with resumptionToken)
-- [ ] 2.3 Implement medRxiv adapter (details endpoint with cursor paging)
-- [ ] 2.4 Add rate limit handling (3 rps → 10 rps with API key for NCBI)
+- [x] 2.1 Implement PubMed E-utilities adapter (ESearch, EFetch, ESummary with usehistory paging)
+- [x] 2.2 Implement PMC OAI-PMH adapter (ListRecords with resumptionToken)
+- [x] 2.3 Implement medRxiv adapter (details endpoint with cursor paging)
+- [x] 2.4 Add rate limit handling (3 rps → 10 rps with API key for NCBI)
 
 ## 3. Clinical Trials
 

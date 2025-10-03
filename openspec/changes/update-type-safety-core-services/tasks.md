@@ -2,9 +2,9 @@
 
 ## 1. Config & Optional Dependencies
 
-- [ ] 1.1 Annotate `config/manager.py` helpers, removing `Any`-based deep merges
-- [ ] 1.2 Type `utils/optional_dependencies.py` protocols and fallbacks, covering prometheus/tiktoken/torch
-- [ ] 1.3 Update CLI entrypoints to propagate typed config objects
+- [x] 1.1 Annotate `config/manager.py` helpers, removing `Any`-based deep merges
+- [x] 1.2 Type `utils/optional_dependencies.py` protocols and fallbacks, covering prometheus/tiktoken/torch
+- [x] 1.3 Update CLI entrypoints to propagate typed config objects
 
 ## 2. Ingestion Modules
 
@@ -25,6 +25,6 @@
 
 ## 5. Validation & CI
 
-- [ ] 5.1 Run `mypy --strict` on updated modules (config, ingestion, retrieval, kg)
-- [ ] 5.2 Update `docs/type_safety.md` with new protocols and examples
-- [ ] 5.3 Ensure pre-commit/CI jobs enforce strict typing for these paths
+- [x] 5.1 Run `mypy --strict` on updated modules (config, ingestion, retrieval, kg)
+- [x] 5.2 Update `docs/type_safety.md` with new protocols and examples
+- [x] 5.3 Ensure pre-commit/CI jobs enforce strict typing for these paths

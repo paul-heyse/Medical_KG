@@ -15,6 +15,13 @@ jobs:
           environment-name: ci
           cache-downloads: true
           cache-env: true
+      - name: Type check core services
+        shell: bash -l {0}
+        run: |
+          python -m mypy --strict \
+            src/Medical_KG/config \
+            src/Medical_KG/utils/optional_dependencies.py \
+            src/Medical_KG/cli.py
       - name: Run tests
         shell: bash -l {0}
         run: |

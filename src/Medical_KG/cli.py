@@ -4,16 +4,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib
 import json
 import sys
 from pathlib import Path
-from typing import Optional
-
-try:
-    import httpx
-except Exception as exc:  # pragma: no cover - httpx required for CLI
-    raise RuntimeError("httpx is required for CLI operations") from exc
+from types import TracebackType
+from typing import Protocol, cast
 from Medical_KG.config.manager import ConfigError, ConfigManager, ConfigValidator, mask_secrets
+from Medical_KG.config.models import PdfPipelineSettings
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 from Medical_KG.ingestion.ledger import IngestionLedger
@@ -29,15 +27,57 @@ from Medical_KG.pdf import (
 from Medical_KG.security.licenses import LicenseRegistry
 
 
-def _load_manager(config_dir: Optional[Path]) -> ConfigManager:
+class HttpxResponse(Protocol):
+    content: bytes
+
+    def raise_for_status(self) -> None:
+        ...
+
+
+class HttpxClient(Protocol):
+    def __enter__(self) -> "HttpxClient":
+        ...
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        ...
+
+    def get(self, url: str, *, follow_redirects: bool) -> HttpxResponse:
+        ...
+
+
+class HttpxModule(Protocol):
+    HTTPError: type[Exception]
+
+    def Client(self, *, timeout: float) -> HttpxClient:
+        ...
+
+
+def _require_httpx() -> HttpxModule:
+    try:
+        module = importlib.import_module("httpx")
+    except Exception as exc:  # pragma: no cover - dependency check
+        raise RuntimeError("httpx is required for CLI operations") from exc
+    return cast(HttpxModule, module)
+
+
+_HTTPX = _require_httpx()
+HTTPError = _HTTPX.HTTPError
+
+
+def _load_manager(config_dir: Path | None) -> ConfigManager:
     base_path = config_dir or Path(__file__).resolve().parent / "config"
     return ConfigManager(base_path=base_path)
 
 
 def _build_pipeline(manager: ConfigManager) -> PdfPipeline:
-    pdf_config = manager.config.pdf_pipeline()
-    ledger_path = Path(pdf_config["ledger_path"]).expanduser()
-    artifact_dir = Path(pdf_config["artifact_dir"]).expanduser()
+    pdf_config: PdfPipelineSettings = manager.config.pdf_pipeline()
+    ledger_path = pdf_config.ledger_path.expanduser()
+    artifact_dir = pdf_config.artifact_dir.expanduser()
     mineru = MinerURunner(MinerUConfig(output_dir=artifact_dir))
     ledger = IngestionLedger(ledger_path)
     return PdfPipeline(ledger=ledger, mineru=mineru)
@@ -102,18 +142,18 @@ def _command_ingest_pdf(args: argparse.Namespace) -> int:
         print(f"Unable to load configuration: {exc}")
         return 1
     pipeline_config = manager.config.pdf_pipeline()
-    downloads_dir = Path(pipeline_config["artifact_dir"]).expanduser() / "downloads"
+    downloads_dir = pipeline_config.artifact_dir.expanduser() / "downloads"
     downloads_dir.mkdir(parents=True, exist_ok=True)
     destination = downloads_dir / f"{args.doc_key}.pdf"
     try:
-        with httpx.Client(timeout=30.0) as client:
+        with _HTTPX.Client(timeout=30.0) as client:
             response = client.get(args.uri, follow_redirects=True)
             response.raise_for_status()
-    except httpx.HTTPError as exc:
+    except HTTPError as exc:
         print(f"Failed to download PDF: {exc}", file=sys.stderr)
         return 1
     destination.write_bytes(response.content)
-    ledger = IngestionLedger(Path(pipeline_config["ledger_path"]).expanduser())
+    ledger = IngestionLedger(pipeline_config.ledger_path.expanduser())
     ledger.record(
         args.doc_key,
         "pdf_downloaded",
@@ -131,7 +171,7 @@ def _command_mineru_run(args: argparse.Namespace) -> int:
         return 1
     pipeline = _build_pipeline(manager)
     pdf_config = manager.config.pdf_pipeline()
-    ledger = IngestionLedger(Path(pdf_config["ledger_path"]).expanduser())
+    ledger = IngestionLedger(pdf_config.ledger_path.expanduser())
     entries = ledger.entries(state="pdf_downloaded")
     if args.doc_key:
         entries = [entry for entry in entries if entry.doc_id == args.doc_key]
@@ -171,13 +211,13 @@ def _command_postpdf(args: argparse.Namespace) -> int:
         print(f"Unable to load configuration: {exc}")
         return 1
     pdf_config = manager.config.pdf_pipeline()
-    require_gpu = bool(pdf_config.get("require_gpu", True))
+    require_gpu = pdf_config.require_gpu
     try:
         ensure_gpu(require_flag=require_gpu)
     except GpuNotAvailableError as exc:
         print(str(exc), file=sys.stderr)
         return 99
-    ledger = IngestionLedger(Path(pdf_config["ledger_path"]).expanduser())
+    ledger = IngestionLedger(pdf_config.ledger_path.expanduser())
     entries = list(ledger.entries(state="pdf_ir_ready"))
     for entry in entries:
         ledger.record(entry.doc_id, "postpdf_started", {"steps": args.steps})
@@ -288,7 +328,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     return int(args.func(args))

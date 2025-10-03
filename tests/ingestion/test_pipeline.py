@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -8,7 +9,7 @@ import pytest
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion.models import Document, IngestionResult
-from Medical_KG.ingestion.pipeline import IngestionPipeline
+from Medical_KG.ingestion.pipeline import IngestionPipeline, PipelineResult
 
 
 class _StubAdapter(BaseAdapter):
@@ -99,3 +100,26 @@ def test_pipeline_status_reports_entries(tmp_path: Path) -> None:
     summary = pipeline.status()
     assert "auto_done" in summary and summary["auto_done"][0]["doc_id"] == "doc-a"
     assert "auto_failed" in summary
+
+
+def test_pipeline_run_async_supports_event_loops(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "ledger.jsonl"
+    ledger = IngestionLedger(ledger_path)
+    records = [{"id": "doc-async", "content": "ok"}]
+    adapter = _StubAdapter(AdapterContext(ledger), records=records)
+    pipeline = IngestionPipeline(
+        ledger,
+        registry=_Registry(adapter),
+        client_factory=lambda: _NoopClient(),
+    )
+
+    async def _invoke() -> list[PipelineResult]:
+        return await pipeline.run_async("stub")
+
+    loop = asyncio.new_event_loop()
+    try:
+        results = loop.run_until_complete(_invoke())
+    finally:
+        loop.close()
+
+    assert results == [PipelineResult(source="stub", doc_ids=["doc-async"])]

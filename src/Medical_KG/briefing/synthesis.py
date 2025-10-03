@@ -16,8 +16,8 @@ from .models import (
 )
 
 
-def build_pico(bundle: TopicBundle) -> Mapping[str, list[Mapping[str, object]]]:
-    sections: MutableMapping[str, list[Mapping[str, object]]] = defaultdict(list)
+def build_pico(bundle: TopicBundle) -> dict[str, list[dict[str, object]]]:
+    sections: MutableMapping[str, list[dict[str, object]]] = defaultdict(list)
     for variable in bundle.evidence_variables:
         sections[variable.kind].append(
             {
@@ -25,25 +25,26 @@ def build_pico(bundle: TopicBundle) -> Mapping[str, list[Mapping[str, object]]]:
                 "citations": [citation.as_dict() for citation in variable.citations],
             }
         )
-    return sections
+    return {section: entries for section, entries in sections.items()}
 
 
-def build_endpoint_summary(bundle: TopicBundle) -> list[Mapping[str, object]]:
+def build_endpoint_summary(bundle: TopicBundle) -> list[dict[str, object]]:
     grouped: MutableMapping[tuple[str, str], list[Evidence]] = defaultdict(list)
     for evidence in bundle.evidence:
         grouped[(evidence.outcome, evidence.intervention)].append(evidence)
 
     summaries: list[Mapping[str, object]] = []
     for (outcome, intervention), evidences in grouped.items():
-        summary = {
+        summary: dict[str, object] = {
             "outcome": outcome,
             "intervention": intervention,
             "certainty": _highest_certainty(evidences),
             "meta": _meta_analysis(evidences),
-            "citations": [citation.as_dict() for citation in _collect_citations(evidences)],
+            "citations": [citation.as_dict() for citation in _collect_evidence_citations(evidences)],
         }
         summaries.append(summary)
-    return sorted(summaries, key=lambda item: (item["outcome"], item["intervention"]))
+    summaries.sort(key=_endpoint_sort_key)
+    return [dict(item) for item in summaries]
 
 
 def _highest_certainty(evidences: Iterable[Evidence]) -> str:
@@ -52,7 +53,7 @@ def _highest_certainty(evidences: Iterable[Evidence]) -> str:
     return highest.certainty
 
 
-def _meta_analysis(evidences: list[Evidence]) -> Mapping[str, object]:
+def _meta_analysis(evidences: list[Evidence]) -> dict[str, object]:
     values = [ev.value for ev in evidences]
     ci_values = [ev for ev in evidences if ev.has_interval()]
     if len(ci_values) >= 2:
@@ -95,14 +96,14 @@ def _random_effects(evidences: list[Evidence]) -> tuple[float, float, float, flo
     return pooled, ci_low, ci_high, i2
 
 
-def _collect_citations(evidences: Iterable[Evidence]) -> list[Citation]:
+def _collect_evidence_citations(evidences: Iterable[Evidence]) -> list[Citation]:
     citations: list[Citation] = []
     for evidence in evidences:
         citations.extend(evidence.citations)
     return citations
 
 
-def build_safety_profile(bundle: TopicBundle) -> list[Mapping[str, object]]:
+def build_safety_profile(bundle: TopicBundle) -> list[dict[str, object]]:
     grouped: MutableMapping[tuple[str, int | None], list[AdverseEvent]] = defaultdict(list)
     for ae in bundle.adverse_events:
         grouped[(ae.meddra_pt, ae.grade)].append(ae)
@@ -113,21 +114,26 @@ def build_safety_profile(bundle: TopicBundle) -> list[Mapping[str, object]]:
                 "term": term,
                 "grade": grade,
                 "rate": mean([ev.rate for ev in events if ev.rate is not None]) if events else None,
-                "citations": [citation.as_dict() for citation in _collect_citations(events)],
+                "citations": [
+                    citation.as_dict() for citation in _collect_generic_citations(events)
+                ],
             }
         )
-    return sorted(profile, key=lambda item: (item["term"], item.get("grade") or 0))
+    profile.sort(key=_safety_sort_key)
+    return [dict(item) for item in profile]
 
 
-def _collect_citations(events: Iterable[AdverseEvent | Dose | EligibilityConstraint]) -> list[Citation]:
+def _collect_generic_citations(
+    events: Iterable[AdverseEvent | Dose | EligibilityConstraint],
+) -> list[Citation]:
     citations: list[Citation] = []
     for event in events:
         citations.extend(event.citations)
     return citations
 
 
-def build_dosing(bundle: TopicBundle) -> list[Mapping[str, object]]:
-    regimens: list[Mapping[str, object]] = []
+def build_dosing(bundle: TopicBundle) -> list[dict[str, object]]:
+    regimens: list[dict[str, object]] = []
     for dose in bundle.doses:
         regimens.append(
             {
@@ -141,8 +147,8 @@ def build_dosing(bundle: TopicBundle) -> list[Mapping[str, object]]:
     return regimens
 
 
-def build_eligibility(bundle: TopicBundle) -> list[Mapping[str, object]]:
-    summary: list[Mapping[str, object]] = []
+def build_eligibility(bundle: TopicBundle) -> list[dict[str, object]]:
+    summary: list[dict[str, object]] = []
     for constraint in bundle.eligibility:
         summary.append(
             {
@@ -154,8 +160,8 @@ def build_eligibility(bundle: TopicBundle) -> list[Mapping[str, object]]:
     return summary
 
 
-def build_guideline_summary(bundle: TopicBundle) -> list[Mapping[str, object]]:
-    entries: list[Mapping[str, object]] = []
+def build_guideline_summary(bundle: TopicBundle) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
     for guideline in bundle.guidelines:
         entries.append(
             {
@@ -169,8 +175,8 @@ def build_guideline_summary(bundle: TopicBundle) -> list[Mapping[str, object]]:
     return entries
 
 
-def detect_conflicts(bundle: TopicBundle) -> list[Mapping[str, object]]:
-    conflicts: list[Mapping[str, object]] = []
+def detect_conflicts(bundle: TopicBundle) -> list[dict[str, object]]:
+    conflicts: list[dict[str, object]] = []
     evidence_by_key: MutableMapping[tuple[str, str], list[Evidence]] = defaultdict(list)
     for ev in bundle.evidence:
         evidence_by_key[(ev.outcome, ev.intervention)].append(ev)
@@ -216,6 +222,19 @@ def detect_gaps(bundle: TopicBundle) -> list[str]:
         if positives and negatives:
             gaps.add(outcome)
     return sorted(gaps)
+
+
+def _endpoint_sort_key(item: Mapping[str, object]) -> tuple[str, str]:
+    outcome = item.get("outcome")
+    intervention = item.get("intervention")
+    return (str(outcome), str(intervention))
+
+
+def _safety_sort_key(item: Mapping[str, object]) -> tuple[str, int]:
+    term = str(item.get("term"))
+    grade_value = item.get("grade")
+    grade = int(grade_value) if isinstance(grade_value, int) else 0
+    return (term, grade)
 
 
 __all__ = [

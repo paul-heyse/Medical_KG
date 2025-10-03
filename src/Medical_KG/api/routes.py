@@ -5,11 +5,12 @@ from __future__ import annotations
 import hashlib
 import time
 from datetime import datetime, timezone
-from typing import Annotated, Awaitable, Callable
+from typing import Annotated, Callable
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 
 from Medical_KG.api.auth import Authenticator, Principal, build_default_authenticator
+from Medical_KG.api.types import DependencyCallable
 from Medical_KG.api.models import (
     ChunkResponse,
     ExtractionRequest,
@@ -129,7 +130,7 @@ class ApiRouter(APIRouter):
         self._register_routes()
 
     # dependencies ---------------------------------------------------------
-    def _require_scope(self, scope: str) -> Callable[[], Awaitable[Principal]]:
+    def _require_scope(self, scope: str) -> DependencyCallable[Principal]:
         return self._authenticator.dependency(scope)
 
     def _apply_rate_limit(self, principal: Principal, response: Response) -> None:

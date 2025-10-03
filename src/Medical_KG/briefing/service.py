@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from .citation import CitationManager
 from .formatters import BriefingFormatter
@@ -74,7 +74,7 @@ class BriefingService:
         bundle = self._repository.load_topic_bundle(topic)
         gaps = detect_gaps(bundle)
         conflicts = detect_conflicts(bundle)
-        questions = [
+        questions: list[dict[str, object]] = [
             {
                 "question": f"What is known about {gap}?",
                 "priority": 1,
@@ -83,14 +83,22 @@ class BriefingService:
             for gap in gaps
         ]
         for conflict in conflicts:
+            details = conflict.get("details")
+            citations = []
+            if isinstance(details, list) and details:
+                first = details[0]
+                if isinstance(first, dict):
+                    citations_value = first.get("citations", [])
+                    if isinstance(citations_value, list):
+                        citations = citations_value
             questions.append(
                 {
                     "question": f"Why do studies disagree on {conflict['outcome']}?",
                     "priority": 2,
-                    "citations": conflict["details"][0]["citations"],
+                    "citations": citations,
                 }
             )
-        questions.sort(key=lambda item: item["priority"])
+        questions.sort(key=_priority_sort_key)
         return {
             "questions": questions,
             "context": {
@@ -176,12 +184,31 @@ class BriefingService:
         raise ValueError(f"Unsupported format: {format}")
 
 
-def _simplify(pico_sections: Mapping[str, Sequence[Mapping[str, object]]]) -> list[Mapping[str, object]]:
-    items: list[Mapping[str, object]] = []
+def _simplify(pico_sections: Mapping[str, Sequence[Mapping[str, object]]]) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
     for section, entries in pico_sections.items():
         for entry in entries:
-            items.append({"summary": f"{section}: {entry['description']}", "citations": entry["citations"]})
+            description = entry.get("description", "")
+            citations = entry.get("citations", [])
+            citations_list: list[object]
+            if isinstance(citations, list):
+                citations_list = citations
+            else:
+                citations_list = []
+            items.append({
+                "summary": f"{section}: {description}",
+                "citations": citations_list,
+            })
     return items
+
+
+def _priority_sort_key(item: Mapping[str, Any]) -> int:
+    value = item.get("priority")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return 0
 
 
 __all__ = ["BriefingService", "BriefingSettings"]

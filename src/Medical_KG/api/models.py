@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from Medical_KG.extraction.models import ExtractionEnvelope
 from Medical_KG.facets.models import FacetModel
@@ -93,7 +91,8 @@ class KgNode(BaseModel):
 
     id: str
     label: str
-    model_config = ConfigDict(extra="allow")
+
+    model_config = {"extra": "allow"}
 
 
 class KgRelationship(BaseModel):
@@ -102,7 +101,7 @@ class KgRelationship(BaseModel):
     type: str
     start_id: Annotated[str, Field(alias="start_id")]
     end_id: Annotated[str, Field(alias="end_id")]
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    model_config = {"extra": "allow", "populate_by_name": True}
 
 
 class KgWriteRequest(BaseModel):

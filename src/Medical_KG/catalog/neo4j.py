@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Protocol
+from typing import Protocol, cast
 
 from .models import Concept
 from .pipeline import CatalogBuildResult
+from .types import JsonValue
 
 
 class Neo4jSession(Protocol):  # pragma: no cover - interface definition
-    def run(self, query: str, parameters: Mapping[str, object] | None = None) -> None:
+    def run(self, query: str, parameters: Mapping[str, JsonValue] | None = None) -> None:
         """Execute a Cypher query."""
 
 
@@ -57,7 +59,7 @@ class ConceptGraphWriter:
     def _upsert_concept(self, concept: Concept) -> None:
         family_label = concept.family.name.title().replace("_", "")
         query = f"MERGE (c:Concept:{family_label} {{iri: $iri}}) " "SET c += $props"
-        props = {
+        props: dict[str, JsonValue] = {
             "ontology": concept.ontology,
             "family": concept.family.value,
             "label": concept.label,
@@ -72,7 +74,11 @@ class ConceptGraphWriter:
             "embedding_qwen": concept.embedding_qwen,
             "splade_terms": concept.splade_terms,
         }
-        self.session.run(query, {"iri": concept.iri, "props": props})
+        parameters: dict[str, JsonValue] = {
+            "iri": concept.iri,
+            "props": cast(Mapping[str, JsonValue], props),
+        }
+        self.session.run(query, cast(Mapping[str, JsonValue], parameters))
 
     def _create_relationships(self, concepts: Iterable[Concept]) -> None:
         for concept in concepts:

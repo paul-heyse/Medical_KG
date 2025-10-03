@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import AsyncIterator
-from typing import Any, Iterable, Mapping, cast
+from typing import Any, Iterable
 from urllib.parse import urlparse
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
@@ -30,6 +30,16 @@ from Medical_KG.ingestion.types import (
     PmcReferencePayload,
     PmcSectionPayload,
     PubMedDocumentPayload,
+    is_medrxiv_payload,
+    is_pmc_payload,
+    is_pubmed_payload,
+)
+from Medical_KG.ingestion.utils import (
+    canonical_json,
+    ensure_json_mapping,
+    ensure_json_sequence,
+    ensure_json_value,
+    normalize_text,
 )
 from Medical_KG.ingestion.utils import (
     canonical_json,
@@ -72,9 +82,9 @@ class PubMedAdapter(HttpAdapter[Any]):
         rate = RateLimit(rate=10 if api_key else 3, per=1.0)
         self.client.set_rate_limit(host, rate)
 
-    async def fetch(self, term: str, retmax: int = 1000) -> AsyncIterator[Any]:
+    async def fetch(self, term: str, retmax: int = 1000) -> AsyncIterator[JSONMapping]:
         retmax = min(retmax, 10000)
-        params = {
+        params: dict[str, object] = {
             "db": "pubmed",
             "retmode": "json",
             "retmax": retmax,
@@ -253,7 +263,7 @@ class PubMedAdapter(HttpAdapter[Any]):
 
     def validate(self, document: Document) -> None:
         raw = document.raw
-        if raw is None or not isinstance(raw, dict):
+        if not is_pubmed_payload(raw):
             raise ValueError("PubMedAdapter document missing typed payload")
         raw_payload = cast(
             PubMedDocumentPayload,
@@ -264,7 +274,28 @@ class PubMedAdapter(HttpAdapter[Any]):
             raise ValueError(f"Invalid PMID: {pmid}")
 
     @staticmethod
-    def _fetch_author_list(raw_authors: Iterable[dict[str, Any]]) -> list[str]:
+    def _as_str(value: JSONValue | None) -> str | None:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return str(value)
+        return None
+
+    @staticmethod
+    def _as_int(value: JSONValue | None) -> int | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                return None
+        return None
+
+    @staticmethod
+    def _fetch_author_list(raw_authors: Iterable[JSONMapping]) -> list[str]:
         authors: list[str] = []
         for author in raw_authors:
             if collective := author.get("CollectiveName"):
@@ -278,8 +309,8 @@ class PubMedAdapter(HttpAdapter[Any]):
         return authors
 
     @staticmethod
-    def _parse_fetch_xml(xml: str) -> dict[str, dict[str, Any]]:
-        details: dict[str, dict[str, Any]] = {}
+    def _parse_fetch_xml(xml: str) -> dict[str, JSONMapping]:
+        details: dict[str, JSONMapping] = {}
         root = ET.fromstring(xml)
 
         def strip(tag: str) -> str:
@@ -293,8 +324,8 @@ class PubMedAdapter(HttpAdapter[Any]):
             if not pmid:
                 continue
             article_data = medline.find("Article")
-            journal = None
-            pub_year = None
+            journal: str | None = None
+            pub_year: str | None = None
             abstract_text = []
             authors: list[str] = []
             pub_types: list[str] = []
@@ -330,22 +361,25 @@ class PubMedAdapter(HttpAdapter[Any]):
                     pmcid = value
                 elif id_type == "doi":
                     doi = value
-            details[pmid] = {
+            detail: MutableJSONMapping = {
                 "pmid": pmid,
-                "title": normalize_text(article_data.findtext("ArticleTitle", default="")) if article_data is not None else "",
+                "title": normalize_text(article_data.findtext("ArticleTitle", default=""))
+                if article_data is not None
+                else "",
                 "abstract": normalize_text("\n".join(filter(None, abstract_text))),
                 "authors": authors,
                 "mesh_terms": [term for term in mesh_terms if term],
                 "journal": normalize_text(journal or ""),
-                "pub_year": pub_year,
+                "pub_year": normalize_text(pub_year) if pub_year else None,
                 "pub_types": [ptype for ptype in pub_types if ptype],
                 "pmcid": pmcid,
                 "doi": doi,
             }
+            details[pmid] = detail
         return details
 
 
-class PmcAdapter(HttpAdapter[Any]):
+class PmcAdapter(HttpAdapter[ET.Element]):
     source = "pmc"
 
     def __init__(self, context: AdapterContext, client: AsyncHttpClient) -> None:
@@ -360,8 +394,8 @@ class PmcAdapter(HttpAdapter[Any]):
         metadata_prefix: str = "pmc",
         from_date: str | None = None,
         until_date: str | None = None,
-    ) -> AsyncIterator[Any]:
-        params: dict[str, Any] = {"verb": "ListRecords", "set": set_spec, "metadataPrefix": metadata_prefix}
+    ) -> AsyncIterator[ET.Element]:
+        params: dict[str, object] = {"verb": "ListRecords", "set": set_spec, "metadataPrefix": metadata_prefix}
         if from_date:
             params["from"] = from_date
         if until_date:
@@ -415,7 +449,7 @@ class PmcAdapter(HttpAdapter[Any]):
 
     def validate(self, document: Document) -> None:
         raw = document.raw
-        if raw is None or not isinstance(raw, dict):
+        if not is_pmc_payload(raw):
             raise ValueError("PMC document missing typed payload")
         raw_payload = cast(
             PmcDocumentPayload,
@@ -499,7 +533,7 @@ class PmcAdapter(HttpAdapter[Any]):
         return refs
 
 
-class MedRxivAdapter(HttpAdapter[Any]):
+class MedRxivAdapter(HttpAdapter[JSONMapping]):
     source = "medrxiv"
 
     def __init__(
@@ -507,7 +541,7 @@ class MedRxivAdapter(HttpAdapter[Any]):
         context: AdapterContext,
         client: AsyncHttpClient,
         *,
-        bootstrap_records: Iterable[dict[str, Any]] | None = None,
+        bootstrap_records: Iterable[JSONMapping] | None = None,
     ) -> None:
         super().__init__(context, client)
         self._bootstrap = list(bootstrap_records or [])
@@ -518,12 +552,12 @@ class MedRxivAdapter(HttpAdapter[Any]):
         search: str | None = None,
         cursor: str | None = None,
         page_size: int = 100,
-    ) -> AsyncIterator[Any]:
+    ) -> AsyncIterator[JSONMapping]:
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record
             return
-        params: dict[str, Any] = {"page_size": page_size}
+        params: dict[str, object] = {"page_size": page_size}
         if search:
             params["search"] = search
         next_cursor = cursor
@@ -568,7 +602,7 @@ class MedRxivAdapter(HttpAdapter[Any]):
 
     def validate(self, document: Document) -> None:
         raw = document.raw
-        if raw is None or not isinstance(raw, dict):
+        if not is_medrxiv_payload(raw):
             raise ValueError("MedRxiv document missing typed payload")
         raw_payload = cast(
             MedRxivDocumentPayload,
@@ -577,6 +611,33 @@ class MedRxivAdapter(HttpAdapter[Any]):
         doi = raw_payload["doi"]
         if not isinstance(doi, str) or "/" not in doi:
             raise ValueError("Invalid DOI")
+
+    @staticmethod
+    def _iter_records(value: JSONValue | None) -> Iterator[JSONMapping]:
+        if isinstance(value, SequenceABC) and not isinstance(value, (str, bytes, bytearray)):
+            for item in value:
+                if isinstance(item, MappingABC):
+                    yield ensure_json_mapping(
+                        ensure_json_value(item, context="medrxiv record"),
+                        context="medrxiv record mapping",
+                    )
+
+    @staticmethod
+    def _iter_strings(value: JSONValue | None) -> Iterator[str]:
+        if isinstance(value, SequenceABC) and not isinstance(value, (str, bytes, bytearray)):
+            for item in value:
+                if isinstance(item, str):
+                    yield item
+                elif isinstance(item, (int, float)) and not isinstance(item, bool):
+                    yield str(item)
+
+    @staticmethod
+    def _as_str(value: JSONValue | None) -> str | None:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return str(value)
+        return None
 
 
 class LiteratureFallbackError(RuntimeError):

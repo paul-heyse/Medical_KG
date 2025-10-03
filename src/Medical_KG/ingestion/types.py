@@ -1,7 +1,7 @@
 """Shared typing utilities for ingestion adapters."""
 from __future__ import annotations
 
-from typing import Mapping, MutableMapping, NotRequired, Sequence, TypedDict, Union
+from typing import Any, Mapping, MutableMapping, NotRequired, Sequence, TypeGuard, TypedDict, Union
 
 
 JSONPrimitive = Union[str, int, float, bool, None]
@@ -53,7 +53,6 @@ class ClinicalDocumentPayload(TitleMixin, VersionMixin):
     nct_id: str
     arms: Sequence[JSONMapping]
     eligibility: JSONValue
-    outcomes: Sequence[JSONMapping]
     status: NotRequired[str | None]
     phase: NotRequired[str | None]
     study_type: NotRequired[str | None]
@@ -61,6 +60,7 @@ class ClinicalDocumentPayload(TitleMixin, VersionMixin):
     enrollment: NotRequired[int | str | None]
     start_date: NotRequired[str | None]
     completion_date: NotRequired[str | None]
+    outcomes: NotRequired[Sequence[JSONMapping]]
 
 
 class OpenFdaRecordPayload(TypedDict):
@@ -261,3 +261,158 @@ AdapterDocumentPayload = Union[
 
 
 DocumentRaw = AdapterDocumentPayload
+
+
+def _is_payload_dict(raw: DocumentRaw | None) -> TypeGuard[dict[str, Any]]:
+    return isinstance(raw, dict)
+
+
+def is_mesh_payload(raw: DocumentRaw | None) -> TypeGuard[MeshDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "terms" in raw and "descriptor_id" in raw
+
+
+def is_umls_payload(raw: DocumentRaw | None) -> TypeGuard[UmlsDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "synonyms" in raw and "cui" in raw
+
+
+def is_loinc_payload(raw: DocumentRaw | None) -> TypeGuard[LoincDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "property" in raw and "system" in raw and "method" in raw
+
+
+def is_icd11_payload(raw: DocumentRaw | None) -> TypeGuard[Icd11DocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "code" in raw and "uri" in raw
+
+
+def is_snomed_payload(raw: DocumentRaw | None) -> TypeGuard[SnomedDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "designation" in raw and "code" in raw
+
+
+def is_terminology_payload(raw: DocumentRaw | None) -> TypeGuard[TerminologyDocumentPayload]:
+    return bool(
+        is_mesh_payload(raw)
+        or is_umls_payload(raw)
+        or is_loinc_payload(raw)
+        or is_icd11_payload(raw)
+        or is_snomed_payload(raw)
+    )
+
+
+def is_clinical_document_payload(raw: DocumentRaw | None) -> TypeGuard[ClinicalDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "nct_id" in raw and "arms" in raw and "eligibility" in raw
+
+
+def is_openfda_payload(raw: DocumentRaw | None) -> TypeGuard[OpenFdaDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "identifier" in raw and "version" in raw and "record" in raw
+
+
+def is_dailymed_payload(raw: DocumentRaw | None) -> TypeGuard[DailyMedDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "setid" in raw and "sections" in raw
+
+
+def is_rxnorm_payload(raw: DocumentRaw | None) -> TypeGuard[RxNormDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "rxcui" in raw
+
+
+def is_access_gudid_payload(raw: DocumentRaw | None) -> TypeGuard[AccessGudidDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "udi_di" in raw
+
+
+def is_clinical_payload(raw: DocumentRaw | None) -> TypeGuard[ClinicalCatalogDocumentPayload]:
+    return bool(
+        is_clinical_document_payload(raw)
+        or is_openfda_payload(raw)
+        or is_dailymed_payload(raw)
+        or is_rxnorm_payload(raw)
+        or is_access_gudid_payload(raw)
+    )
+
+
+def is_nice_guideline_payload(raw: DocumentRaw | None) -> TypeGuard[NiceGuidelineDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "uid" in raw and "summary" in raw
+
+
+def is_uspstf_payload(raw: DocumentRaw | None) -> TypeGuard[UspstfDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "title" in raw and "status" in raw
+
+
+def is_guideline_payload(raw: DocumentRaw | None) -> TypeGuard[GuidelineDocumentPayload]:
+    return bool(is_nice_guideline_payload(raw) or is_uspstf_payload(raw))
+
+
+def is_cdc_socrata_payload(raw: DocumentRaw | None) -> TypeGuard[CdcSocrataDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "identifier" in raw and "record" in raw and "version" not in raw
+
+
+def is_cdc_wonder_payload(raw: DocumentRaw | None) -> TypeGuard[CdcWonderDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "rows" in raw
+
+
+def is_who_gho_payload(raw: DocumentRaw | None) -> TypeGuard[WhoGhoDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "indicator" in raw and "value" in raw
+
+
+def is_openprescribing_payload(raw: DocumentRaw | None) -> TypeGuard[OpenPrescribingDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "identifier" in raw and "record" in raw and "version" not in raw
+
+
+def is_knowledge_base_payload(raw: DocumentRaw | None) -> TypeGuard[KnowledgeBaseDocumentPayload]:
+    return bool(
+        is_cdc_socrata_payload(raw)
+        or is_cdc_wonder_payload(raw)
+        or is_who_gho_payload(raw)
+        or is_openprescribing_payload(raw)
+    )
+
+
+def is_pubmed_payload(raw: DocumentRaw | None) -> TypeGuard[PubMedDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "pmid" in raw and "abstract" in raw and "authors" in raw
+
+
+def is_pmc_payload(raw: DocumentRaw | None) -> TypeGuard[PmcDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "pmcid" in raw and "sections" in raw and "references" in raw
+
+
+def is_medrxiv_payload(raw: DocumentRaw | None) -> TypeGuard[MedRxivDocumentPayload]:
+    if not _is_payload_dict(raw):
+        return False
+    return "doi" in raw and "abstract" in raw
+
+
+def is_literature_payload(raw: DocumentRaw | None) -> TypeGuard[LiteratureDocumentPayload]:
+    return bool(is_pubmed_payload(raw) or is_pmc_payload(raw) or is_medrxiv_payload(raw))

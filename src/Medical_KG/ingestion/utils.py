@@ -51,3 +51,20 @@ def ensure_json_sequence(value: JSONValue, *, context: str) -> JSONSequence:
     if not isinstance(value, Sequence):
         raise TypeError(f"{context} expected a sequence, received {type(value).__name__}")
     return value
+
+
+def ensure_json_value(value: object, *, context: str) -> JSONValue:
+    """Coerce an arbitrary JSON-like object into a :class:`JSONValue`."""
+
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, Mapping):
+        return {
+            str(key): ensure_json_value(item, context=f"{context} mapping value")
+            for key, item in value.items()
+        }
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [ensure_json_value(item, context=f"{context} sequence item") for item in value]
+    raise TypeError(
+        f"{context} expected a JSON-serializable value, received {type(value).__name__}"
+    )

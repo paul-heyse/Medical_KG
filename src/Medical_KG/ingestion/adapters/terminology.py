@@ -27,11 +27,13 @@ from Medical_KG.ingestion.types import (
     MeshDocumentPayload,
     SnomedDocumentPayload,
     UmlsDocumentPayload,
+    is_snomed_payload,
 )
 from Medical_KG.ingestion.utils import (
     canonical_json,
     ensure_json_mapping,
     ensure_json_sequence,
+    ensure_json_value,
     normalize_text,
 )
 
@@ -253,12 +255,11 @@ class LoincAdapter(HttpAdapter[Any]):
         }
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=code, version="v1", content=content)
-        metadata_value = code
         return Document(
             doc_id=doc_id,
             source=self.source,
             content=json.dumps(payload),
-            metadata={"code": metadata_value},
+            metadata={"code": code},
             raw=payload,
         )
 
@@ -302,12 +303,18 @@ class Icd11Adapter(HttpAdapter[Any]):
         title_value = payload_map.get("title")
         title_text = None
         if isinstance(title_value, Mapping):
-            title_text = ensure_json_mapping(title_value, context="icd11 title").get("@value")
+            title_map = ensure_json_mapping(title_value, context="icd11 title")
+            title_raw = title_map.get("@value")
+            if isinstance(title_raw, str):
+                title = normalize_text(title_raw)
 
         definition_value = payload_map.get("definition")
         definition_text = None
         if isinstance(definition_value, Mapping):
-            definition_text = ensure_json_mapping(definition_value, context="icd11 definition").get("@value")
+            definition_map = ensure_json_mapping(definition_value, context="icd11 definition")
+            definition_raw = definition_map.get("@value")
+            if isinstance(definition_raw, str):
+                definition = normalize_text(definition_raw)
 
         uri_value = payload_map.get("browserUrl")
         # ``Icd11DocumentPayload`` fields map directly to the optional ``code``,
@@ -315,18 +322,17 @@ class Icd11Adapter(HttpAdapter[Any]):
         # ``Medical_KG.ingestion.types``.
         payload: Icd11DocumentPayload = {
             "code": code,
-            "title": title_text if isinstance(title_text, str) else None,
-            "definition": definition_text if isinstance(definition_text, str) else None,
-            "uri": uri_value if isinstance(uri_value, str) else None,
+            "title": title,
+            "definition": definition,
+            "uri": uri,
         }
         content = canonical_json(payload)
-        identifier = code or "unknown"
-        doc_id = self.build_doc_id(identifier=identifier, version="v1", content=content)
+        doc_id = self.build_doc_id(identifier=code, version="v1", content=content)
         return Document(
             doc_id=doc_id,
             source=self.source,
             content=json.dumps(payload),
-            metadata={"code": identifier},
+            metadata={"code": code},
             raw=payload,
         )
 
@@ -388,18 +394,17 @@ class SnomedAdapter(HttpAdapter[Any]):
         # ``SnomedDocumentPayload.display`` is optional; designation entries are
         # required and stay typed via ``ensure_json_mapping`` above.
         payload: SnomedDocumentPayload = {
-            "code": code or None,
-            "display": display_value if isinstance(display_value, str) else None,
+            "code": code,
+            "display": normalize_text(display_value) if isinstance(display_value, str) else None,
             "designation": designation_entries,
         }
         content = canonical_json(payload)
-        identifier = code
-        doc_id = self.build_doc_id(identifier=identifier, version="v1", content=content)
+        doc_id = self.build_doc_id(identifier=code, version="v1", content=content)
         return Document(
             doc_id=doc_id,
             source=self.source,
             content=json.dumps(payload),
-            metadata={"code": identifier},
+            metadata={"code": code},
             raw=payload,
         )
 

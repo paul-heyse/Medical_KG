@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import xml.etree.ElementTree as ET
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Iterable, Sequence as SequenceABC
 from typing import Generic, Mapping, Sequence, TypeVar
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
@@ -64,13 +64,20 @@ class NiceGuidelineAdapter(_BootstrapAdapter[JSONMapping]):
             ensure_json_value(payload_value, context="nice guidance response value"),
             context="nice guidance response",
         )
+        # NICE guidance API (v1, 2023-12 docs) wraps results in an object with an
+        # ``items`` array.
         items_value = payload_map.get("items")
         items_sequence: JSONSequence = ensure_json_sequence(
             items_value if items_value is not None else [],
             context="nice guidance items",
         )
+        # Keep boundary validation so schema changes in the REST payload are
+        # surfaced during fetch.
         for record_value in items_sequence:
-            record_mapping = ensure_json_mapping(record_value, context="nice guidance item")
+            record_mapping = ensure_json_mapping(
+                record_value,
+                context="nice guidance item",
+            )
             yield record_mapping
 
     def parse(self, raw: JSONMapping) -> Document:
@@ -166,8 +173,13 @@ class CdcSocrataAdapter(_BootstrapAdapter[JSONMapping]):
         params = {"$limit": limit}
         payload = await self.fetch_json(f"https://data.cdc.gov/resource/{dataset}.json", params=params)
         rows = ensure_json_sequence(payload, context="cdc socrata rows")
+        # CDC Socrata datasets expose each table as an array of row objects; keep
+        # boundary validation tied to the 2024-02 API schema.
         for row in rows:
-            yield ensure_json_mapping(row, context="cdc socrata row")
+            yield ensure_json_mapping(
+                row,
+                context="cdc socrata row",
+            )
 
     def parse(self, raw: JSONMapping) -> Document:
         identifier_value = raw.get("row_id")
@@ -246,18 +258,37 @@ class WhoGhoAdapter(_BootstrapAdapter[JSONMapping]):
         if spatial:
             params["spatial"] = spatial
         payload = await self.fetch_json("https://ghoapi.azureedge.net/api/GHO", params=params)
-        payload_map = ensure_json_mapping(payload, context="who gho response")
+        payload_map = ensure_json_mapping(
+            payload,
+            context="who gho response",
+        )
+        # WHO GHO API (beta docs 2023) wraps indicator rows in a ``value`` array.
         values_value = payload_map.get("value", [])
-        for entry in ensure_json_sequence(values_value, context="who gho values"):
-            yield ensure_json_mapping(entry, context="who gho entry")
+        for entry in ensure_json_sequence(
+            values_value,
+            context="who gho values",
+        ):
+            yield ensure_json_mapping(
+                entry,
+                context="who gho entry",
+            )
 
     def parse(self, raw: JSONMapping) -> Document:
         indicator_value = raw.get("Indicator")
         country_value = raw.get("SpatialDim")
         year_value = raw.get("TimeDim")
+        value_raw = raw.get("Value")
+        if isinstance(value_raw, (str, int, float, bool)) or value_raw is None:
+            value: JSONValue = value_raw
+        elif isinstance(value_raw, Mapping):
+            value = dict(value_raw)
+        elif isinstance(value_raw, SequenceABC) and not isinstance(value_raw, (str, bytes, bytearray)):
+            value = list(value_raw)
+        else:
+            value = str(value_raw)
         payload: WhoGhoDocumentPayload = {
             "indicator": indicator_value if isinstance(indicator_value, str) else None,
-            "value": ensure_json_value(raw.get("Value"), context="who gho value"),
+            "value": value,
             "country": country_value if isinstance(country_value, str) else None,
             "year": year_value if isinstance(year_value, str) else None,
         }
@@ -293,8 +324,13 @@ class OpenPrescribingAdapter(_BootstrapAdapter[JSONMapping]):
             return
         payload = await self.fetch_json(f"https://openprescribing.net/api/1.0/{endpoint}")
         rows = ensure_json_sequence(payload, context="openprescribing rows")
+        # OpenPrescribing API v1 returns each query as an array of JSON objects;
+        # retain boundary validation to detect schema changes early.
         for row in rows:
-            yield ensure_json_mapping(row, context="openprescribing row")
+            yield ensure_json_mapping(
+                row,
+                context="openprescribing row",
+            )
 
     def parse(self, raw: JSONMapping) -> Document:
         identifier = (

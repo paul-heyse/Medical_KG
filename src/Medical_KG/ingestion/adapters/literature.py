@@ -14,9 +14,7 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
-from collections.abc import AsyncIterator
-from collections.abc import Mapping as MappingABC
-from collections.abc import Sequence as SequenceABC
+from collections.abc import AsyncIterator, Mapping, Sequence as SequenceABC
 from typing import Any, Iterable, Iterator
 from urllib.parse import urlparse
 
@@ -91,6 +89,9 @@ class PubMedAdapter(HttpAdapter[Any]):
         }
         if self.api_key:
             params["api_key"] = self.api_key
+        # PubMed E-utilities (2024-01) emit JSON object envelopes for search and
+        # summary endpoints; keep boundary validation so schema drift surfaces
+        # during ingestion.
         search = ensure_json_mapping(
             await self.fetch_json(PUBMED_SEARCH_URL, params=params),
             context="pubmed search response",
@@ -213,7 +214,9 @@ class PubMedAdapter(HttpAdapter[Any]):
             retstart += retmax
 
     def parse(self, raw: Any) -> Document:
-        raw_map = ensure_json_mapping(raw, context="pubmed document")
+        if not isinstance(raw, Mapping):
+            raise TypeError("PubMed adapter expected a mapping payload")
+        raw_map = dict(raw)
         uid_value = raw_map.get("pmid") or raw_map.get("uid")
         uid = str(uid_value) if uid_value is not None else "unknown"
         title = normalize_text(str(raw_map.get("title", "")))
@@ -556,6 +559,8 @@ class MedRxivAdapter(HttpAdapter[JSONMapping]):
                 await self.fetch_json(MEDRXIV_URL, params=params),
                 context="medrxiv response",
             )
+            # medRxiv JSON API (2024-02 docs) returns paginated ``results`` arrays;
+            # keep boundary validation to surface API changes quickly.
             for entry in ensure_json_sequence(response.get("results", []), context="medrxiv results"):
                 if not isinstance(entry, MappingABC):
                     continue
@@ -566,7 +571,9 @@ class MedRxivAdapter(HttpAdapter[JSONMapping]):
                 break
 
     def parse(self, raw: Any) -> Document:
-        raw_map = ensure_json_mapping(raw, context="medrxiv document")
+        if not isinstance(raw, Mapping):
+            raise TypeError("MedRxiv adapter expected a mapping payload")
+        raw_map = dict(raw)
         identifier_value = raw_map.get("doi")
         if not isinstance(identifier_value, str):
             raise ValueError("MedRxiv payload missing DOI")
@@ -602,7 +609,7 @@ class MedRxivAdapter(HttpAdapter[JSONMapping]):
     def _iter_records(value: JSONValue | None) -> Iterator[JSONMapping]:
         if isinstance(value, SequenceABC) and not isinstance(value, (str, bytes, bytearray)):
             for item in value:
-                if isinstance(item, MappingABC):
+                if isinstance(item, Mapping):
                     yield ensure_json_mapping(
                         ensure_json_value(item, context="medrxiv record"),
                         context="medrxiv record mapping",

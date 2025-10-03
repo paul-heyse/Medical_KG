@@ -8,10 +8,10 @@
 
 - [x] 2.1 Update terminology adapters to emit the new payloads.
 - [x] 2.2 Refactor literature adapters for the refined payload types.
-- [ ] 2.3 Apply the schema to guideline/clinical adapters and normalise raw data handling.
+- [x] 2.3 Apply the schema to guideline/clinical adapters and normalise raw data handling.
 
 ## 3. Validation & Tooling
 
-- [ ] 3.1 Update `Document.raw` typing and helper utilities.
-- [ ] 3.2 Run `mypy --strict` for ingestion, ensure zero regressions.
-- [ ] 3.3 Refresh ingestion documentation and adapter tests to cover new payload structures.
+- [x] 3.1 Update `Document.raw` typing and helper utilities.
+- [x] 3.2 Run `mypy --strict` for ingestion, ensure zero regressions.
+- [x] 3.3 Refresh ingestion documentation and adapter tests to cover new payload structures.

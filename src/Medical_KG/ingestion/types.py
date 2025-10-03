@@ -53,7 +53,6 @@ class ClinicalDocumentPayload(TitleMixin, VersionMixin):
     nct_id: str
     arms: Sequence[JSONMapping]
     eligibility: JSONValue
-    outcomes: Sequence[JSONMapping]
     status: NotRequired[str | None]
     phase: NotRequired[str | None]
     study_type: NotRequired[str | None]
@@ -61,6 +60,7 @@ class ClinicalDocumentPayload(TitleMixin, VersionMixin):
     enrollment: NotRequired[int | str | None]
     start_date: NotRequired[str | None]
     completion_date: NotRequired[str | None]
+    outcomes: NotRequired[Sequence[JSONMapping]]
 
 
 class OpenFdaRecordPayload(TypedDict):

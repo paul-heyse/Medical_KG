@@ -4,12 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Mapping
 
-from Medical_KG.ingestion.types import (
-    AdapterDocumentPayload,
-    JSONMapping,
-    JSONValue,
-    MutableJSONMapping,
-)
+from Medical_KG.ingestion.types import DocumentRaw, JSONMapping, JSONValue, MutableJSONMapping
 
 
 @dataclass(slots=True)
@@ -20,7 +15,7 @@ class Document:
     source: str
     content: str
     metadata: MutableJSONMapping = field(default_factory=dict)
-    raw: AdapterDocumentPayload | None = None
+    raw: DocumentRaw | None = None
 
     def as_record(self) -> Mapping[str, object]:
         record: dict[str, object] = {

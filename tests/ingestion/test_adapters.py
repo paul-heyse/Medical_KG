@@ -148,6 +148,10 @@ def test_clinical_trials_parses_metadata(fake_ledger: Any) -> None:
         document = results[0].document
         assert document.metadata["record_version"] == "2024-01-01"
         assert document.raw["phase"]
+        assert isinstance(document.raw, dict)
+        assert isinstance(document.raw["arms"], list)
+        assert isinstance(document.raw.get("outcomes"), list)
+        assert isinstance(document.raw["eligibility"], str)
         await client.aclose()
 
     _run(_test())
@@ -162,7 +166,10 @@ def test_clinical_trials_handles_partial_payload(fake_ledger: Any) -> None:
             bootstrap_records=[clinical_study_without_outcomes()],
         )
         results = await adapter.run()
-        assert results[0].document.raw["outcomes"] is None
+        payload = results[0].document.raw
+        assert isinstance(payload, dict)
+        assert payload.get("outcomes") is None
+        assert isinstance(payload["arms"], list)
         await client.aclose()
 
     _run(_test())
@@ -308,6 +315,7 @@ def test_openfda_parses_identifier(fake_ledger: Any) -> None:
         )
         results = await adapter.run(resource="drug/event")
         assert results[0].document.metadata["identifier"]
+        assert isinstance(results[0].document.raw["record"], dict)
         await client.aclose()
 
     _run(_test())
@@ -323,6 +331,7 @@ def test_openfda_udi_enriches_metadata(fake_ledger: Any) -> None:
         metadata = results[0].document.metadata
         assert metadata["identifier"]
         assert metadata["udi_di"].isdigit()
+        assert isinstance(results[0].document.raw["record"], dict)
         await client.aclose()
 
     _run(_test())
@@ -477,7 +486,13 @@ def test_guideline_adapters(fake_ledger: Any) -> None:
         nic_results = await nice.run()
         cdc_results = await cdc.run(dataset="abc")
         assert nic_results[0].document.metadata["uid"].startswith("CG")
+        assert isinstance(nic_results[0].document.raw, dict)
+        assert isinstance(nic_results[0].document.raw["summary"], str)
+        assert nic_results[0].document.raw["url"] is None or isinstance(
+            nic_results[0].document.raw["url"], str
+        )
         assert cdc_results[0].document.metadata["identifier"].startswith("CA-")
+        assert isinstance(cdc_results[0].document.raw["record"], dict)
         await client.aclose()
 
     _run(_test())
@@ -504,9 +519,14 @@ def test_terminology_adapters_parse(fake_ledger: Any) -> None:
         )
 
         assert results[0][0].document.metadata["descriptor_id"].startswith("D")
+        assert isinstance(results[0][0].document.raw["terms"], list)
         assert results[1][0].document.metadata["cui"].startswith("C")
+        assert isinstance(results[1][0].document.raw["synonyms"], list)
         assert results[2][0].document.metadata["code"].endswith("-4")
+        assert isinstance(results[2][0].document.raw["property"], str)
         assert results[5][0].document.metadata["rxcui"].isdigit()
+        assert isinstance(results[3][0].document.raw["title"], str)
+        assert isinstance(results[4][0].document.raw["designation"], list)
         await client.aclose()
 
     _run(_test())

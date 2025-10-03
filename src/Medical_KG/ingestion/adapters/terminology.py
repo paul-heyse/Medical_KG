@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Iterable, Sequence
 from typing import Any, Mapping
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
@@ -21,6 +21,7 @@ from Medical_KG.ingestion.utils import (
     canonical_json,
     ensure_json_mapping,
     ensure_json_sequence,
+    ensure_json_value,
     normalize_text,
 )
 
@@ -62,15 +63,41 @@ class MeSHAdapter(HttpAdapter[JSONMapping]):
         yield payload_map
 
     def parse(self, raw: JSONMapping) -> Document:
-        descriptor_raw = raw.get("descriptor", {})
-        descriptor = ensure_json_mapping(descriptor_raw, context="mesh descriptor payload")
+        descriptor_value = raw.get("descriptor")
+        descriptor = ensure_json_mapping(descriptor_value, context="mesh descriptor")
+
         descriptor_id_value = descriptor.get("descriptorUI")
-        descriptor_id = str(descriptor_id_value) if isinstance(descriptor_id_value, str) else ""
-        name = normalize_text(descriptor.get("descriptorName", {}).get("string", ""))
-        concept_list = descriptor.get("conceptList", {}).get("concept", []) or []
-        primary_concept = concept_list[0] if concept_list else {}
-        term_list = primary_concept.get("termList", {}).get("term", []) if isinstance(primary_concept, dict) else []
-        terms = [normalize_text(term.get("string", "")) for term in term_list if isinstance(term, dict)]
+        if not isinstance(descriptor_id_value, str) or not descriptor_id_value:
+            raise ValueError("MeSH descriptor missing descriptorUI")
+        descriptor_id = descriptor_id_value
+
+        descriptor_name_value = descriptor.get("descriptorName")
+        name = ""
+        if isinstance(descriptor_name_value, Mapping):
+            descriptor_name = ensure_json_mapping(descriptor_name_value, context="mesh descriptor name")
+            name_value = descriptor_name.get("string")
+            if isinstance(name_value, str):
+                name = normalize_text(name_value)
+
+        concept_list_value = descriptor.get("conceptList")
+        terms: list[str] = []
+        if isinstance(concept_list_value, Mapping):
+            concept_list = ensure_json_mapping(concept_list_value, context="mesh concept list")
+            concepts_value = concept_list.get("concept")
+            if concepts_value is not None:
+                for concept in ensure_json_sequence(concepts_value, context="mesh concepts"):
+                    concept_map = ensure_json_mapping(concept, context="mesh concept")
+                    term_list_value = concept_map.get("termList")
+                    if isinstance(term_list_value, Mapping):
+                        term_list = ensure_json_mapping(term_list_value, context="mesh term list")
+                        term_values = term_list.get("term")
+                        if term_values is not None:
+                            for term_value in ensure_json_sequence(term_values, context="mesh term entries"):
+                                term_map = ensure_json_mapping(term_value, context="mesh term")
+                                term_string = term_map.get("string")
+                                if isinstance(term_string, str):
+                                    terms.append(normalize_text(term_string))
+
         payload: MeshDocumentPayload = {
             "descriptor_id": descriptor_id,
             "name": name,
@@ -78,7 +105,13 @@ class MeSHAdapter(HttpAdapter[JSONMapping]):
         }
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=descriptor_id, version="v1", content=content)
-        return Document(doc_id=doc_id, source=self.source, content=json.dumps(payload), metadata={"descriptor_id": descriptor_id}, raw=payload)
+        return Document(
+            doc_id=doc_id,
+            source=self.source,
+            content=json.dumps(payload),
+            metadata={"descriptor_id": descriptor_id},
+            raw=payload,
+        )
 
     def validate(self, document: Document) -> None:
         descriptor_id = document.metadata.get("descriptor_id")
@@ -114,17 +147,41 @@ class UMLSAdapter(HttpAdapter[JSONMapping]):
         yield payload_map
 
     def parse(self, raw: JSONMapping) -> Document:
-        result = ensure_json_mapping(raw.get("result", {}), context="umls result")
-        cui = result.get("ui")
+        result = ensure_json_mapping(raw.get("result"), context="umls result")
+
+        cui_value = result.get("ui")
+        if not isinstance(cui_value, str) or not cui_value:
+            raise ValueError("UMLS result missing CUI")
+        cui = cui_value
+
+        name_value = result.get("name")
+        name = normalize_text(name_value) if isinstance(name_value, str) else None
+
+        synonyms_value = result.get("synonyms", [])
+        synonyms: list[str] = []
+        if isinstance(synonyms_value, Sequence):
+            for synonym in synonyms_value:
+                if isinstance(synonym, str):
+                    synonyms.append(normalize_text(synonym))
+
+        definition_value = result.get("definition")
+        definition = normalize_text(definition_value) if isinstance(definition_value, str) else None
+
         payload: UmlsDocumentPayload = {
             "cui": cui,
-            "name": result.get("name"),
-            "synonyms": result.get("synonyms", []),
-            "definition": result.get("definition"),
+            "name": name,
+            "synonyms": synonyms,
+            "definition": definition,
         }
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=cui, version="v1", content=content)
-        return Document(doc_id=doc_id, source=self.source, content=json.dumps(payload), metadata={"cui": cui}, raw=payload)
+        return Document(
+            doc_id=doc_id,
+            source=self.source,
+            content=json.dumps(payload),
+            metadata={"cui": cui},
+            raw=payload,
+        )
 
     def validate(self, document: Document) -> None:
         cui = document.metadata.get("cui")
@@ -160,26 +217,36 @@ class LoincAdapter(HttpAdapter[JSONMapping]):
         yield payload_map
 
     def parse(self, raw: JSONMapping) -> Document:
-        parameter = ensure_json_mapping(raw.get("parameter", {}), context="loinc parameter")
-        code_value = parameter.get("code") or raw.get("code")
-        if code_value is None:
+        parameter_value = raw.get("parameter")
+        parameter = (
+            ensure_json_mapping(parameter_value, context="loinc parameter")
+            if isinstance(parameter_value, Mapping)
+            else None
+        )
+        code_source = parameter.get("code") if parameter is not None else raw.get("code")
+        if not isinstance(code_source, str) or not code_source:
             raise ValueError("LOINC payload missing code")
-        code = str(code_value)
+        code = code_source
+
+        display_value = raw.get("display")
+        property_value = raw.get("property")
+        system_value = raw.get("system")
+        method_value = raw.get("method")
+
         payload: LoincDocumentPayload = {
-            "code": code or None,
-            "display": raw.get("display") if isinstance(raw.get("display"), str) else None,
-            "property": raw.get("property"),
-            "system": raw.get("system"),
-            "method": raw.get("method"),
+            "code": code,
+            "display": normalize_text(display_value) if isinstance(display_value, str) else None,
+            "property": ensure_json_value(property_value, context="loinc property"),
+            "system": ensure_json_value(system_value, context="loinc system"),
+            "method": ensure_json_value(method_value, context="loinc method"),
         }
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=code, version="v1", content=content)
-        metadata_value = code
         return Document(
             doc_id=doc_id,
             source=self.source,
             content=json.dumps(payload),
-            metadata={"code": metadata_value},
+            metadata={"code": code},
             raw=payload,
         )
 
@@ -218,32 +285,42 @@ class Icd11Adapter(HttpAdapter[JSONMapping]):
 
     def parse(self, raw: JSONMapping) -> Document:
         code_value = raw.get("code")
-        code = str(code_value) if isinstance(code_value, str) else None
+        if not isinstance(code_value, str) or not code_value:
+            raise ValueError("ICD-11 payload missing code")
+        code = code_value
+
         title_value = raw.get("title")
-        title_text = None
+        title = None
         if isinstance(title_value, Mapping):
-            title_text = ensure_json_mapping(title_value, context="icd11 title").get("@value")
+            title_map = ensure_json_mapping(title_value, context="icd11 title")
+            title_raw = title_map.get("@value")
+            if isinstance(title_raw, str):
+                title = normalize_text(title_raw)
 
         definition_value = raw.get("definition")
-        definition_text = None
+        definition = None
         if isinstance(definition_value, Mapping):
-            definition_text = ensure_json_mapping(definition_value, context="icd11 definition").get("@value")
+            definition_map = ensure_json_mapping(definition_value, context="icd11 definition")
+            definition_raw = definition_map.get("@value")
+            if isinstance(definition_raw, str):
+                definition = normalize_text(definition_raw)
 
         uri_value = raw.get("browserUrl")
+        uri = uri_value if isinstance(uri_value, str) else None
+
         payload: Icd11DocumentPayload = {
             "code": code,
-            "title": title_text if isinstance(title_text, str) else None,
-            "definition": definition_text if isinstance(definition_text, str) else None,
-            "uri": uri_value if isinstance(uri_value, str) else None,
+            "title": title,
+            "definition": definition,
+            "uri": uri,
         }
         content = canonical_json(payload)
-        identifier = code or "unknown"
-        doc_id = self.build_doc_id(identifier=identifier, version="v1", content=content)
+        doc_id = self.build_doc_id(identifier=code, version="v1", content=content)
         return Document(
             doc_id=doc_id,
             source=self.source,
             content=json.dumps(payload),
-            metadata={"code": identifier},
+            metadata={"code": code},
             raw=payload,
         )
 
@@ -284,29 +361,40 @@ class SnomedAdapter(HttpAdapter[JSONMapping]):
         yield payload_map
 
     def parse(self, raw: JSONMapping) -> Document:
-        parameter = ensure_json_mapping(raw.get("parameter", {}), context="snomed parameter") if isinstance(raw.get("parameter"), Mapping) else {}
-        code_value = raw.get("code") or parameter.get("code")
-        if code_value is None:
-            raise ValueError("SNOMED payload missing code")
-        code = str(code_value)
+        parameter_value = raw.get("parameter")
+        parameter = (
+            ensure_json_mapping(parameter_value, context="snomed parameter")
+            if isinstance(parameter_value, Mapping)
+            else None
+        )
+        code_source = raw.get("code")
+        if not isinstance(code_source, str) or not code_source:
+            code_candidate = parameter.get("code") if parameter is not None else None
+            if not isinstance(code_candidate, str) or not code_candidate:
+                raise ValueError("SNOMED payload missing code")
+            code = code_candidate
+        else:
+            code = code_source
+
         display_value = raw.get("display")
-        designation_value = ensure_json_sequence(raw.get("designation", []), context="snomed designation")
-        designation_entries = [
-            ensure_json_mapping(entry, context="snomed designation entry") for entry in designation_value
-        ]
+        designation_value = raw.get("designation")
+        designation_entries: list[JSONMapping] = []
+        if designation_value is not None:
+            for entry in ensure_json_sequence(designation_value, context="snomed designation"):
+                designation_entries.append(ensure_json_mapping(entry, context="snomed designation entry"))
+
         payload: SnomedDocumentPayload = {
-            "code": code or None,
-            "display": display_value if isinstance(display_value, str) else None,
+            "code": code,
+            "display": normalize_text(display_value) if isinstance(display_value, str) else None,
             "designation": designation_entries,
         }
         content = canonical_json(payload)
-        identifier = code
-        doc_id = self.build_doc_id(identifier=identifier, version="v1", content=content)
+        doc_id = self.build_doc_id(identifier=code, version="v1", content=content)
         return Document(
             doc_id=doc_id,
             source=self.source,
             content=json.dumps(payload),
-            metadata={"code": identifier},
+            metadata={"code": code},
             raw=payload,
         )
 

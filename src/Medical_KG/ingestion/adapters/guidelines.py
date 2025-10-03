@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import xml.etree.ElementTree as ET
 from collections.abc import AsyncIterator, Iterable
-from typing import Generic, Mapping, Sequence, TypeVar, cast
+from typing import Generic, Mapping, Sequence, TypeVar
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
@@ -13,6 +13,7 @@ from Medical_KG.ingestion.types import (
     CdcSocrataDocumentPayload,
     CdcWonderDocumentPayload,
     JSONMapping,
+    JSONSequence,
     JSONValue,
     NiceGuidelineDocumentPayload,
     OpenPrescribingDocumentPayload,
@@ -23,6 +24,7 @@ from Medical_KG.ingestion.utils import (
     canonical_json,
     ensure_json_mapping,
     ensure_json_sequence,
+    ensure_json_value,
     normalize_text,
 )
 
@@ -57,29 +59,45 @@ class NiceGuidelineAdapter(_BootstrapAdapter[JSONMapping]):
                 yield record
             return
         params = {"licence": licence} if licence else None
-        payload = await self.fetch_json("https://api.nice.org.uk/guidance", params=params or {})
-        payload_map = ensure_json_mapping(payload, context="nice guidance response")
-        items_value = payload_map.get("items", [])
-        for record in ensure_json_sequence(items_value, context="nice guidance items"):
-            yield ensure_json_mapping(record, context="nice guidance item")
+        payload_value = await self.fetch_json("https://api.nice.org.uk/guidance", params=params or {})
+        payload_map: JSONMapping = ensure_json_mapping(
+            ensure_json_value(payload_value, context="nice guidance response value"),
+            context="nice guidance response",
+        )
+        items_value = payload_map.get("items")
+        items_sequence: JSONSequence = ensure_json_sequence(
+            items_value if items_value is not None else [],
+            context="nice guidance items",
+        )
+        for record_value in items_sequence:
+            record_mapping = ensure_json_mapping(record_value, context="nice guidance item")
+            yield record_mapping
 
     def parse(self, raw: JSONMapping) -> Document:
-        payload: NiceGuidelineDocumentPayload = {
-            "uid": str(raw.get("uid")) if raw.get("uid") is not None else "",
-            "title": normalize_text(str(raw.get("title", ""))),
-            "summary": normalize_text(str(raw.get("summary", ""))),
-            "url": str(raw.get("url")) if isinstance(raw.get("url"), str) else None,
-            "licence": str(raw.get("licence")) if isinstance(raw.get("licence"), str) else None,
-        }
-        if not payload["uid"]:
+        uid_value = raw.get("uid")
+        if not isinstance(uid_value, str) or not uid_value:
             raise ValueError("NICE guideline missing uid")
+        title_value = raw.get("title")
+        summary_value = raw.get("summary")
+        url_value = raw.get("url")
+        licence_value = raw.get("licence")
+        payload: NiceGuidelineDocumentPayload = {
+            "uid": uid_value,
+            "title": normalize_text(title_value) if isinstance(title_value, str) else "",
+            "summary": normalize_text(summary_value) if isinstance(summary_value, str) else "",
+            "url": url_value if isinstance(url_value, str) else None,
+            "licence": licence_value if isinstance(licence_value, str) else None,
+        }
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=payload["uid"], version="v1", content=content)
+        metadata: dict[str, JSONValue] = {"uid": payload["uid"]}
+        if payload["licence"] is not None:
+            metadata["licence"] = payload["licence"]
         return Document(
             doc_id=doc_id,
             source=self.source,
             content=payload["summary"] or payload["title"],
-            metadata={"uid": payload["uid"], "licence": payload["licence"]},
+            metadata=metadata,
             raw=payload,
         )
 
@@ -103,20 +121,31 @@ class UspstfAdapter(_BootstrapAdapter[JSONMapping]):
         raise RuntimeError("USPSTF API requires manual approval; provide bootstrap records")
 
     def parse(self, raw: JSONMapping) -> Document:
+        title_value = raw.get("title")
+        if not isinstance(title_value, str) or not title_value:
+            raise ValueError("USPSTF payload missing title")
+        identifier_value = raw.get("id")
+        status_value = raw.get("status")
+        url_value = raw.get("url")
         payload: UspstfDocumentPayload = {
-            "id": str(raw.get("id")) if raw.get("id") is not None else None,
-            "title": normalize_text(str(raw.get("title", ""))),
-            "status": str(raw.get("status")) if isinstance(raw.get("status"), str) else None,
-            "url": str(raw.get("url")) if isinstance(raw.get("url"), str) else None,
+            "id": identifier_value if isinstance(identifier_value, str) else None,
+            "title": normalize_text(title_value),
+            "status": status_value if isinstance(status_value, str) else None,
+            "url": url_value if isinstance(url_value, str) else None,
         }
         content = canonical_json(payload)
         identifier = payload["id"] or payload["title"]
-        doc_id = self.build_doc_id(identifier=str(identifier), version="v1", content=content)
+        doc_id = self.build_doc_id(identifier=identifier, version="v1", content=content)
+        metadata: dict[str, JSONValue] = {"title": payload["title"]}
+        if payload["id"] is not None:
+            metadata["id"] = payload["id"]
+        if payload["status"] is not None:
+            metadata["status"] = payload["status"]
         return Document(
             doc_id=doc_id,
             source=self.source,
             content=payload["title"],
-            metadata={"id": payload["id"], "status": payload["status"]},
+            metadata=metadata,
             raw=payload,
         )
 
@@ -149,17 +178,19 @@ class CdcSocrataAdapter(_BootstrapAdapter[JSONMapping]):
             year = raw.get("year")
             indicator = raw.get("indicator")
             identifier = f"{state}-{year}-{indicator}"
+        record_payload: dict[str, JSONValue] = {key: value for key, value in raw.items()}
         payload: CdcSocrataDocumentPayload = {
             "identifier": identifier,
-            "record": {key: cast(JSONValue, value) for key, value in raw.items()},
+            "record": record_payload,
         }
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=identifier, version="v1", content=content)
+        metadata: dict[str, JSONValue] = {"identifier": identifier}
         return Document(
             doc_id=doc_id,
             source=self.source,
             content=json.dumps(payload["record"]),
-            metadata={"identifier": identifier},
+            metadata=metadata,
             raw=payload,
         )
 
@@ -189,11 +220,12 @@ class CdcWonderAdapter(_BootstrapAdapter[str]):
         payload: CdcWonderDocumentPayload = {"rows": rows}
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=str(len(rows)), version="v1", content=content)
+        metadata: dict[str, JSONValue] = {"rows": len(rows)}
         return Document(
             doc_id=doc_id,
             source=self.source,
             content=json.dumps(rows),
-            metadata={"rows": len(rows)},
+            metadata=metadata,
             raw=payload,
         )
 
@@ -220,20 +252,28 @@ class WhoGhoAdapter(_BootstrapAdapter[JSONMapping]):
             yield ensure_json_mapping(entry, context="who gho entry")
 
     def parse(self, raw: JSONMapping) -> Document:
+        indicator_value = raw.get("Indicator")
+        country_value = raw.get("SpatialDim")
+        year_value = raw.get("TimeDim")
         payload: WhoGhoDocumentPayload = {
-            "indicator": str(raw.get("Indicator")) if raw.get("Indicator") is not None else None,
-            "value": cast(JSONValue, raw.get("Value")),
-            "country": str(raw.get("SpatialDim")) if raw.get("SpatialDim") is not None else None,
-            "year": str(raw.get("TimeDim")) if raw.get("TimeDim") is not None else None,
+            "indicator": indicator_value if isinstance(indicator_value, str) else None,
+            "value": ensure_json_value(raw.get("Value"), context="who gho value"),
+            "country": country_value if isinstance(country_value, str) else None,
+            "year": year_value if isinstance(year_value, str) else None,
         }
-        identifier = f"{payload['indicator']}-{payload['country']}-{payload['year']}"
+        identifier = (
+            f"{payload['indicator'] or 'unknown'}-"
+            f"{payload['country'] or 'unknown'}-"
+            f"{payload['year'] or 'unknown'}"
+        )
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=identifier, version="v1", content=content)
+        metadata: dict[str, JSONValue] = {"identifier": identifier}
         return Document(
             doc_id=doc_id,
             source=self.source,
             content=json.dumps(payload),
-            metadata={"identifier": identifier},
+            metadata=metadata,
             raw=payload,
         )
 
@@ -263,17 +303,19 @@ class OpenPrescribingAdapter(_BootstrapAdapter[JSONMapping]):
             or json.dumps({key: raw[key] for key in sorted(raw)}, sort_keys=True)
         )
         identifier_str = str(identifier)
+        record_payload: dict[str, JSONValue] = {key: value for key, value in raw.items()}
         payload: OpenPrescribingDocumentPayload = {
             "identifier": identifier_str,
-            "record": {key: cast(JSONValue, value) for key, value in raw.items()},
+            "record": record_payload,
         }
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=identifier_str, version="v1", content=content)
+        metadata: dict[str, JSONValue] = {"identifier": identifier_str}
         return Document(
             doc_id=doc_id,
             source=self.source,
             content=json.dumps(payload["record"]),
-            metadata={"identifier": identifier_str},
+            metadata=metadata,
             raw=payload,
         )
 

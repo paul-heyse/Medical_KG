@@ -10,7 +10,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from types import FrameType
-from typing import Any, Mapping, Sequence, cast
+from typing import Any, Callable, Dict, Iterable, Mapping, MutableMapping, Sequence, cast
+import types
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 PACKAGE_ROOT = SRC / "Medical_KG"
@@ -19,12 +20,39 @@ TARGET_COVERAGE = float(os.environ.get("COVERAGE_TARGET", "0.95"))
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+if "fastapi" not in sys.modules:
+    fastapi_module = types.ModuleType("fastapi")
+
+    class _FastAPI:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
+    class _APIRouter:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            self.args = args
+            self.kwargs = kwargs
+            self.routes: list[tuple[str, Callable[..., Any]]] = []
+
+        def post(self, path: str, **_options: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+            def _decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+                self.routes.append((path, func))
+                return func
+
+            return _decorator
+
+    fastapi_module.FastAPI = _FastAPI
+    fastapi_module.APIRouter = _APIRouter
+    sys.modules["fastapi"] = fastapi_module
+
 from trace import Trace
 
 import pytest
 
+from Medical_KG.ingestion.ledger import LedgerEntry
 from Medical_KG.retrieval.models import RetrievalRequest, RetrievalResponse, RetrievalResult, RetrieverScores
 from Medical_KG.retrieval.types import JSONValue, SearchHit, VectorHit
+from Medical_KG.utils.optional_dependencies import get_httpx_module
 
 
 @pytest.fixture
@@ -199,7 +227,7 @@ def sample_document_factory() -> Callable[[str, str, str, MutableMapping[str, An
 
 
 @pytest.fixture
-def httpx_mock_transport(monkeypatch: pytest.MonkeyPatch) -> Callable[[Callable[..., Any]], None]:
+def httpx_mock_transport(monkeypatch: pytest.MonkeyPatch) -> Callable[[Callable[[Any], Any]], Any]:
     """Patch httpx AsyncClient creation to use a MockTransport."""
 
     HTTPX = get_httpx_module()
@@ -214,6 +242,7 @@ def httpx_mock_transport(monkeypatch: pytest.MonkeyPatch) -> Callable[[Callable[
             return client
 
         monkeypatch.setattr("Medical_KG.compat.httpx.create_async_client", _create_async_client)
+        monkeypatch.setattr("Medical_KG.ingestion.http_client.create_async_client", _create_async_client)
 
         return transport
 
@@ -225,6 +254,30 @@ def httpx_mock_transport(monkeypatch: pytest.MonkeyPatch) -> Callable[[Callable[
             loop.run_until_complete(client.aclose())
         finally:
             loop.close()
+
+
+class _CounterStub:
+    def labels(self, *args: Any, **kwargs: Any) -> "_CounterStub":
+        return self
+
+    def inc(self, amount: float = 1.0) -> None:
+        return None
+
+
+class _HistogramStub:
+    def labels(self, *args: Any, **kwargs: Any) -> "_HistogramStub":
+        return self
+
+    def observe(self, amount: float) -> None:
+        return None
+
+
+@pytest.fixture(autouse=True)
+def stub_ingestion_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
+    counter = _CounterStub()
+    histogram = _HistogramStub()
+    monkeypatch.setattr("Medical_KG.ingestion.http_client.HTTP_REQUESTS", counter)
+    monkeypatch.setattr("Medical_KG.ingestion.http_client.HTTP_LATENCY", histogram)
 
 
 # ---------------------------------------------------------------------------

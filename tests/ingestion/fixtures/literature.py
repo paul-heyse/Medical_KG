@@ -30,7 +30,9 @@ def pmc_record_xml() -> str:
 
 
 def medrxiv_record() -> dict[str, Any]:
-    return deepcopy(_MEDRXIV_RECORD)
+    payload = deepcopy(_MEDRXIV_RECORD)
+    results = payload.get("results", [])
+    return deepcopy(results[0]) if results else {}
 
 
 def pubmed_summary_without_history() -> dict[str, Any]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 from typing import Any, Sequence
 
 import pytest
@@ -67,6 +68,7 @@ def test_retry_on_transient_failure(monkeypatch: Any) -> None:
     payload = asyncio.run(client.get_json("https://example.com"))
     assert payload == {"ok": True}
     assert len(transport.calls) == 2
+    asyncio.run(client.aclose())
 
 
 def test_rate_limiter_serializes_calls(monkeypatch: Any) -> None:
@@ -89,6 +91,7 @@ def test_rate_limiter_serializes_calls(monkeypatch: Any) -> None:
     asyncio.run(_run())
     assert len(calls) == 3
     assert all(b >= a for a, b in zip(calls, calls[1:]))
+    asyncio.run(client.aclose())
 
 
 def test_timeout_propagates(monkeypatch: Any) -> None:
@@ -103,6 +106,7 @@ def test_timeout_propagates(monkeypatch: Any) -> None:
 
     with pytest.raises(HTTPX.TimeoutException):
         asyncio.run(_call())
+    asyncio.run(client.aclose())
 
 
 def test_get_text_and_bytes(monkeypatch: Any) -> None:
@@ -141,6 +145,7 @@ def test_post_uses_execute(monkeypatch: Any) -> None:
 
     asyncio.run(_run())
     asyncio.run(client.aclose())
+    asyncio.run(client.aclose())
 
 
 def test_stream_context_manager(monkeypatch: Any) -> None:
@@ -148,7 +153,9 @@ def test_stream_context_manager(monkeypatch: Any) -> None:
         status_code=200,
         content=b"stream",
         request=HTTPX.Request("GET", "https://example.com"),
+        extensions={"elapsed": timedelta(0)},
     )
+    response._elapsed = timedelta(0)  # type: ignore[attr-defined]
 
     class _Stream:
         async def __aenter__(self) -> HttpxResponseProtocol:
@@ -157,7 +164,7 @@ def test_stream_context_manager(monkeypatch: Any) -> None:
         async def __aexit__(self, *_exc: Any) -> None:
             return None
 
-    async def _stream(self: HttpxAsyncClient, method: str, url: str, **kwargs: Any) -> Any:
+    def _stream(self: HttpxAsyncClient, method: str, url: str, **kwargs: Any) -> Any:
         assert method == "GET"
         return _Stream()
 

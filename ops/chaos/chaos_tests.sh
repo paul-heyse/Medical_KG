@@ -346,4 +346,3 @@ while [[ $# -gt 0 ]]; do
 done
 
 main "${SCENARIO:-all}"
-

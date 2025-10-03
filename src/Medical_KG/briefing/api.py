@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -21,7 +21,9 @@ def _get_dependencies() -> _Dependencies:
     return _Dependencies(repository=InMemoryBriefingRepository())
 
 
-def _get_service(deps: _Dependencies = Depends(_get_dependencies)) -> BriefingService:
+def _get_service(
+    deps: Annotated[_Dependencies, Depends(_get_dependencies)]
+) -> BriefingService:
     return BriefingService(deps.repository)
 
 
@@ -29,7 +31,10 @@ router = APIRouter(prefix="/briefing", tags=["briefing"])
 
 
 @router.post("/dossier")
-async def create_dossier(request: dict[str, Any], service: BriefingService = Depends(_get_service)) -> dict[str, Any]:
+async def create_dossier(
+    request: dict[str, Any],
+    service: Annotated[BriefingService, Depends(_get_service)],
+) -> dict[str, Any]:
     try:
         topic = _parse_topic(request)
     except KeyError as exc:
@@ -42,7 +47,10 @@ async def create_dossier(request: dict[str, Any], service: BriefingService = Dep
 
 
 @router.post("/evidence-map")
-async def create_evidence_map(request: dict[str, Any], service: BriefingService = Depends(_get_service)) -> dict[str, Any]:
+async def create_evidence_map(
+    request: dict[str, Any],
+    service: Annotated[BriefingService, Depends(_get_service)],
+) -> dict[str, Any]:
     try:
         topic = _parse_topic(request)
     except KeyError as exc:
@@ -54,7 +62,10 @@ async def create_evidence_map(request: dict[str, Any], service: BriefingService 
 
 
 @router.post("/interview-kit")
-async def create_interview_kit(request: dict[str, Any], service: BriefingService = Depends(_get_service)) -> dict[str, Any]:
+async def create_interview_kit(
+    request: dict[str, Any],
+    service: Annotated[BriefingService, Depends(_get_service)],
+) -> dict[str, Any]:
     try:
         topic = _parse_topic(request)
     except KeyError as exc:
@@ -66,7 +77,10 @@ async def create_interview_kit(request: dict[str, Any], service: BriefingService
 
 
 @router.post("/coverage")
-async def create_coverage(request: dict[str, Any], service: BriefingService = Depends(_get_service)) -> dict[str, Any]:
+async def create_coverage(
+    request: dict[str, Any],
+    service: Annotated[BriefingService, Depends(_get_service)],
+) -> dict[str, Any]:
     try:
         topic = _parse_topic(request)
     except KeyError as exc:
@@ -78,7 +92,10 @@ async def create_coverage(request: dict[str, Any], service: BriefingService = De
 
 
 @router.post("/qa")
-async def real_time_qa(request: dict[str, Any], service: BriefingService = Depends(_get_service)) -> dict[str, Any]:
+async def real_time_qa(
+    request: dict[str, Any],
+    service: Annotated[BriefingService, Depends(_get_service)],
+) -> dict[str, Any]:
     try:
         topic = _parse_topic(request)
     except KeyError as exc:

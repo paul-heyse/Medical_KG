@@ -21,15 +21,17 @@ class ExtractionType(str, Enum):
 class ExtractionBase(BaseModel):
     type: ExtractionType
     evidence_spans: Annotated[list[EvidenceSpan], Field(min_length=1)]
-    confidence: float | None = Field(default=None, serialization_alias="__confidence")
+    confidence: Annotated[
+        float | None, Field(default=None, serialization_alias="__confidence")
+    ]
 
 
 class PICOExtraction(ExtractionBase):
     type: Literal[ExtractionType.PICO] = ExtractionType.PICO
     population: str
-    interventions: list[str] = Field(default_factory=list)
-    comparators: list[str] = Field(default_factory=list)
-    outcomes: list[str] = Field(default_factory=list)
+    interventions: Annotated[list[str], Field(default_factory=list)]
+    comparators: Annotated[list[str], Field(default_factory=list)]
+    outcomes: Annotated[list[str], Field(default_factory=list)]
     timeframe: str | None = None
 
 
@@ -41,7 +43,7 @@ class EffectExtraction(ExtractionBase):
     ci_low: float | None = None
     ci_high: float | None = None
     p_value: str | None = None
-    n_total: int | None = Field(default=None, ge=0)
+    n_total: Annotated[int | None, Field(default=None, ge=0)]
     arm_sizes: list[int] | None = None
     model: str | None = None
     time_unit_ucum: str | None = None
@@ -51,24 +53,24 @@ class AdverseEventExtraction(ExtractionBase):
     type: Literal[ExtractionType.ADVERSE_EVENT] = ExtractionType.ADVERSE_EVENT
     term: str
     meddra_pt: str | None = None
-    grade: int | None = Field(default=None, ge=1, le=5)
-    count: int | None = Field(default=None, ge=0)
-    denom: int | None = Field(default=None, ge=0)
+    grade: Annotated[int | None, Field(default=None, ge=1, le=5)]
+    count: Annotated[int | None, Field(default=None, ge=0)]
+    denom: Annotated[int | None, Field(default=None, ge=0)]
     arm: str | None = None
     serious: bool | None = None
-    onset_days: float | None = Field(default=None, ge=0)
-    codes: list[Code] = Field(default_factory=list)
+    onset_days: Annotated[float | None, Field(default=None, ge=0)]
+    codes: Annotated[list[Code], Field(default_factory=list)]
 
 
 class DoseExtraction(ExtractionBase):
     type: Literal[ExtractionType.DOSE] = ExtractionType.DOSE
     drug: Code | None = None
-    amount: float | None = Field(default=None, ge=0)
+    amount: Annotated[float | None, Field(default=None, ge=0)]
     unit: str | None = None
     route: str | None = None
-    frequency_per_day: float | None = Field(default=None, ge=0)
-    duration_days: float | None = Field(default=None, ge=0)
-    drug_codes: list[Code] = Field(default_factory=list)
+    frequency_per_day: Annotated[float | None, Field(default=None, ge=0)]
+    duration_days: Annotated[float | None, Field(default=None, ge=0)]
+    drug_codes: Annotated[list[Code], Field(default_factory=list)]
 
 
 class EligibilityLogic(BaseModel):

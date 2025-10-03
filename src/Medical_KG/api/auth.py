@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from typing import Iterable, Mapping
+from typing import Annotated, Awaitable, Callable, Iterable, Mapping
 
-from fastapi import Depends, HTTPException, Header, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 
@@ -48,10 +48,12 @@ class Authenticator:
             scopes = frozenset({"retrieve:read", "facets:write", "extract:write"})
         return Principal(subject=f"bearer:{token_hash[:8]}", scopes=scopes)
 
-    def dependency(self, scope: str | None = None):
+    def dependency(self, scope: str | None = None) -> Callable[[], Awaitable[Principal]]:
         async def _dependency(
-            credentials: HTTPAuthorizationCredentials | None = Depends(self._bearer),
-            api_key: str | None = Header(default=None, alias="X-API-Key"),
+            credentials: Annotated[
+                HTTPAuthorizationCredentials | None, Depends(self._bearer)
+            ],
+            api_key: Annotated[str | None, Header(default=None, alias="X-API-Key")],
         ) -> Principal:
             principal = self.authenticate(credentials, api_key)
             if scope and not principal.has_scope(scope):

@@ -90,7 +90,7 @@ def get_tiktoken_encoding(name: str = "cl100k_base") -> TokenEncoder | None:
     """Return the requested tiktoken encoding if the package is installed."""
 
     try:
-        import tiktoken
+        import tiktoken  # type: ignore[import-not-found]
     except ModuleNotFoundError:  # pragma: no cover - optional dependency
         return None
 
@@ -102,7 +102,7 @@ def load_spacy_pipeline(model: str) -> NLPPipeline | None:
     """Load a spaCy pipeline, returning ``None`` when unavailable."""
 
     try:
-        import spacy
+        import spacy  # type: ignore[import-not-found]
     except ModuleNotFoundError:  # pragma: no cover - optional dependency
         return None
 
@@ -117,7 +117,7 @@ def get_torch_module() -> TorchModule | None:
     """Return the ``torch`` module if installed."""
 
     try:
-        import torch
+        import torch  # type: ignore[import-not-found]
     except ModuleNotFoundError:  # pragma: no cover - optional dependency
         return None
     return cast(TorchModule, torch)
@@ -127,7 +127,7 @@ def build_gauge(name: str, documentation: str, labelnames: Sequence[str]) -> Gau
     """Construct a Prometheus gauge or a typed no-op substitute."""
 
     try:
-        from prometheus_client import Gauge as PromGauge
+        from prometheus_client import Gauge as PromGauge  # type: ignore[import-not-found]
     except ModuleNotFoundError:  # pragma: no cover - optional dependency
         return _NoopGauge()
     gauge: "prometheus_client.Gauge" = PromGauge(name, documentation, labelnames)

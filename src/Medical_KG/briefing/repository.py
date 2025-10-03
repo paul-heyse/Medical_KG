@@ -1,8 +1,10 @@
 """Repository abstractions for briefing outputs."""
 from __future__ import annotations
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, Mapping, Protocol
+from typing import Iterable, Mapping, Protocol
 
 from .models import (
     AdverseEvent,
@@ -28,7 +30,7 @@ class BriefingRepository(Protocol):
 class InMemoryBriefingRepository:
     """Simple repository backed by dictionaries. Useful for testing."""
 
-    bundles: Dict[tuple[str, str, str], TopicBundle] = field(default_factory=dict)
+    bundles: dict[tuple[str, str, str], TopicBundle] = field(default_factory=dict)
 
     def register(self, bundle: TopicBundle) -> None:
         key = (bundle.topic.condition, bundle.topic.intervention, bundle.topic.outcome)
@@ -72,8 +74,8 @@ class DelegatedBriefingRepository:
         )
 
 
-def _redact_vocab(items: Iterable[Study | AdverseEvent], *, vocab: str) -> list:
-    redacted: list = []
+def _redact_vocab(items: Iterable[Study | AdverseEvent], *, vocab: str) -> list[Study | AdverseEvent]:
+    redacted: list[Study | AdverseEvent] = []
     for item in items:
         if isinstance(item, Study):
             redacted.append(Study(item.study_id, title=f"[{vocab} redacted]", registry_ids=item.registry_ids, citations=item.citations))

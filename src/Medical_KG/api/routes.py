@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import time
 from datetime import datetime, timezone
-from typing import Dict
+from typing import Annotated, Awaitable, Callable
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 
@@ -25,6 +25,8 @@ from Medical_KG.api.models import (
     VersionResponse,
 )
 from Medical_KG.extraction.models import ExtractionType
+from Medical_KG.extraction.models import ExtractionEnvelope
+from Medical_KG.extraction.service import Chunk as ExtractionChunk
 from Medical_KG.extraction.service import ClinicalExtractionService
 from Medical_KG.facets.models import AdverseEventFacet, DoseFacet, EndpointFacet, FacetModel
 from Medical_KG.facets.service import Chunk as FacetChunk
@@ -44,7 +46,7 @@ class IdempotencyCache:
 
     def __init__(self, *, ttl_seconds: int = 60 * 60 * 24) -> None:
         self._ttl = ttl_seconds
-        self._cache: Dict[str, tuple[int, str, bytes]] = {}
+        self._cache: dict[str, tuple[int, str, bytes]] = {}
 
     def _cleanup(self, now: int) -> None:
         expired = [key for key, (ts, _hash, _resp) in self._cache.items() if now - ts > self._ttl]
@@ -81,7 +83,7 @@ class RateLimiter:
     def __init__(self, *, limit: int = 60, window_seconds: int = 60) -> None:
         self._limit = limit
         self._window = window_seconds
-        self._buckets: Dict[str, tuple[int, int]] = {}
+        self._buckets: dict[str, tuple[int, int]] = {}
 
     def check(self, principal: Principal, *, now: int) -> tuple[bool, int, int]:
         bucket = now // self._window
@@ -127,7 +129,7 @@ class ApiRouter(APIRouter):
         self._register_routes()
 
     # dependencies ---------------------------------------------------------
-    def _require_scope(self, scope: str):
+    def _require_scope(self, scope: str) -> Callable[[], Awaitable[Principal]]:
         return self._authenticator.dependency(scope)
 
     def _apply_rate_limit(self, principal: Principal, response: Response) -> None:
@@ -173,9 +175,11 @@ class ApiRouter(APIRouter):
             request: Request,
             payload: FacetGenerationRequest,
             response: Response,
-            principal: Principal = Depends(self._require_scope("facets:write")),
-            idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
-            license_tier: str = Header(default="affiliate", alias="X-License-Tier"),
+            principal: Annotated[
+                Principal, Depends(self._require_scope("facets:write"))
+            ],
+            idempotency_key: Annotated[str | None, Header(default=None, alias="Idempotency-Key")],
+            license_tier: Annotated[str, Header(default="affiliate", alias="X-License-Tier")],
         ) -> FacetGenerationResponse:
             self._apply_rate_limit(principal, response)
             body = await request.body()
@@ -185,9 +189,9 @@ class ApiRouter(APIRouter):
             except IdempotencyConflict as exc:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
             if cached is not None:
-                return FacetGenerationResponse.model_validate_json(cached)
-            facets_by_chunk: Dict[str, list] = {}
-            metadata: Dict[str, Dict[str, str]] = {}
+                return FacetGenerationResponse.model_validate_json(cached.decode("utf-8"))
+            facets_by_chunk: dict[str, list[FacetModel]] = {}
+            metadata: dict[str, dict[str, str]] = {}
             for chunk_id in payload.chunk_ids:
                 chunk = self._chunks.get(chunk_id)
                 if chunk is None:
@@ -223,8 +227,10 @@ class ApiRouter(APIRouter):
         async def get_chunk(
             chunk_id: str,
             response: Response,
-            principal: Principal = Depends(self._require_scope("retrieve:read")),
-            license_tier: str = Header(default="affiliate", alias="X-License-Tier"),
+            principal: Annotated[
+                Principal, Depends(self._require_scope("retrieve:read"))
+            ],
+            license_tier: Annotated[str, Header(default="affiliate", alias="X-License-Tier")],
         ) -> ChunkResponse:
             self._apply_rate_limit(principal, response)
             chunk = self._chunks.get(chunk_id)
@@ -243,7 +249,9 @@ class ApiRouter(APIRouter):
         async def retrieve(
             payload: RetrieveRequest,
             response: Response,
-            principal: Principal = Depends(self._require_scope("retrieve:read")),
+            principal: Annotated[
+                Principal, Depends(self._require_scope("retrieve:read"))
+            ],
         ) -> RetrieveResponse:
             self._apply_rate_limit(principal, response)
             facet_type = payload.filters.facet_type if payload.filters else None
@@ -261,7 +269,9 @@ class ApiRouter(APIRouter):
         async def extract_pico(
             payload: ExtractionRequest,
             response: Response,
-            principal: Principal = Depends(self._require_scope("extract:write")),
+            principal: Annotated[
+                Principal, Depends(self._require_scope("extract:write"))
+            ],
         ) -> ExtractionResponse:
             self._apply_rate_limit(principal, response)
             chunks = self._load_chunks(payload.chunk_ids)
@@ -273,7 +283,9 @@ class ApiRouter(APIRouter):
         async def extract_effects(
             payload: ExtractionRequest,
             response: Response,
-            principal: Principal = Depends(self._require_scope("extract:write")),
+            principal: Annotated[
+                Principal, Depends(self._require_scope("extract:write"))
+            ],
         ) -> ExtractionResponse:
             self._apply_rate_limit(principal, response)
             chunks = self._load_chunks(payload.chunk_ids)
@@ -285,7 +297,9 @@ class ApiRouter(APIRouter):
         async def extract_ae(
             payload: ExtractionRequest,
             response: Response,
-            principal: Principal = Depends(self._require_scope("extract:write")),
+            principal: Annotated[
+                Principal, Depends(self._require_scope("extract:write"))
+            ],
         ) -> ExtractionResponse:
             self._apply_rate_limit(principal, response)
             chunks = self._load_chunks(payload.chunk_ids)
@@ -297,7 +311,9 @@ class ApiRouter(APIRouter):
         async def extract_dose(
             payload: ExtractionRequest,
             response: Response,
-            principal: Principal = Depends(self._require_scope("extract:write")),
+            principal: Annotated[
+                Principal, Depends(self._require_scope("extract:write"))
+            ],
         ) -> ExtractionResponse:
             self._apply_rate_limit(principal, response)
             chunks = self._load_chunks(payload.chunk_ids)
@@ -309,7 +325,9 @@ class ApiRouter(APIRouter):
         async def extract_eligibility(
             payload: ExtractionRequest,
             response: Response,
-            principal: Principal = Depends(self._require_scope("extract:write")),
+            principal: Annotated[
+                Principal, Depends(self._require_scope("extract:write"))
+            ],
         ) -> ExtractionResponse:
             self._apply_rate_limit(principal, response)
             chunks = self._load_chunks(payload.chunk_ids)
@@ -321,7 +339,7 @@ class ApiRouter(APIRouter):
         async def write_kg(
             payload: KgWriteRequest,
             response: Response,
-            principal: Principal = Depends(self._require_scope("kg:write")),
+            principal: Annotated[Principal, Depends(self._require_scope("kg:write"))],
         ) -> KgWriteResponse:
             self._apply_rate_limit(principal, response)
             try:
@@ -360,8 +378,8 @@ class ApiRouter(APIRouter):
             )
 
     # helper utilities -----------------------------------------------------
-    def _load_chunks(self, chunk_ids: list[str]) -> list[FacetChunk]:
-        chunks: list[FacetChunk] = []
+    def _load_chunks(self, chunk_ids: list[str]) -> list[ExtractionChunk]:
+        chunks: list[ExtractionChunk] = []
         for chunk_id in chunk_ids:
             chunk = self._chunks.get(chunk_id)
             if chunk is None:
@@ -369,12 +387,11 @@ class ApiRouter(APIRouter):
                     status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown chunk {chunk_id}"
                 )
             chunks.append(
-                FacetChunk(
+                ExtractionChunk(
                     chunk_id=chunk.chunk_id,
-                    doc_id=chunk.doc_id,
                     text=chunk.text,
+                    doc_id=chunk.doc_id,
                     section=chunk.section,
-                    table_headers=chunk.table_headers,
                 )
             )
         return chunks
@@ -389,7 +406,9 @@ class ApiRouter(APIRouter):
         )
 
     @staticmethod
-    def _filter_envelope(envelope, *, allowed: set[ExtractionType]):
+    def _filter_envelope(
+        envelope: ExtractionEnvelope, *, allowed: set[ExtractionType]
+    ) -> ExtractionEnvelope:
         filtered = [item for item in envelope.payload if item.type in allowed]
         return envelope.model_copy(update={"payload": filtered})
 

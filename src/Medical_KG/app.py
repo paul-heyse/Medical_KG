@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any, Awaitable, Callable
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from Medical_KG.api.routes import ApiRouter
@@ -37,7 +37,9 @@ def create_app(
     setup_tracing(app)
 
     @app.middleware("http")
-    async def add_request_context(request: Request, call_next: Any) -> Any:
+    async def add_request_context(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         request_id = request.headers.get("x-request-id") or str(uuid4())
         traceparent = request.headers.get("traceparent")
         response = await call_next(request)
@@ -48,7 +50,9 @@ def create_app(
 
     @app.post("/admin/reload", tags=["admin"], summary="Hot reload configuration")
     async def reload_config(
-        credentials: HTTPAuthorizationCredentials = Depends(_security),
+        credentials: Annotated[
+            HTTPAuthorizationCredentials | None, Depends(_security)
+        ],
     ) -> dict[str, str]:
         if credentials is None:
             raise HTTPException(

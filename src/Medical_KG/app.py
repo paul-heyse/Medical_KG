@@ -11,6 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from Medical_KG.api.routes import ApiRouter
 from Medical_KG.briefing import router as briefing_router
 from Medical_KG.config.manager import ConfigError, ConfigManager
+from Medical_KG.observability import configure_logging, setup_tracing
 from Medical_KG.retrieval import RetrievalService, create_router
 
 _security = HTTPBearer(auto_error=False)
@@ -20,6 +21,7 @@ def create_app(
     manager: ConfigManager | None = None,
     retrieval_service: RetrievalService | None = None,
 ) -> FastAPI:
+    configure_logging()
     manager = manager or ConfigManager()
     app = FastAPI(title="Medical KG", version=manager.version.raw)
 
@@ -31,6 +33,8 @@ def create_app(
     # Setup retrieval service if provided
     if retrieval_service is not None:
         app.include_router(create_router(retrieval_service))
+
+    setup_tracing(app)
 
     @app.middleware("http")
     async def add_request_context(request: Request, call_next: Any) -> Any:

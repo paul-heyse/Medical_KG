@@ -1,0 +1,97 @@
+{
+  "title": "Medical KG - Pipeline Overview",
+  "uid": "medkg-pipeline",
+  "tags": ["medical-kg", "operations"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PROMETHEUS_DS"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "title": "API Latency P95 (/retrieve)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{route=\"/retrieve\"}[5m]))",
+          "legendFormat": "P95 latency",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PROMETHEUS_DS"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "title": "Error Rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(http_requests_total{code=~\"5..\"}[5m]) / rate(http_requests_total[5m])",
+          "legendFormat": "5xx error rate",
+          "refId": "A"
+        }
+      ],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {"color": "green"},
+          {"color": "orange", "value": 0.01},
+          {"color": "red", "value": 0.02}
+        ]
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PROMETHEUS_DS"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 8},
+      "id": 3,
+      "title": "Ingest Throughput",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(ingestion_documents_processed_total[5m])",
+          "legendFormat": "Docs/min",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(kg_writes_total[5m])",
+          "legendFormat": "KG writes/min",
+          "refId": "B"
+        }
+      ]
+    }
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  }
+}

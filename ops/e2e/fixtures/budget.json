@@ -1,0 +1,15 @@
+{
+  "total_seconds": 300,
+  "per_step": {
+    "Ingest Documents": 30,
+    "Chunking": 60,
+    "Facet Generation": 45,
+    "Embedding": 60,
+    "Indexing": 30,
+    "Retrieval Quality": 30,
+    "Entity Linking": 30,
+    "Clinical Extraction": 45,
+    "KG Write": 20,
+    "Briefing Generation": 45
+  }
+}

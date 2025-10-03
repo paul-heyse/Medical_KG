@@ -1,0 +1,288 @@
+{
+  "ingest": {
+    "pmc_ids": [
+      "PMC1000001",
+      "PMC1000002",
+      "PMC1000003",
+      "PMC1000004",
+      "PMC1000005",
+      "PMC1000006",
+      "PMC1000007",
+      "PMC1000008",
+      "PMC1000009",
+      "PMC1000010"
+    ],
+    "spl_setids": [
+      "setid-000001",
+      "setid-000002",
+      "setid-000003",
+      "setid-000004",
+      "setid-000005",
+      "setid-000006",
+      "setid-000007",
+      "setid-000008",
+      "setid-000009",
+      "setid-000010"
+    ],
+    "nct_ids": [
+      "NCT01234567",
+      "NCT01234568",
+      "NCT01234569",
+      "NCT01234570",
+      "NCT01234571",
+      "NCT01234572",
+      "NCT01234573",
+      "NCT01234574",
+      "NCT01234575",
+      "NCT01234576"
+    ]
+  },
+  "documents": [
+    {
+      "doc_id": "doc-metformin-001",
+      "text": "Patients with type 2 diabetes were randomised to metformin or placebo in a 48 week trial. The hazard ratio for progression was 0.78 (95% CI 0.70-0.86) with p=0.002. Inclusion criteria required age 18-75 years and HbA1c between seven and ten percent. Exclusion criteria removed severe renal impairment and active cardiovascular disease. Metformin 1000 mg bid titrated weekly improved HbA1c, weight, and quality of life. Grade 2 diarrhoea occurred in 5/120 patients while serious adverse events were rare. Survival curves demonstrated improved progression-free survival and durable glycaemic control across subgroups.",
+      "sections": []
+    },
+    {
+      "doc_id": "doc-metformin-002",
+      "text": "A pragmatic registry study followed adults initiated on metformin compared with sulfonylureas. Investigators observed reduced hospitalisations and neutral cardiovascular outcomes. Dose escalation to 1500 mg daily maintained fasting glucose under seven millimoles per litre. Safety monitoring captured grade 1-2 gastrointestinal events in 12% of the cohort with no lactic acidosis. Eligibility included estimated GFR above 45 and exclusion of significant hepatic disease. Quality metrics highlighted adherence above 85% at twelve months and meaningful weight reduction.",
+      "sections": []
+    },
+    {
+      "doc_id": "doc-metformin-003",
+      "text": "Guideline panels reviewed randomised trials, observational evidence, and pharmacovigilance reports. They concluded that metformin remains first line for type 2 diabetes with high certainty. Recommendations emphasised checking renal function, titrating from 500 mg daily, and combining with lifestyle interventions. Evidence for cardiovascular benefit was moderate but consistent. Panelists highlighted minimal hypoglycaemia risk and favourable cost profile. Follow-up summaries noted quarterly monitoring and annual review of vitamin B12 levels to mitigate deficiencies.",
+      "sections": []
+    }
+  ],
+  "min_chunk_count": 6,
+  "retrieval_queries": [
+    {
+      "query": "metformin efficacy type 2 diabetes",
+      "intent": "endpoint",
+      "min_results": 1
+    },
+    {
+      "query": "metformin adverse events",
+      "intent": "ae",
+      "min_results": 1
+    },
+    {
+      "query": "metformin dosing titration",
+      "intent": "dose",
+      "min_results": 1
+    }
+  ],
+  "entity_linking": {
+    "text": "Metformin (RxCUI 6809) therapy reduced HbA1c and improved weight in adults with type 2 diabetes.",
+    "context": "Adult outpatient with type 2 diabetes and preserved renal function",
+    "expected_id": "RXCUI:6809",
+    "label": "Metformin",
+    "ontology": "RxCUI"
+  },
+  "kg_payload": {
+    "nodes": [
+      {
+        "id": "study-001",
+        "label": "Study",
+        "nct_id": "NCT01234567",
+        "provenance": ["doc-metformin-001"]
+      },
+      {
+        "id": "outcome-001",
+        "label": "Outcome",
+        "loinc": "LP12345-6",
+        "provenance": ["doc-metformin-001"]
+      },
+      {
+        "id": "evidence-001",
+        "label": "Evidence",
+        "unit_ucum": "1",
+        "outcome_loinc": "LP12345-6",
+        "provenance": ["doc-metformin-001"],
+        "spans": [
+          {"start": 42, "end": 120}
+        ]
+      },
+      {
+        "id": "adverse-001",
+        "label": "AdverseEvent",
+        "grade": 2,
+        "rate": 0.12,
+        "provenance": ["doc-metformin-002"]
+      },
+      {
+        "id": "activity-001",
+        "label": "ExtractionActivity",
+        "generated_by": "pipeline"
+      }
+    ],
+    "relationships": [
+      {
+        "type": "REPORTS",
+        "start_id": "study-001",
+        "end_id": "evidence-001"
+      },
+      {
+        "type": "HAS_OUTCOME",
+        "start_id": "study-001",
+        "end_id": "outcome-001"
+      },
+      {
+        "type": "MEASURES",
+        "start_id": "evidence-001",
+        "end_id": "outcome-001"
+      }
+    ],
+    "graph": {
+      "evidence": [
+        {
+          "id": "evidence-001",
+          "unit_ucum": "1",
+          "outcome_loinc": "LP12345-6",
+          "spans": [
+            {"start": 42, "end": 120}
+          ]
+        }
+      ],
+      "adverse_events": [
+        {
+          "id": "adverse-001",
+          "grade": 2
+        }
+      ],
+      "constraints": [
+        {
+          "id": "activity-001",
+          "generated_by": "pipeline"
+        }
+      ]
+    }
+  },
+  "briefing": {
+    "topic": {
+      "condition": "Type 2 Diabetes",
+      "intervention": "Metformin",
+      "outcome": "HbA1c"
+    },
+    "min_length": 200,
+    "min_citations": 1,
+    "bundle": {
+      "studies": [
+        {
+          "study_id": "study-001",
+          "title": "Metformin improves glycaemic control",
+          "registry_ids": ["NCT01234567"],
+          "citations": [
+            {
+              "doc_id": "doc-metformin-001",
+              "start": 0,
+              "end": 120,
+              "quote": "Randomised controlled trial of metformin vs placebo"
+            }
+          ]
+        }
+      ],
+      "evidence_variables": [
+        {
+          "kind": "population",
+          "description": "Adults with type 2 diabetes and HbA1c 7-10%",
+          "citations": [
+            {
+              "doc_id": "doc-metformin-001",
+              "start": 0,
+              "end": 80,
+              "quote": "Inclusion criteria included age 18-75 years"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "study_id": "study-001",
+          "population": "Adults with T2D",
+          "intervention": "Metformin",
+          "outcome": "Progression",
+          "effect_type": "HR",
+          "value": 0.78,
+          "ci_low": 0.70,
+          "ci_high": 0.86,
+          "p_value": 0.002,
+          "certainty": "high",
+          "citations": [
+            {
+              "doc_id": "doc-metformin-001",
+              "start": 40,
+              "end": 140,
+              "quote": "Hazard ratio for progression was 0.78"
+            }
+          ]
+        }
+      ],
+      "adverse_events": [
+        {
+          "study_id": "study-001",
+          "meddra_pt": "Diarrhoea",
+          "grade": 2,
+          "rate": 0.04,
+          "numerator": 5,
+          "denominator": 120,
+          "citations": [
+            {
+              "doc_id": "doc-metformin-001",
+              "start": 160,
+              "end": 220,
+              "quote": "Grade 2 diarrhoea occurred in 5/120"
+            }
+          ]
+        }
+      ],
+      "doses": [
+        {
+          "study_id": "study-001",
+          "description": "Metformin titrated to 1000 mg twice daily",
+          "amount": 1000,
+          "unit": "mg",
+          "frequency": "BID",
+          "citations": [
+            {
+              "doc_id": "doc-metformin-001",
+              "start": 120,
+              "end": 180,
+              "quote": "Metformin 1000 mg bid titrated weekly"
+            }
+          ]
+        }
+      ],
+      "eligibility": [
+        {
+          "constraint_type": "inclusion",
+          "description": "Estimated GFR above 45 and HbA1c 7-10%",
+          "citations": [
+            {
+              "doc_id": "doc-metformin-002",
+              "start": 140,
+              "end": 220,
+              "quote": "Eligibility included estimated GFR above 45"
+            }
+          ]
+        }
+      ],
+      "guidelines": [
+        {
+          "guideline_id": "guideline-001",
+          "statement": "Metformin is recommended as first line therapy for type 2 diabetes",
+          "strength": "strong",
+          "certainty": "high",
+          "citations": [
+            {
+              "doc_id": "doc-metformin-003",
+              "start": 0,
+              "end": 160,
+              "quote": "Guideline panels concluded metformin remains first line"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

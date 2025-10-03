@@ -18,6 +18,7 @@ else:  # pragma: no cover - fallback for unusual environments
     from httpx import ASGITransport  # type: ignore
 import pytest
 
+from Medical_KG.api.auth import Authenticator
 from Medical_KG.app import create_app
 from Medical_KG.config.manager import SecretResolver
 from Medical_KG.services.chunks import Chunk
@@ -29,6 +30,20 @@ def app(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("PMC_API_KEY", "test-key")
     monkeypatch.setenv("CTGOV_SANDBOX_KEY", "test-key")
     monkeypatch.setenv("OPEN_FDA_SANDBOX_KEY", "test-key")
+
+    monkeypatch.setattr(
+        "Medical_KG.api.routes.build_default_authenticator",
+        lambda: Authenticator(
+            valid_api_keys={
+                "demo-key": {
+                    "retrieve:read",
+                    "facets:write",
+                    "extract:write",
+                    "kg:write",
+                }
+            }
+        ),
+    )
 
     def _resolve(self, key: str, default: str | None = None) -> str:
         if key in os.environ:
@@ -122,5 +137,57 @@ def test_rate_limiting_and_retrieval_headers(app) -> None:
             assert retrieval.status_code == 200
             body = retrieval.json()
             assert body["results"]
+
+    asyncio.run(run())
+
+
+def test_kg_write_happy_path_and_validation_error(app) -> None:
+    headers = {"X-API-Key": "demo-key"}
+    valid_payload = {
+        "nodes": [
+            {
+                "id": "outcome-1",
+                "label": "Outcome",
+                "unit_ucum": "1",
+                "loinc": "LP12345-6",
+            },
+            {
+                "id": "evidence-1",
+                "label": "Evidence",
+                "unit_ucum": "1",
+                "outcome_loinc": "LP12345-6",
+                "provenance": ["doc-1"],
+                "spans": [{"start": 10, "end": 20}],
+            },
+        ],
+        "relationships": [
+            {"type": "MEASURES", "start_id": "evidence-1", "end_id": "outcome-1"}
+        ],
+    }
+    invalid_payload = {
+        "nodes": [
+            {
+                "id": "bad-evidence",
+                "label": "Evidence",
+                "unit_ucum": "1",
+                "outcome_loinc": "LP00000-0",
+            }
+        ],
+        "relationships": [],
+    }
+
+    async def run() -> None:
+        async with _httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            success = await client.post("/kg/write", json=valid_payload, headers=headers)
+            assert success.status_code == 200
+            body = success.json()
+            assert body["written_nodes"] == 2
+            assert body["written_relationships"] == 1
+
+            failure = await client.post("/kg/write", json=invalid_payload, headers=headers)
+            assert failure.status_code == 422
+            error = failure.json()["detail"]
+            assert error["code"] == "kg_validation_failed"
+            assert error["issues"]
 
     asyncio.run(run())

@@ -1,0 +1,89 @@
+{
+  "title": "Medical KG - GPU Utilization",
+  "uid": "medkg-gpu",
+  "tags": ["medical-kg", "gpu"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS"},
+      "fieldConfig": {"defaults": {"unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "title": "GPU Utilization",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "avg(gpu_utilization_percent) by (pod)",
+          "legendFormat": "{{pod}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {"color": "red", "value": 95}
+        ]
+      }
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS"},
+      "fieldConfig": {"defaults": {"unit": "percent"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "title": "GPU Memory Used",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "avg(gpu_memory_used_bytes / gpu_memory_total_bytes * 100) by (pod)",
+          "legendFormat": "{{pod}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 3,
+      "title": "Embedding Tokens/s",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(embedding_tokens_total[5m])",
+          "legendFormat": "tokens/s",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "PROMETHEUS_DS"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 4,
+      "title": "vLLM Queue Depth",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "avg(vllm_request_queue_depth)",
+          "legendFormat": "queue depth",
+          "refId": "A"
+        }
+      ],
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {"color": "green"},
+          {"color": "orange", "value": 5},
+          {"color": "red", "value": 10}
+        ]
+      }
+    }
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  }
+}

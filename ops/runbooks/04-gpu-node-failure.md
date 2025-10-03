@@ -61,6 +61,15 @@ kubectl logs <vllm-pod-name> -n medkg --tail=100
 
 ## Resolution
 
+### Immediate Guardrails
+
+- Pause chaos experiments or GPU-intensive jobs.
+- Annotate node with `medkg.io/cordon-reason=gpu-incident` for audit trail:
+
+```bash
+kubectl annotate node <gpu-node-name> medkg.io/cordon-reason="gpu-incident-$(date -u +%Y%m%dT%H%M%S)"
+```
+
 ### Scenario A: Node NotReady (Software Issue)
 
 #### 1. Cordon Node
@@ -215,18 +224,30 @@ kubectl get pods -n medkg -l app=vllm -w
 kubectl wait --for=condition=Ready pod -l app=vllm -n medkg --timeout=600s
 ```
 
-#### 4. Verify Embedding Service
+#### 4. Verify Embedding & vLLM Services
 
 ```bash
-# Test embedding via API
+# Test embedding via API (tokens < 1024 to stay within default batch limits)
 curl -X POST https://api.medkg.example.com/embed \
   -H "Authorization: Bearer ${API_KEY}" \
+  -H "X-Request-ID: gpu-recovery-test" \
   -d '{
     "object_ids": ["chunk_12345"],
     "object_type": "chunk"
   }'
 
 # Expected: {"embedded_count": 1, "failed": []}
+
+# Test vLLM completions (briefing generation)
+curl -X POST https://api.medkg.example.com/briefing \
+  -H "Authorization: Bearer ${API_KEY}" \
+  -d '{
+    "query": "metformin cardiovascular outcomes",
+    "format": "markdown",
+    "max_tokens": 600
+  }' | jq '.content | length'
+
+# Expected: content length > 400 characters, citations present
 ```
 
 ## Monitoring

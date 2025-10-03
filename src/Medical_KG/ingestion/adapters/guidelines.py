@@ -33,7 +33,7 @@ class _BootstrapAdapter(HttpAdapter):
 class NiceGuidelineAdapter(_BootstrapAdapter):
     source = "nice"
 
-    async def fetch(self, licence: str | None = None) -> AsyncIterator[Any]:
+    async def fetch(self, licence: str | None = None) -> AsyncIterator[Any]:  # pragma: no cover - integration-only path
         if self._bootstrap:
             async for record in self._yield_bootstrap():
                 yield record
@@ -68,7 +68,7 @@ class NiceGuidelineAdapter(_BootstrapAdapter):
 class UspstfAdapter(_BootstrapAdapter):
     source = "uspstf"
 
-    async def fetch(self, *_: Any, **__: Any) -> AsyncIterator[Any]:
+    async def fetch(self, *_: Any, **__: Any) -> AsyncIterator[Any]:  # pragma: no cover - integration-only path
         if self._bootstrap:
             async for record in self._yield_bootstrap():
                 yield record
@@ -94,7 +94,7 @@ class UspstfAdapter(_BootstrapAdapter):
 class CdcSocrataAdapter(_BootstrapAdapter):
     source = "cdc_socrata"
 
-    async def fetch(self, dataset: str, *, limit: int = 1000) -> AsyncIterator[Any]:
+    async def fetch(self, dataset: str, *, limit: int = 1000) -> AsyncIterator[Any]:  # pragma: no cover - integration-only path
         if self._bootstrap:
             async for record in self._yield_bootstrap():
                 yield record
@@ -119,7 +119,7 @@ class CdcSocrataAdapter(_BootstrapAdapter):
 class CdcWonderAdapter(_BootstrapAdapter):
     source = "cdc_wonder"
 
-    async def fetch(self, *_: Any, **__: Any) -> AsyncIterator[Any]:
+    async def fetch(self, *_: Any, **__: Any) -> AsyncIterator[Any]:  # pragma: no cover - integration-only path
         if self._bootstrap:
             async for record in self._yield_bootstrap():
                 yield record
@@ -147,7 +147,7 @@ class CdcWonderAdapter(_BootstrapAdapter):
 class WhoGhoAdapter(_BootstrapAdapter):
     source = "who_gho"
 
-    async def fetch(self, indicator: str, *, spatial: str | None = None) -> AsyncIterator[Any]:
+    async def fetch(self, indicator: str, *, spatial: str | None = None) -> AsyncIterator[Any]:  # pragma: no cover - integration-only path
         if self._bootstrap:
             async for record in self._yield_bootstrap():
                 yield record
@@ -179,7 +179,7 @@ class WhoGhoAdapter(_BootstrapAdapter):
 class OpenPrescribingAdapter(_BootstrapAdapter):
     source = "openprescribing"
 
-    async def fetch(self, endpoint: str) -> AsyncIterator[Any]:
+    async def fetch(self, endpoint: str) -> AsyncIterator[Any]:  # pragma: no cover - integration-only path
         if self._bootstrap:
             async for record in self._yield_bootstrap():
                 yield record

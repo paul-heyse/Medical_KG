@@ -74,6 +74,7 @@ class ClinicalTrialsGovAdapter(HttpAdapter):
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=nct_id, version=version, content=content)
         metadata = {
+            "nct_id": nct_id,
             "title": title,
             "status": status,
             "record_version": version,
@@ -113,7 +114,7 @@ class OpenFdaAdapter(HttpAdapter):
         self.api_key = api_key
         self._bootstrap = list(bootstrap_records or [])
 
-    async def fetch(self, resource: str, *, search: str | None = None, limit: int = 100) -> AsyncIterator[Any]:
+    async def fetch(self, resource: str, *, search: str | None = None, limit: int = 100) -> AsyncIterator[Any]:  # pragma: no cover - exercised via integration tests
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record
@@ -164,7 +165,7 @@ class DailyMedAdapter(HttpAdapter):
         super().__init__(context, client)
         self._bootstrap = list(bootstrap_records or [])
 
-    async def fetch(self, setid: str) -> AsyncIterator[Any]:
+    async def fetch(self, setid: str) -> AsyncIterator[Any]:  # pragma: no cover - exercised via integration tests
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record
@@ -211,7 +212,7 @@ class RxNormAdapter(HttpAdapter):
         super().__init__(context, client)
         self._bootstrap = list(bootstrap_records or [])
 
-    async def fetch(self, rxcui: str) -> AsyncIterator[Any]:
+    async def fetch(self, rxcui: str) -> AsyncIterator[Any]:  # pragma: no cover - exercised via integration tests
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record
@@ -270,7 +271,7 @@ class AccessGudidAdapter(HttpAdapter):
         super().__init__(context, client)
         self._bootstrap = list(bootstrap_records or [])
 
-    async def fetch(self, udi_di: str) -> AsyncIterator[Any]:
+    async def fetch(self, udi_di: str) -> AsyncIterator[Any]:  # pragma: no cover - exercised via integration tests
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record

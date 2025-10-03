@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 PACKAGE_ROOT = SRC / "Medical_KG"
 TARGET_COVERAGE = float(os.environ.get("COVERAGE_TARGET", "0.95"))
+COVERAGE_SCOPE = os.environ.get("COVERAGE_SCOPE")
+SCOPE_ROOT = (ROOT / COVERAGE_SCOPE).resolve() if COVERAGE_SCOPE else None
 
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
@@ -58,6 +60,8 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # p
     total_covered = 0
 
     for py_file in PACKAGE_ROOT.rglob("*.py"):
+        if SCOPE_ROOT and not py_file.resolve().is_relative_to(SCOPE_ROOT):
+            continue
         statements = _statement_lines(py_file)
         if not statements:
             continue
@@ -102,6 +106,9 @@ def _statement_lines(path: Path) -> set[int]:
     tree = ast.parse(source, filename=str(path))
     lines: set[int] = set()
     for node in ast.walk(tree):
+        if isinstance(node, ast.Expr) and isinstance(getattr(node, "value", None), ast.Constant):
+            if isinstance(node.value.value, str):
+                continue
         if isinstance(node, ast.stmt):
             lines.add(node.lineno)
     return lines

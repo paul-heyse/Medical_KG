@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import asyncio
+import json
 import sys
 import types
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import pytest
 
@@ -18,12 +20,17 @@ class _BadParameter(Exception):
     pass
 
 
+class _Exit(SystemExit):
+    def __init__(self, code: int = 0) -> None:
+        super().__init__(code)
+
+
 def _argument(default: object, **_kwargs: object) -> object:
     return default
 
 
-def _option(default: object = None, **_kwargs: object) -> object:
-    return default
+def _option(*args: object, default: object = None, **_kwargs: object) -> object:
+    return default if default is not None else (args[0] if args else None)
 
 
 def _echo(value: object) -> None:
@@ -47,11 +54,13 @@ if "typer" not in sys.modules:
     typer_stub.Argument = _argument
     typer_stub.Option = _option
     typer_stub.BadParameter = _BadParameter
+    typer_stub.Exit = _Exit
     typer_stub.echo = _echo
     sys.modules["typer"] = typer_stub
 
 from Medical_KG.ingestion import cli
-from Medical_KG.ingestion.models import Document, IngestionResult
+from Medical_KG.ingestion.models import IngestionResult
+from .fixtures import FakeRegistry, sample_document_factory
 
 RegistryFactory = Callable[[list[IngestionResult]], list[dict[str, object]]]
 
@@ -81,26 +90,26 @@ def make_registry(monkeypatch: pytest.MonkeyPatch) -> RegistryFactory:
     def _factory(results: list[IngestionResult]) -> list[dict[str, object]]:
         calls: list[dict[str, object]] = []
 
-        class _Adapter:
-            async def run(self, **params: object) -> list[IngestionResult]:
-                calls.append(params)
-                return results
+        def _builder(_context: object, _client: DummyClient) -> Any:
+            class _Adapter:
+                async def run(self, **params: object) -> list[IngestionResult]:
+                    calls.append(params)
+                    return results
 
-        class _Registry:
-            def available_sources(self) -> list[str]:
-                return ["demo"]
+            return _Adapter()
 
-            def get_adapter(self, _source: str, _context: object, _client: DummyClient) -> _Adapter:
-                return _Adapter()
-
-        monkeypatch.setattr(cli, "_resolve_registry", lambda: _Registry())
+        registry = FakeRegistry({"demo": _builder})
+        monkeypatch.setattr(cli, "_resolve_registry", lambda: registry)
         return calls
 
     return _factory
 
 
+_document_factory = sample_document_factory("demo")
+
+
 def _result(doc_id: str) -> IngestionResult:
-    document = Document(doc_id=doc_id, source="demo", content="{}")
+    document = _document_factory(doc_id, json.dumps({"doc": doc_id}))
     return IngestionResult(document=document, state="auto_done", timestamp=datetime.now(timezone.utc))
 
 
@@ -126,7 +135,8 @@ def test_ingest_with_batch_outputs_doc_ids(
 
     captured = capsys.readouterr()
     lines = [json.loads(line) for line in captured.out.strip().splitlines() if line]
-    assert lines == [["doc-1", "doc-2"], ["doc-1", "doc-2"]]
+    expected_ids = [res.document.doc_id for res in results]
+    assert lines == [expected_ids, expected_ids]
     assert dummy_client.closed is True
     assert calls == [{"param": "value"}, {"param": "second"}]
 
@@ -142,9 +152,22 @@ def test_ingest_without_batch_runs_once(
 
     captured = capsys.readouterr()
     lines = [json.loads(line) for line in captured.out.strip().splitlines() if line]
-    assert lines == [["doc-3"]]
+    assert lines == [[results[0].document.doc_id]]
     assert dummy_client.closed is True
     assert calls == [{}]
+
+
+def test_ingest_with_ids_runs_per_identifier(
+    dummy_client: DummyClient, make_registry: RegistryFactory, tmp_path: Path
+) -> None:
+    results = [_result("doc-a"), _result("doc-b")]
+    calls = make_registry(results)
+    ledger_path = tmp_path / "ledger.jsonl"
+
+    cli.ingest("demo", ids="alpha,beta", ledger_path=ledger_path)
+
+    assert dummy_client.closed is True
+    assert calls == [{"id": "alpha"}, {"id": "beta"}]
 
 
 def test_ingest_rejects_unknown_source(make_registry: RegistryFactory) -> None:
@@ -152,3 +175,62 @@ def test_ingest_rejects_unknown_source(make_registry: RegistryFactory) -> None:
 
     with pytest.raises(sys.modules["typer"].BadParameter):
         cli.ingest("unknown")
+
+
+def test_ingest_rejects_conflicting_options(make_registry: RegistryFactory, tmp_path: Path) -> None:
+    make_registry([])
+    batch = tmp_path / "batch.jsonl"
+    batch.write_text("{}\n")
+    with pytest.raises(sys.modules["typer"].BadParameter):
+        cli.ingest("demo", batch=batch, ids="dup")
+
+
+def test_resume_retries_failed_tasks(
+    dummy_client: DummyClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    attempts: dict[str, int] = {"alpha": 0, "beta": 0}
+    results = {
+        "alpha": [_result("doc-alpha")],
+        "beta": [_result("doc-beta")],
+    }
+
+    def _builder(_context: object, _client: DummyClient) -> Any:
+        class _Adapter:
+            async def run(self, **params: object) -> list[IngestionResult]:
+                identifier = params["id"]
+                attempts[identifier] += 1
+                if identifier == "alpha" and attempts[identifier] == 1:
+                    raise RuntimeError("boom")
+                return results[identifier]
+
+        return _Adapter()
+
+    registry = FakeRegistry({"demo": _builder})
+    monkeypatch.setattr(cli, "_resolve_registry", lambda: registry)
+    ledger_path = tmp_path / "ledger.jsonl"
+
+    with pytest.raises(SystemExit) as exc:
+        cli.ingest("demo", ids="alpha,beta", ledger_path=ledger_path)
+    assert exc.value.code == 1
+    cli.resume("demo", ledger_path=ledger_path)
+
+    assert attempts == {"alpha": 2, "beta": 1}
+    ledger = cli.IngestionLedger(ledger_path)
+    task_states = {entry.doc_id: entry.state for entry in ledger.entries() if entry.doc_id.startswith("task:")}
+    assert all(state == "cli_completed" for state in task_states.values())
+
+
+def test_status_reports_summary(
+    dummy_client: DummyClient, make_registry: RegistryFactory, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    results = [_result("doc-1")]
+    make_registry(results)
+    ledger_path = tmp_path / "ledger.jsonl"
+
+    cli.ingest("demo", ledger_path=ledger_path)
+    cli.status(ledger_path, format="json")
+
+    output = capsys.readouterr().out.strip()
+    payload = json.loads(output)
+    assert payload["total"] >= 1
+    assert payload["states"]["cli_completed"] >= 1

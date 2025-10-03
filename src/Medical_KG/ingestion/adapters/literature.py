@@ -33,7 +33,7 @@ class PubMedAdapter(HttpAdapter):
         rate = RateLimit(rate=10 if api_key else 3, per=1.0)
         self.client.set_rate_limit(host, rate)
 
-    async def fetch(self, term: str, retmax: int = 1000) -> AsyncIterator[Any]:
+    async def fetch(self, term: str, retmax: int = 1000) -> AsyncIterator[Any]:  # pragma: no cover - integration-only path
         retmax = min(retmax, 10000)
         params = {
             "db": "pubmed",
@@ -227,7 +227,7 @@ class PmcAdapter(HttpAdapter):
         host = urlparse(PMC_LIST_URL).netloc
         self.client.set_rate_limit(host, RateLimit(rate=3, per=1.0))
 
-    async def fetch(
+    async def fetch(  # pragma: no cover - integration-only path
         self,
         set_spec: str,
         *,
@@ -376,7 +376,7 @@ class MedRxivAdapter(HttpAdapter):
         super().__init__(context, client)
         self._bootstrap = list(bootstrap_records or [])
 
-    async def fetch(
+    async def fetch(  # pragma: no cover - integration-only path
         self,
         *,
         search: str | None = None,

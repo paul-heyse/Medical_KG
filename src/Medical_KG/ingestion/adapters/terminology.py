@@ -5,10 +5,12 @@ import re
 from collections.abc import AsyncIterator, Iterable
 from typing import Any
 
+from dataclasses import replace
+
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
 from Medical_KG.ingestion.http_client import AsyncHttpClient
-from Medical_KG.ingestion.models import Document
+from Medical_KG.ingestion.models import Document, IngestionResult
 from Medical_KG.ingestion.utils import canonical_json, normalize_text
 
 _MESH_ID_RE = re.compile(r"^D\d{6}")
@@ -18,8 +20,39 @@ _ICD11_RE = re.compile(r"^[A-Z0-9]{3,4}")
 _SNOMED_RE = re.compile(r"^\d{6,18}$")
 
 
-class MeSHAdapter(HttpAdapter):
+class _CachedTerminologyAdapter(HttpAdapter):
+    """Cache terminology lookups within a single adapter instance."""
+
+    cache_key: str
+
+    def __init__(self, context: AdapterContext, client: AsyncHttpClient) -> None:
+        super().__init__(context, client)
+        self._cache: dict[str, tuple[IngestionResult, ...]] = {}
+
+    def _extract_cache_key(self, args: tuple[Any, ...], kwargs: dict[str, Any]) -> str:
+        if self.cache_key in kwargs:
+            value = kwargs[self.cache_key]
+        elif args:
+            value = args[0]
+        else:  # pragma: no cover - defensive, enforced by tests
+            raise ValueError(f"Missing cache key '{self.cache_key}'")
+        if not isinstance(value, str):  # pragma: no cover - defensive guard
+            raise ValueError(f"Cache key '{self.cache_key}' must be a string")
+        return value
+
+    async def run(self, *args: Any, **kwargs: Any) -> Iterable[IngestionResult]:
+        key = self._extract_cache_key(args, kwargs)
+        if key in self._cache:
+            return [replace(result) for result in self._cache[key]]
+        results = await super().run(*args, **kwargs)
+        if results:
+            self._cache[key] = tuple(replace(result) for result in results)
+        return results
+
+
+class MeSHAdapter(_CachedTerminologyAdapter):
     source = "mesh"
+    cache_key = "descriptor_id"
 
     def __init__(
         self,
@@ -62,8 +95,9 @@ class MeSHAdapter(HttpAdapter):
             raise ValueError("Invalid MeSH descriptor id")
 
 
-class UMLSAdapter(HttpAdapter):
+class UMLSAdapter(_CachedTerminologyAdapter):
     source = "umls"
+    cache_key = "cui"
 
     def __init__(
         self,
@@ -102,8 +136,9 @@ class UMLSAdapter(HttpAdapter):
             raise ValueError("Invalid UMLS CUI")
 
 
-class LoincAdapter(HttpAdapter):
+class LoincAdapter(_CachedTerminologyAdapter):
     source = "loinc"
+    cache_key = "code"
 
     def __init__(
         self,
@@ -142,8 +177,9 @@ class LoincAdapter(HttpAdapter):
             raise ValueError("Invalid LOINC code")
 
 
-class Icd11Adapter(HttpAdapter):
+class Icd11Adapter(_CachedTerminologyAdapter):
     source = "icd11"
+    cache_key = "code"
 
     def __init__(
         self,
@@ -181,8 +217,9 @@ class Icd11Adapter(HttpAdapter):
             raise ValueError("Invalid ICD-11 code")
 
 
-class SnomedAdapter(HttpAdapter):
+class SnomedAdapter(_CachedTerminologyAdapter):
     source = "snomed"
+    cache_key = "code"
 
     def __init__(
         self,

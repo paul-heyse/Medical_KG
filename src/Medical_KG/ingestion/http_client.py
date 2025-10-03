@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 import importlib.util
 from dataclasses import dataclass
 from time import time
-from typing import Any, AsyncIterator, Dict, Mapping, MutableMapping
+from typing import AsyncIterator, Generic, Mapping, MutableMapping, TypeVar, cast
 from urllib.parse import urlparse
 
 from Medical_KG.compat.httpx import (
@@ -25,6 +25,7 @@ from Medical_KG.utils.optional_dependencies import (
     build_histogram,
     get_httpx_module,
 )
+from Medical_KG.ingestion.types import JSONValue
 
 HTTPX: HttpxModule = get_httpx_module()
 
@@ -46,6 +47,30 @@ class RateLimit:
     per: float
 
 
+JSONBodyT = TypeVar("JSONBodyT", bound=JSONValue)
+
+
+@dataclass(slots=True)
+class JsonResponse(Generic[JSONBodyT]):
+    url: str
+    status_code: int
+    data: JSONBodyT
+
+
+@dataclass(slots=True)
+class TextResponse:
+    url: str
+    status_code: int
+    text: str
+
+
+@dataclass(slots=True)
+class BytesResponse:
+    url: str
+    status_code: int
+    content: bytes
+
+
 class _SimpleLimiter:
     def __init__(self, rate: int, per: float) -> None:
         self.rate = rate
@@ -57,7 +82,7 @@ class _SimpleLimiter:
         await self.acquire()
         return self
 
-    async def __aexit__(self, *_exc: Any) -> None:
+    async def __aexit__(self, *_exc: object) -> None:
         return None
 
     async def acquire(self) -> None:
@@ -90,9 +115,9 @@ class AsyncHttpClient:
         self._client: AsyncClientProtocol = create_async_client(
             timeout=timeout, headers=headers, http2=http2_enabled
         )
-        self._limits: Dict[str, RateLimit] = dict(limits or {})
+        self._limits: dict[str, RateLimit] = dict(limits or {})
         self._default_rate = default_rate or RateLimit(rate=5, per=1.0)
-        self._limiters: Dict[str, _SimpleLimiter] = {}
+        self._limiters: dict[str, _SimpleLimiter] = {}
         self._retries = retries
 
     async def aclose(self) -> None:
@@ -105,7 +130,7 @@ class AsyncHttpClient:
         return self._limiters[host]
 
     async def _execute(
-        self, method: str, url: str, **kwargs: Any
+        self, method: str, url: str, **kwargs: object
     ) -> ResponseProtocol:
         parsed = urlparse(url)
         limiter = self._get_limiter(parsed.netloc)
@@ -138,7 +163,7 @@ class AsyncHttpClient:
         self,
         url: str,
         *,
-        params: Mapping[str, Any] | None = None,
+        params: Mapping[str, object] | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> ResponseProtocol:
         return await self._execute("GET", url, params=params, headers=headers)
@@ -147,15 +172,15 @@ class AsyncHttpClient:
         self,
         url: str,
         *,
-        data: Any | None = None,
-        json: Any | None = None,
+        data: object | None = None,
+        json: JSONValue | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> ResponseProtocol:
         return await self._execute("POST", url, data=data, json=json, headers=headers)
 
     @asynccontextmanager
     async def stream(
-        self, method: str, url: str, **kwargs: Any
+        self, method: str, url: str, **kwargs: object
     ) -> AsyncIterator[ResponseProtocol]:
         parsed = urlparse(url)
         limiter = self._get_limiter(parsed.netloc)
@@ -170,31 +195,32 @@ class AsyncHttpClient:
         self,
         url: str,
         *,
-        params: Mapping[str, Any] | None = None,
+        params: Mapping[str, object] | None = None,
         headers: Mapping[str, str] | None = None,
-    ) -> Any:
+    ) -> JsonResponse[JSONValue]:
         response = await self.get(url, params=params, headers=headers)
-        return response.json()
+        payload = cast(JSONValue, response.json())
+        return JsonResponse(url=url, status_code=response.status_code, data=payload)
 
     async def get_text(
         self,
         url: str,
         *,
-        params: Mapping[str, Any] | None = None,
+        params: Mapping[str, object] | None = None,
         headers: Mapping[str, str] | None = None,
-    ) -> str:
+    ) -> TextResponse:
         response = await self.get(url, params=params, headers=headers)
-        return response.text
+        return TextResponse(url=url, status_code=response.status_code, text=response.text)
 
     async def get_bytes(
         self,
         url: str,
         *,
-        params: Mapping[str, Any] | None = None,
+        params: Mapping[str, object] | None = None,
         headers: Mapping[str, str] | None = None,
-    ) -> bytes:
+    ) -> BytesResponse:
         response = await self.get(url, params=params, headers=headers)
-        return response.content
+        return BytesResponse(url=url, status_code=response.status_code, content=response.content)
 
     def set_rate_limit(self, host: str, limit: RateLimit) -> None:
         """Override the per-host rate limit."""

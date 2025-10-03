@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/pdf/qa.py
-# hypothesis_version: 6.140.2
-
-[0.6, 0.8, 0.85, 1.0, 200, 'QaGateError', 'QaGates', 'QaMetrics', 'en', 'non-en', 'rows', 'unknown']

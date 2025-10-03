@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/embeddings/qwen.py
-# hypothesis_version: 6.140.2
-
-[-1.0, 0.2, 1.0, 10.0, 256, 4096, 'Qwen3-Embedding-8B', 'QwenEmbeddingClient', 'data', 'embedding', 'input', 'model', 'utf-8']

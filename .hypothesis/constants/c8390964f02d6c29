@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/extraction/service.py
-# hypothesis_version: 6.140.2
-
-[2.0, '(\\d+)\\s*/\\s*(\\d+)', '0.1.0', '::', '<', '=', 'HR', 'abstract', 'adverse', 'ae', 'age\\s*(\\d+)-(\\d+)', 'arms', 'bid', 'criteria', 'dosage', 'efficacy', 'eligibility', 'exclusion', 'grade\\s*(\\d)\\s*(\\w+)', 'gte', 'hazard ratio', 'inclusion', 'iv', 'lte', 'methods', 'mortality', 'nausea', 'outcome', 'patients', 'placebo', 'po', 'qwen2', 'registry', 'results', 'safety', 'serious', 'survival', 'treatment']

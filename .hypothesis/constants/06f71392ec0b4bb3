@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/retrieval/fusion.py
-# hypothesis_version: 6.140.2
-
-[0.0, 1.0, 'min_max_normalize', 'weighted_fusion']

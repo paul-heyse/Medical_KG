@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/ingestion/utils.py
-# hypothesis_version: 6.140.2
-
-[',', ':', 'NFKC', '\\s+', '^[a-z]{2}', 'unknown', 'utf-8']

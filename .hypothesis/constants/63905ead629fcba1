@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/extraction/kg.py
-# hypothesis_version: 6.140.2
-
-['AdverseEvent', 'EvidenceVariable', 'ExtractionActivity', 'Intervention', 'Outcome', 'amount', 'arm', 'arm_sizes_json', 'build_kg_statements', 'certainty', 'ci_high', 'ci_low', 'comparators_json', 'count', 'denom', 'dose', 'duration_days', 'frequency_per_day', 'grade', 'human_text', 'id', 'interventions_json', 'label', 'logic_json', 'meddra_pt', 'model', 'n_total', 'name', 'onset_days', 'outcomes_json', 'p_value', 'population_json', 'prompt_hash', 'schema_hash', 'serious', 'spans_json', 'term', 'time_unit_ucum', 'timeframe', 'timestamp', 'type', 'unit', 'value', 'version']

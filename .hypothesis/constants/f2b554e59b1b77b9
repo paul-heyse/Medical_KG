@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/ingestion/adapters/guidelines.py
-# hypothesis_version: 6.140.2
-
-[1000, '$limit', './/row', 'CC-BY-ND', 'Indicator', 'OpenGov', 'SpatialDim', 'TimeDim', 'Value', 'cdc_socrata', 'cdc_wonder', 'country', 'id', 'identifier', 'indicator', 'items', 'licence', 'nice', 'openprescribing', 'practice', 'row_id', 'rows', 'spatial', 'status', 'summary', 'title', 'uid', 'url', 'uspstf', 'v1', 'value', 'who_gho', 'year']

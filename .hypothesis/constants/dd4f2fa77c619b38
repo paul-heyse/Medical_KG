@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/compat/__init__.py
-# hypothesis_version: 6.140.2
-
-['AsyncClientProtocol', 'ClientProtocol', 'Counter', 'CounterLike', 'CudaProtocol', 'DocProtocol', 'EncodingProtocol', 'Gauge', 'GaugeLike', 'HTTPError', 'Histogram', 'HistogramLike', 'HttpUserProtocol', 'PipelineProtocol', 'ResponseProtocol', 'SpanProtocol', 'TaskDecorator', 'TorchProtocol', 'WaitTimeFactory', 'create_async_client', 'create_client', 'load_encoding', 'load_locust', 'load_pipeline', 'load_torch']

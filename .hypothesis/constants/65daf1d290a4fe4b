@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/types/__init__.py
-# hypothesis_version: 6.140.2
-
-['JSONMapping', 'JSONObject', 'JSONPrimitive', 'JSONValue', 'MutableJSONMapping']

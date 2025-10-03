@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/compat/tiktoken.py
-# hypothesis_version: 6.140.2
-
-['EncodingProtocol', 'cl100k_base', 'encode', 'get_encoding', 'load_encoding', 'tiktoken']

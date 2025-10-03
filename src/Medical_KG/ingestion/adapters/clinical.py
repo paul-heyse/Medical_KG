@@ -4,20 +4,36 @@ import json
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import AsyncIterator, Iterable
-from typing import Any, Mapping
-from typing import MutableMapping
+from typing import Mapping, MutableMapping, Sequence, cast
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 from Medical_KG.ingestion.models import Document
-from Medical_KG.ingestion.utils import canonical_json, normalize_text
+from Medical_KG.ingestion.types import (
+    AccessGudidDocumentPayload,
+    ClinicalDocumentPayload,
+    ClinicalTrialsStudyPayload,
+    DailyMedDocumentPayload,
+    DailyMedSectionPayload,
+    JSONMapping,
+    JSONValue,
+    OpenFdaDocumentPayload,
+    OpenFdaRecordPayload,
+    RxNormDocumentPayload,
+)
+from Medical_KG.ingestion.utils import (
+    canonical_json,
+    ensure_json_mapping,
+    ensure_json_sequence,
+    normalize_text,
+)
 
 _CT_NCT_RE = re.compile(r"^NCT\d{8}$")
 _GTIN14_RE = re.compile(r"^\d{14}$")
 
 
-class ClinicalTrialsGovAdapter(HttpAdapter):
+class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
     """Adapter for ClinicalTrials.gov v2 API."""
 
     source = "clinicaltrials"
@@ -28,76 +44,175 @@ class ClinicalTrialsGovAdapter(HttpAdapter):
         client: AsyncHttpClient,
         *,
         api_base: str = "https://clinicaltrials.gov/api/v2",
-        bootstrap_records: Iterable[dict[str, Any]] | None = None,
+        bootstrap_records: Iterable[ClinicalTrialsStudyPayload] | None = None,
     ) -> None:
         super().__init__(context, client)
         self.api_base = api_base.rstrip("/")
-        self._bootstrap = list(bootstrap_records or [])
+        self._bootstrap: list[ClinicalTrialsStudyPayload] = list(bootstrap_records or [])
 
-    async def fetch(self, *_, **__) -> AsyncIterator[Any]:  # pragma: no cover - wrapper around bootstrap
+    async def fetch(self, *_: object, **__: object) -> AsyncIterator[ClinicalTrialsStudyPayload]:
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record
             return
-        # Minimal API loop for live use
         page_token: str | None = None
-        params: dict[str, Any] = {"pageSize": 100}
         while True:
+            params: dict[str, object] = {"pageSize": 100}
             if page_token:
                 params["pageToken"] = page_token
             payload = await self.fetch_json(f"{self.api_base}/studies", params=params)
-            for study in payload.get("studies", []):
-                yield study
-            page_token = payload.get("nextPageToken")
+            payload_map = ensure_json_mapping(payload, context="clinicaltrials response")
+            studies_value = payload_map.get("studies", [])
+            for study_value in ensure_json_sequence(studies_value, context="clinicaltrials studies"):
+                study_map = ensure_json_mapping(study_value, context="clinicaltrials study")
+                yield cast(ClinicalTrialsStudyPayload, dict(study_map))
+            next_token_value = payload_map.get("nextPageToken")
+            page_token = next_token_value if isinstance(next_token_value, str) and next_token_value else None
             if not page_token:
                 break
 
-    def parse(self, raw: Any) -> Document:
-        protocol = raw.get("protocolSection", {})
-        identification = protocol.get("identificationModule", {})
-        nct_id = identification.get("nctId", "")
-        title = normalize_text(identification.get("briefTitle", ""))
-        status = protocol.get("statusModule", {}).get("overallStatus")
-        summary = normalize_text(protocol.get("descriptionModule", {}).get("briefSummary", ""))
-        version = raw.get("derivedSection", {}).get("miscInfoModule", {}).get("version", "unknown")
-        sponsor_module = protocol.get("sponsorCollaboratorsModule", {})
-        lead_sponsor = sponsor_module.get("leadSponsor", {}) if isinstance(sponsor_module, Mapping) else {}
-        enrollment_module = protocol.get("designModule", {}).get("enrollmentInfo", {})
-        date_module = protocol.get("statusModule", {}) if isinstance(protocol.get("statusModule", {}), Mapping) else {}
-        start_date_struct = date_module.get("startDateStruct", {}) if isinstance(date_module, Mapping) else {}
-        completion_date_struct = date_module.get("completionDateStruct", {}) if isinstance(date_module, Mapping) else {}
-        payload = {
+    def parse(self, raw: ClinicalTrialsStudyPayload) -> Document:
+        protocol = ensure_json_mapping(cast(JSONValue, raw.get("protocolSection", {})), context="clinicaltrials protocol")
+        identification = ensure_json_mapping(
+            cast(JSONValue, protocol.get("identificationModule", {})),
+            context="clinicaltrials identification",
+        )
+        nct_id = str(identification.get("nctId", ""))
+        title = normalize_text(str(identification.get("briefTitle", "")))
+
+        status_module = ensure_json_mapping(
+            cast(JSONValue, protocol.get("statusModule", {})), context="clinicaltrials status module"
+        )
+        status_value = status_module.get("overallStatus")
+        status = str(status_value) if isinstance(status_value, str) else None
+
+        description_module = ensure_json_mapping(
+            cast(JSONValue, protocol.get("descriptionModule", {})),
+            context="clinicaltrials description module",
+        )
+        summary_value = description_module.get("briefSummary", "")
+        summary = normalize_text(str(summary_value)) if isinstance(summary_value, str) else ""
+
+        derived_section = ensure_json_mapping(
+            cast(JSONValue, raw.get("derivedSection", {})), context="clinicaltrials derived section"
+        )
+        misc_info = ensure_json_mapping(
+            cast(JSONValue, derived_section.get("miscInfoModule", {})),
+            context="clinicaltrials misc info",
+        )
+        version = str(misc_info.get("version", "unknown"))
+
+        sponsor_module = ensure_json_mapping(
+            cast(JSONValue, protocol.get("sponsorCollaboratorsModule", {})),
+            context="clinicaltrials sponsor module",
+        )
+        lead_sponsor_mapping = ensure_json_mapping(
+            cast(JSONValue, sponsor_module.get("leadSponsor", {})),
+            context="clinicaltrials lead sponsor",
+        )
+        lead_sponsor_name_value = lead_sponsor_mapping.get("name")
+        lead_sponsor_name = str(lead_sponsor_name_value) if isinstance(lead_sponsor_name_value, str) else None
+
+        design_module = ensure_json_mapping(
+            cast(JSONValue, protocol.get("designModule", {})), context="clinicaltrials design module"
+        )
+        phases_value = design_module.get("phases")
+        phases: list[str] = []
+        if phases_value is not None:
+            for phase in ensure_json_sequence(phases_value, context="clinicaltrials phases"):
+                if isinstance(phase, str):
+                    phases.append(phase)
+        phase_text = ", ".join(phases)
+        study_type_value = design_module.get("studyType")
+        study_type = str(study_type_value) if isinstance(study_type_value, str) else None
+
+        enrollment_info = ensure_json_mapping(
+            cast(JSONValue, design_module.get("enrollmentInfo", {})),
+            context="clinicaltrials enrollment",
+        )
+        enrollment_raw = enrollment_info.get("count")
+        enrollment: int | str | None
+        if isinstance(enrollment_raw, int):
+            enrollment = enrollment_raw
+        elif isinstance(enrollment_raw, str):
+            enrollment = enrollment_raw
+        else:
+            enrollment = None
+
+        start_date_struct = ensure_json_mapping(
+            cast(JSONValue, status_module.get("startDateStruct", {})),
+            context="clinicaltrials start date",
+        )
+        start_date_value = start_date_struct.get("date")
+        start_date = str(start_date_value) if isinstance(start_date_value, str) else None
+
+        completion_date_struct = ensure_json_mapping(
+            cast(JSONValue, status_module.get("completionDateStruct", {})),
+            context="clinicaltrials completion date",
+        )
+        completion_date_value = completion_date_struct.get("date")
+        completion_date = str(completion_date_value) if isinstance(completion_date_value, str) else None
+
+        arms_module = ensure_json_mapping(
+            cast(JSONValue, protocol.get("armsInterventionsModule", {})),
+            context="clinicaltrials arms module",
+        )
+        arms_list: list[JSONMapping] = []
+        arms_value = arms_module.get("arms")
+        if arms_value is not None:
+            for arm in ensure_json_sequence(arms_value, context="clinicaltrials arms"):
+                arms_list.append(ensure_json_mapping(arm, context="clinicaltrials arm"))
+
+        eligibility_module = ensure_json_mapping(
+            cast(JSONValue, protocol.get("eligibilityModule", {})),
+            context="clinicaltrials eligibility module",
+        )
+        eligibility_value = eligibility_module.get("eligibilityCriteria")
+
+        outcomes_module = ensure_json_mapping(
+            cast(JSONValue, protocol.get("outcomesModule", {})),
+            context="clinicaltrials outcomes module",
+        )
+        outcomes_value = outcomes_module.get("primaryOutcomes")
+        outcomes_list: list[JSONMapping] = []
+        if outcomes_value is not None:
+            for outcome in ensure_json_sequence(outcomes_value, context="clinicaltrials outcomes"):
+                outcomes_list.append(ensure_json_mapping(outcome, context="clinicaltrials outcome"))
+
+        payload: ClinicalDocumentPayload = {
             "nct_id": nct_id,
             "title": title,
             "status": status,
-            "phase": ", ".join(protocol.get("designModule", {}).get("phases", []) or []),
-            "study_type": protocol.get("designModule", {}).get("studyType"),
-            "arms": protocol.get("armsInterventionsModule", {}).get("arms", []),
-            "eligibility": protocol.get("eligibilityModule", {}).get("eligibilityCriteria"),
-            "outcomes": protocol.get("outcomesModule", {}).get("primaryOutcomes", []),
+            "phase": phase_text or None,
+            "study_type": study_type,
+            "arms": arms_list,
+            "eligibility": eligibility_value,
+            "outcomes": outcomes_list,
             "version": version,
-            "lead_sponsor": lead_sponsor.get("name") if isinstance(lead_sponsor, Mapping) else None,
-            "enrollment": enrollment_module.get("count") if isinstance(enrollment_module, Mapping) else None,
-            "start_date": start_date_struct.get("date"),
-            "completion_date": completion_date_struct.get("date"),
+            "lead_sponsor": lead_sponsor_name,
+            "enrollment": enrollment,
+            "start_date": start_date,
+            "completion_date": completion_date,
         }
+
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=nct_id, version=version, content=content)
-        metadata = {
+        metadata: dict[str, JSONValue] = {
             "title": title,
-            "status": status,
             "record_version": version,
         }
-        if payload.get("lead_sponsor"):
+        if status is not None:
+            metadata["status"] = status
+        if payload["lead_sponsor"]:
             metadata["sponsor"] = payload["lead_sponsor"]
-        if payload.get("phase"):
+        if payload["phase"]:
             metadata["phase"] = payload["phase"]
-        if payload.get("enrollment") is not None:
+        if payload["enrollment"] is not None:
             metadata["enrollment"] = payload["enrollment"]
-        if payload.get("start_date"):
-            metadata["start_date"] = payload["start_date"]
-        if payload.get("completion_date"):
-            metadata["completion_date"] = payload["completion_date"]
+        if start_date is not None:
+            metadata["start_date"] = start_date
+        if completion_date is not None:
+            metadata["completion_date"] = completion_date
         return Document(
             doc_id=doc_id,
             source=self.source,
@@ -107,16 +222,16 @@ class ClinicalTrialsGovAdapter(HttpAdapter):
         )
 
     def validate(self, document: Document) -> None:
-        raw = document.raw if isinstance(document.raw, Mapping) else {}
-        nct_id = raw.get("nct_id")
+        raw_payload = document.raw if isinstance(document.raw, Mapping) else {}
+        nct_id = raw_payload.get("nct_id")
         if not isinstance(nct_id, str) or not _CT_NCT_RE.match(nct_id):
             raise ValueError(f"Invalid NCT ID: {nct_id}")
-        outcomes = raw.get("outcomes", [])
+        outcomes = raw_payload.get("outcomes", [])
         if outcomes and not isinstance(outcomes, list):
             raise ValueError("Outcomes must be a list")
 
 
-class OpenFdaAdapter(HttpAdapter):
+class OpenFdaAdapter(HttpAdapter[OpenFdaRecordPayload]):
     """Adapter for openFDA resources."""
 
     source = "openfda"
@@ -127,34 +242,57 @@ class OpenFdaAdapter(HttpAdapter):
         client: AsyncHttpClient,
         *,
         api_key: str | None = None,
-        bootstrap_records: Iterable[dict[str, Any]] | None = None,
+        bootstrap_records: Iterable[OpenFdaRecordPayload] | None = None,
     ) -> None:
         super().__init__(context, client)
         self.api_key = api_key
-        self._bootstrap = list(bootstrap_records or [])
+        self._bootstrap: list[OpenFdaRecordPayload] = list(bootstrap_records or [])
 
-    async def fetch(self, resource: str, *, search: str | None = None, limit: int = 100) -> AsyncIterator[Any]:
+    async def fetch(
+        self,
+        resource: str,
+        *,
+        search: str | None = None,
+        limit: int = 100,
+    ) -> AsyncIterator[OpenFdaRecordPayload]:
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record
             return
-        params: dict[str, Any] = {"limit": limit}
+        params: dict[str, object] = {"limit": limit}
         if search:
             params["search"] = search
         if self.api_key:
             params["api_key"] = self.api_key
         payload = await self.fetch_json(f"https://api.fda.gov/{resource}.json", params=params)
-        for record in payload.get("results", []):
-            yield record
+        payload_map = ensure_json_mapping(payload, context="openfda response")
+        results_value = payload_map.get("results", [])
+        for record_value in ensure_json_sequence(results_value, context="openfda results"):
+            record_map = ensure_json_mapping(record_value, context="openfda record")
+            yield cast(OpenFdaRecordPayload, dict(record_map))
 
-    def parse(self, raw: Any) -> Document:
-        identifier = raw.get("safetyreportid") or raw.get("udi_di") or raw.get("setid") or raw.get("id")
-        if not identifier:
+    def parse(self, raw: OpenFdaRecordPayload) -> Document:
+        identifier_value = (
+            raw.get("safetyreportid")
+            or raw.get("udi_di")
+            or raw.get("setid")
+            or raw.get("id")
+        )
+        if identifier_value is None:
             raise ValueError("Record missing identifier")
-        payload = dict(raw)
+        identifier = str(identifier_value)
+        version_value = raw.get("receivedate") or raw.get("version_number") or raw.get("last_updated")
+        version = str(version_value) if version_value else "unknown"
+        record_payload: dict[str, JSONValue] = {
+            key: cast(JSONValue, value) for key, value in raw.items()
+        }
+        payload: OpenFdaDocumentPayload = {
+            "identifier": identifier,
+            "version": version,
+            "record": record_payload,
+        }
         content = canonical_json(payload)
-        version = raw.get("receivedate") or raw.get("version_number") or raw.get("last_updated", "unknown")
-        doc_id = self.build_doc_id(identifier=str(identifier), version=str(version), content=content)
+        doc_id = self.build_doc_id(identifier=identifier, version=version, content=content)
         return Document(
             doc_id=doc_id,
             source=self.source,
@@ -165,11 +303,11 @@ class OpenFdaAdapter(HttpAdapter):
 
     def validate(self, document: Document) -> None:
         identifier = document.metadata.get("identifier")
-        if not identifier:
+        if not isinstance(identifier, str) or not identifier:
             raise ValueError("openFDA document missing identifier metadata")
 
 
-class DailyMedAdapter(HttpAdapter):
+class DailyMedAdapter(HttpAdapter[str]):
     """Adapter for DailyMed SPL documents."""
 
     source = "dailymed"
@@ -184,7 +322,7 @@ class DailyMedAdapter(HttpAdapter):
         super().__init__(context, client)
         self._bootstrap = list(bootstrap_records or [])
 
-    async def fetch(self, setid: str) -> AsyncIterator[Any]:
+    async def fetch(self, setid: str) -> AsyncIterator[str]:
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record
@@ -193,30 +331,41 @@ class DailyMedAdapter(HttpAdapter):
         xml = await self.fetch_text("https://dailymed.nlm.nih.gov/dailymed/services/v2/spls", params=params)
         yield xml
 
-    def parse(self, raw: Any) -> Document:
+    def parse(self, raw: str) -> Document:
         root = ET.fromstring(raw)
         setid = root.find("setid").attrib.get("root") if root.find("setid") is not None else "unknown"
         title = normalize_text(root.findtext("title", default=""))
-        sections: list[dict[str, Any]] = []
+        sections: list[DailyMedSectionPayload] = []
         for section in root.findall("section"):
             code_elem = section.find("code")
             loinc = code_elem.attrib.get("code") if code_elem is not None else None
             text = normalize_text(section.findtext("text", default=""))
             sections.append({"loinc": loinc, "text": text})
-        payload = {"setid": setid, "title": title, "sections": sections}
-        content = canonical_json(payload)
         effective = root.find("effectiveTime")
         version = effective.attrib.get("value") if effective is not None else "unknown"
+        payload: DailyMedDocumentPayload = {
+            "setid": setid,
+            "title": title,
+            "version": version,
+            "sections": sections,
+        }
+        content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=setid, version=version, content=content)
-        return Document(doc_id=doc_id, source=self.source, content=title, metadata={"setid": setid}, raw=payload)
+        return Document(
+            doc_id=doc_id,
+            source=self.source,
+            content=title,
+            metadata={"setid": setid, "version": version},
+            raw=payload,
+        )
 
     def validate(self, document: Document) -> None:
         setid = document.metadata.get("setid")
-        if not setid:
+        if not isinstance(setid, str) or not setid:
             raise ValueError("DailyMed record missing setid")
 
 
-class RxNormAdapter(HttpAdapter):
+class RxNormAdapter(HttpAdapter[JSONMapping]):
     """Adapter for RxNav / RxNorm lookups."""
 
     source = "rxnorm"
@@ -226,32 +375,43 @@ class RxNormAdapter(HttpAdapter):
         context: AdapterContext,
         client: AsyncHttpClient,
         *,
-        bootstrap_records: Iterable[dict[str, Any]] | None = None,
+        bootstrap_records: Iterable[JSONMapping] | None = None,
     ) -> None:
         super().__init__(context, client)
-        self._bootstrap = list(bootstrap_records or [])
+        self._bootstrap: list[JSONMapping] = list(bootstrap_records or [])
 
-    async def fetch(self, rxcui: str) -> AsyncIterator[Any]:
+    async def fetch(self, rxcui: str) -> AsyncIterator[JSONMapping]:
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record
             return
         payload = await self.fetch_json(f"https://rxnav.nlm.nih.gov/REST/rxcui/{rxcui}/properties.json")
-        yield payload
+        yield ensure_json_mapping(payload, context="rxnorm response")
 
-    def parse(self, raw: Any) -> Document:
-        props = raw.get("properties", {})
-        rxcui = props.get("rxcui")
-        payload = {
+    def parse(self, raw: JSONMapping) -> Document:
+        props_value = raw.get("properties", {})
+        props = ensure_json_mapping(cast(JSONValue, props_value), context="rxnorm properties")
+        rxcui_value = props.get("rxcui")
+        if rxcui_value is None:
+            raise ValueError("RxNorm payload missing rxcui")
+        rxcui = str(rxcui_value)
+        payload: RxNormDocumentPayload = {
             "rxcui": rxcui,
-            "name": props.get("name"),
-            "synonym": props.get("synonym"),
-            "tty": props.get("tty"),
-            "ndc": props.get("ndc"),
+            "name": props.get("name") if isinstance(props.get("name"), str) else None,
+            "synonym": props.get("synonym") if isinstance(props.get("synonym"), str) else None,
+            "tty": props.get("tty") if isinstance(props.get("tty"), str) else None,
+            "ndc": props.get("ndc") if isinstance(props.get("ndc"), str) else None,
         }
         content = canonical_json(payload)
-        doc_id = self.build_doc_id(identifier=str(rxcui), version="v1", content=content)
-        return Document(doc_id=doc_id, source=self.source, content=props.get("name", ""), metadata={"rxcui": rxcui}, raw=payload)
+        doc_id = self.build_doc_id(identifier=rxcui, version="v1", content=content)
+        display_name = payload.get("name") or ""
+        return Document(
+            doc_id=doc_id,
+            source=self.source,
+            content=str(display_name),
+            metadata={"rxcui": rxcui},
+            raw=payload,
+        )
 
     def validate(self, document: Document) -> None:
         rxcui = document.metadata.get("rxcui")
@@ -275,7 +435,7 @@ class UdiValidator:
         return check_digit == digits[-1]
 
 
-class AccessGudidAdapter(HttpAdapter):
+class AccessGudidAdapter(HttpAdapter[JSONMapping]):
     """Adapter for AccessGUDID device registry."""
 
     source = "accessgudid"
@@ -285,31 +445,34 @@ class AccessGudidAdapter(HttpAdapter):
         context: AdapterContext,
         client: AsyncHttpClient,
         *,
-        bootstrap_records: Iterable[dict[str, Any]] | None = None,
+        bootstrap_records: Iterable[JSONMapping] | None = None,
     ) -> None:
         super().__init__(context, client)
-        self._bootstrap = list(bootstrap_records or [])
+        self._bootstrap: list[JSONMapping] = list(bootstrap_records or [])
 
-    async def fetch(self, udi_di: str) -> AsyncIterator[Any]:
+    async def fetch(self, udi_di: str) -> AsyncIterator[JSONMapping]:
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record
             return
         payload = await self.fetch_json("https://accessgudid.nlm.nih.gov/devices/lookup.json", params={"udi": udi_di})
-        yield payload
+        yield ensure_json_mapping(payload, context="accessgudid response")
 
-    def parse(self, raw: Any) -> Document:
-        udi = raw.get("udi", {})
-        device_identifier = udi.get("deviceIdentifier") or raw.get("udi_di")
-        payload = {
+    def parse(self, raw: JSONMapping) -> Document:
+        udi_mapping = ensure_json_mapping(cast(JSONValue, raw.get("udi", {})), context="accessgudid udi")
+        device_identifier_value = udi_mapping.get("deviceIdentifier") or raw.get("udi_di")
+        if device_identifier_value is None:
+            raise ValueError("AccessGUDID record missing device identifier")
+        device_identifier = str(device_identifier_value)
+        payload: AccessGudidDocumentPayload = {
             "udi_di": device_identifier,
-            "brand": udi.get("brandName"),
-            "model": udi.get("versionOrModelNumber"),
-            "company": udi.get("companyName"),
-            "description": udi.get("deviceDescription"),
+            "brand": udi_mapping.get("brandName") if isinstance(udi_mapping.get("brandName"), str) else None,
+            "model": udi_mapping.get("versionOrModelNumber") if isinstance(udi_mapping.get("versionOrModelNumber"), str) else None,
+            "company": udi_mapping.get("companyName") if isinstance(udi_mapping.get("companyName"), str) else None,
+            "description": udi_mapping.get("deviceDescription") if isinstance(udi_mapping.get("deviceDescription"), str) else None,
         }
         content = canonical_json(payload)
-        doc_id = self.build_doc_id(identifier=str(device_identifier), version="v1", content=content)
+        doc_id = self.build_doc_id(identifier=device_identifier, version="v1", content=content)
         return Document(
             doc_id=doc_id,
             source=self.source,
@@ -329,12 +492,11 @@ class OpenFdaUdiAdapter(OpenFdaAdapter):
 
     source = "openfda_udi"
 
-    def parse(self, raw: Any) -> Document:  # pragma: no cover - delegate to super then enrich
+    def parse(self, raw: OpenFdaRecordPayload) -> Document:  # pragma: no cover - delegate to super then enrich
         document = super().parse(raw)
         udi_di = raw.get("udi_di")
-        if udi_di:
-            if isinstance(document.metadata, MutableMapping):
-                document.metadata["udi_di"] = udi_di
+        if isinstance(udi_di, str) and udi_di:
+            document.metadata["udi_di"] = udi_di
         return document
 
     def validate(self, document: Document) -> None:

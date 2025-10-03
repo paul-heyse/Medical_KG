@@ -3,16 +3,34 @@ from __future__ import annotations
 import json
 import xml.etree.ElementTree as ET
 from collections.abc import AsyncIterator, Iterable
-from typing import Any
+from typing import Generic, Mapping, Sequence, TypeVar, cast
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 from Medical_KG.ingestion.models import Document
-from Medical_KG.ingestion.utils import canonical_json, normalize_text
+from Medical_KG.ingestion.types import (
+    CdcSocrataDocumentPayload,
+    CdcWonderDocumentPayload,
+    JSONMapping,
+    JSONValue,
+    NiceGuidelineDocumentPayload,
+    OpenPrescribingDocumentPayload,
+    UspstfDocumentPayload,
+    WhoGhoDocumentPayload,
+)
+from Medical_KG.ingestion.utils import (
+    canonical_json,
+    ensure_json_mapping,
+    ensure_json_sequence,
+    normalize_text,
+)
 
 
-class _BootstrapAdapter(HttpAdapter):
+RawBootstrapT = TypeVar("RawBootstrapT")
+
+
+class _BootstrapAdapter(HttpAdapter[RawBootstrapT], Generic[RawBootstrapT]):
     """Adapter base class that can iterate over bootstrap records."""
 
     def __init__(
@@ -20,113 +38,147 @@ class _BootstrapAdapter(HttpAdapter):
         context: AdapterContext,
         client: AsyncHttpClient,
         *,
-        bootstrap_records: Iterable[Any] | None = None,
+        bootstrap_records: Iterable[RawBootstrapT] | None = None,
     ) -> None:
         super().__init__(context, client)
-        self._bootstrap = list(bootstrap_records or [])
+        self._bootstrap: list[RawBootstrapT] = list(bootstrap_records or [])
 
-    async def _yield_bootstrap(self) -> AsyncIterator[Any]:
+    async def _yield_bootstrap(self) -> AsyncIterator[RawBootstrapT]:
         for record in self._bootstrap:
             yield record
 
 
-class NiceGuidelineAdapter(_BootstrapAdapter):
+class NiceGuidelineAdapter(_BootstrapAdapter[JSONMapping]):
     source = "nice"
 
-    async def fetch(self, licence: str | None = None) -> AsyncIterator[Any]:
+    async def fetch(self, licence: str | None = None) -> AsyncIterator[JSONMapping]:
         if self._bootstrap:
             async for record in self._yield_bootstrap():
                 yield record
             return
         params = {"licence": licence} if licence else None
         payload = await self.fetch_json("https://api.nice.org.uk/guidance", params=params or {})
-        for record in payload.get("items", []):
-            yield record
+        payload_map = ensure_json_mapping(payload, context="nice guidance response")
+        items_value = payload_map.get("items", [])
+        for record in ensure_json_sequence(items_value, context="nice guidance items"):
+            yield ensure_json_mapping(record, context="nice guidance item")
 
-    def parse(self, raw: Any) -> Document:
-        payload = {
-            "uid": raw.get("uid"),
-            "title": normalize_text(raw.get("title", "")),
-            "summary": normalize_text(raw.get("summary", "")),
-            "url": raw.get("url"),
-            "licence": raw.get("licence"),
+    def parse(self, raw: JSONMapping) -> Document:
+        payload: NiceGuidelineDocumentPayload = {
+            "uid": str(raw.get("uid")) if raw.get("uid") is not None else "",
+            "title": normalize_text(str(raw.get("title", ""))),
+            "summary": normalize_text(str(raw.get("summary", ""))),
+            "url": str(raw.get("url")) if isinstance(raw.get("url"), str) else None,
+            "licence": str(raw.get("licence")) if isinstance(raw.get("licence"), str) else None,
         }
         if not payload["uid"]:
             raise ValueError("NICE guideline missing uid")
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=payload["uid"], version="v1", content=content)
-        return Document(doc_id=doc_id, source=self.source, content=payload["summary"] or payload["title"], metadata={"uid": payload["uid"], "licence": payload["licence"]}, raw=payload)
+        return Document(
+            doc_id=doc_id,
+            source=self.source,
+            content=payload["summary"] or payload["title"],
+            metadata={"uid": payload["uid"], "licence": payload["licence"]},
+            raw=payload,
+        )
 
     def validate(self, document: Document) -> None:
         licence = document.metadata.get("licence")
-        if licence not in {"OpenGov", "CC-BY-ND"}:
+        if not isinstance(licence, str) or licence not in {"OpenGov", "CC-BY-ND"}:
             raise ValueError("Invalid NICE licence metadata")
-        if not document.metadata.get("uid"):
+        uid_meta = document.metadata.get("uid")
+        if not isinstance(uid_meta, str) or not uid_meta:
             raise ValueError("NICE guideline missing uid metadata")
 
 
-class UspstfAdapter(_BootstrapAdapter):
+class UspstfAdapter(_BootstrapAdapter[JSONMapping]):
     source = "uspstf"
 
-    async def fetch(self, *_: Any, **__: Any) -> AsyncIterator[Any]:
+    async def fetch(self, *_: object, **__: object) -> AsyncIterator[JSONMapping]:
         if self._bootstrap:
             async for record in self._yield_bootstrap():
                 yield record
             return
         raise RuntimeError("USPSTF API requires manual approval; provide bootstrap records")
 
-    def parse(self, raw: Any) -> Document:
-        payload = {
-            "id": raw.get("id"),
-            "title": normalize_text(raw.get("title", "")),
-            "status": raw.get("status"),
-            "url": raw.get("url"),
+    def parse(self, raw: JSONMapping) -> Document:
+        payload: UspstfDocumentPayload = {
+            "id": str(raw.get("id")) if raw.get("id") is not None else None,
+            "title": normalize_text(str(raw.get("title", ""))),
+            "status": str(raw.get("status")) if isinstance(raw.get("status"), str) else None,
+            "url": str(raw.get("url")) if isinstance(raw.get("url"), str) else None,
         }
         content = canonical_json(payload)
-        doc_id = self.build_doc_id(identifier=payload["id"], version="v1", content=content)
-        return Document(doc_id=doc_id, source=self.source, content=payload["title"], metadata={"id": payload["id"], "status": payload["status"]}, raw=payload)
+        identifier = payload["id"] or payload["title"]
+        doc_id = self.build_doc_id(identifier=str(identifier), version="v1", content=content)
+        return Document(
+            doc_id=doc_id,
+            source=self.source,
+            content=payload["title"],
+            metadata={"id": payload["id"], "status": payload["status"]},
+            raw=payload,
+        )
 
     def validate(self, document: Document) -> None:
-        if not document.metadata.get("status"):
+        status = document.metadata.get("status")
+        if not isinstance(status, str) or not status:
             raise ValueError("USPSTF record requires status")
 
 
-class CdcSocrataAdapter(_BootstrapAdapter):
+class CdcSocrataAdapter(_BootstrapAdapter[JSONMapping]):
     source = "cdc_socrata"
 
-    async def fetch(self, dataset: str, *, limit: int = 1000) -> AsyncIterator[Any]:
+    async def fetch(self, dataset: str, *, limit: int = 1000) -> AsyncIterator[JSONMapping]:
         if self._bootstrap:
             async for record in self._yield_bootstrap():
                 yield record
             return
         params = {"$limit": limit}
         payload = await self.fetch_json(f"https://data.cdc.gov/resource/{dataset}.json", params=params)
-        for row in payload:
-            yield row
+        rows = ensure_json_sequence(payload, context="cdc socrata rows")
+        for row in rows:
+            yield ensure_json_mapping(row, context="cdc socrata row")
 
-    def parse(self, raw: Any) -> Document:
-        payload = dict(raw)
-        identifier = payload.get("row_id") or f"{payload.get('state')}-{payload.get('year')}-{payload.get('indicator')}"
+    def parse(self, raw: JSONMapping) -> Document:
+        identifier_value = raw.get("row_id")
+        if isinstance(identifier_value, str) and identifier_value:
+            identifier = identifier_value
+        else:
+            state = raw.get("state")
+            year = raw.get("year")
+            indicator = raw.get("indicator")
+            identifier = f"{state}-{year}-{indicator}"
+        payload: CdcSocrataDocumentPayload = {
+            "identifier": identifier,
+            "record": {key: cast(JSONValue, value) for key, value in raw.items()},
+        }
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=identifier, version="v1", content=content)
-        return Document(doc_id=doc_id, source=self.source, content=json.dumps(payload), metadata={"identifier": identifier}, raw=payload)
+        return Document(
+            doc_id=doc_id,
+            source=self.source,
+            content=json.dumps(payload["record"]),
+            metadata={"identifier": identifier},
+            raw=payload,
+        )
 
     def validate(self, document: Document) -> None:
         if not document.metadata.get("identifier"):
             raise ValueError("CDC Socrata row missing identifier")
 
 
-class CdcWonderAdapter(_BootstrapAdapter):
+class CdcWonderAdapter(_BootstrapAdapter[str]):
     source = "cdc_wonder"
 
-    async def fetch(self, *_: Any, **__: Any) -> AsyncIterator[Any]:
+    async def fetch(self, *_: object, **__: object) -> AsyncIterator[str]:
         if self._bootstrap:
             async for record in self._yield_bootstrap():
                 yield record
             return
         raise RuntimeError("CDC WONDER requires XML form posts; provide bootstrap records")
 
-    def parse(self, raw: Any) -> Document:
+    def parse(self, raw: str) -> Document:
         root = ET.fromstring(raw)
         rows = []
         for row in root.findall(".//row"):
@@ -134,20 +186,26 @@ class CdcWonderAdapter(_BootstrapAdapter):
             for child in list(row):
                 row_data[child.tag] = normalize_text(child.text or "")
             rows.append(row_data)
-        payload = {"rows": rows}
+        payload: CdcWonderDocumentPayload = {"rows": rows}
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=str(len(rows)), version="v1", content=content)
-        return Document(doc_id=doc_id, source=self.source, content=json.dumps(rows), metadata={"rows": len(rows)}, raw=payload)
+        return Document(
+            doc_id=doc_id,
+            source=self.source,
+            content=json.dumps(rows),
+            metadata={"rows": len(rows)},
+            raw=payload,
+        )
 
     def validate(self, document: Document) -> None:
         if document.metadata.get("rows", 0) == 0:
             raise ValueError("CDC WONDER payload contained no rows")
 
 
-class WhoGhoAdapter(_BootstrapAdapter):
+class WhoGhoAdapter(_BootstrapAdapter[JSONMapping]):
     source = "who_gho"
 
-    async def fetch(self, indicator: str, *, spatial: str | None = None) -> AsyncIterator[Any]:
+    async def fetch(self, indicator: str, *, spatial: str | None = None) -> AsyncIterator[JSONMapping]:
         if self._bootstrap:
             async for record in self._yield_bootstrap():
                 yield record
@@ -156,45 +214,70 @@ class WhoGhoAdapter(_BootstrapAdapter):
         if spatial:
             params["spatial"] = spatial
         payload = await self.fetch_json("https://ghoapi.azureedge.net/api/GHO", params=params)
-        for entry in payload.get("value", []):
-            yield entry
+        payload_map = ensure_json_mapping(payload, context="who gho response")
+        values_value = payload_map.get("value", [])
+        for entry in ensure_json_sequence(values_value, context="who gho values"):
+            yield ensure_json_mapping(entry, context="who gho entry")
 
-    def parse(self, raw: Any) -> Document:
-        payload = {
-            "indicator": raw.get("Indicator"),
-            "value": raw.get("Value"),
-            "country": raw.get("SpatialDim"),
-            "year": raw.get("TimeDim"),
+    def parse(self, raw: JSONMapping) -> Document:
+        payload: WhoGhoDocumentPayload = {
+            "indicator": str(raw.get("Indicator")) if raw.get("Indicator") is not None else None,
+            "value": cast(JSONValue, raw.get("Value")),
+            "country": str(raw.get("SpatialDim")) if raw.get("SpatialDim") is not None else None,
+            "year": str(raw.get("TimeDim")) if raw.get("TimeDim") is not None else None,
         }
         identifier = f"{payload['indicator']}-{payload['country']}-{payload['year']}"
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=identifier, version="v1", content=content)
-        return Document(doc_id=doc_id, source=self.source, content=json.dumps(payload), metadata={"identifier": identifier}, raw=payload)
+        return Document(
+            doc_id=doc_id,
+            source=self.source,
+            content=json.dumps(payload),
+            metadata={"identifier": identifier},
+            raw=payload,
+        )
 
     def validate(self, document: Document) -> None:
-        if not document.metadata.get("identifier"):
+        identifier = document.metadata.get("identifier")
+        if not isinstance(identifier, str) or not identifier:
             raise ValueError("WHO GHO record missing identifier")
 
 
-class OpenPrescribingAdapter(_BootstrapAdapter):
+class OpenPrescribingAdapter(_BootstrapAdapter[JSONMapping]):
     source = "openprescribing"
 
-    async def fetch(self, endpoint: str) -> AsyncIterator[Any]:
+    async def fetch(self, endpoint: str) -> AsyncIterator[JSONMapping]:
         if self._bootstrap:
             async for record in self._yield_bootstrap():
                 yield record
             return
         payload = await self.fetch_json(f"https://openprescribing.net/api/1.0/{endpoint}")
-        for row in payload:
-            yield row
+        rows = ensure_json_sequence(payload, context="openprescribing rows")
+        for row in rows:
+            yield ensure_json_mapping(row, context="openprescribing row")
 
-    def parse(self, raw: Any) -> Document:
-        payload = dict(raw)
-        identifier = payload.get("row_id") or payload.get("practice") or json.dumps(payload, sort_keys=True)
+    def parse(self, raw: JSONMapping) -> Document:
+        identifier = (
+            raw.get("row_id")
+            or raw.get("practice")
+            or json.dumps({key: raw[key] for key in sorted(raw)}, sort_keys=True)
+        )
+        identifier_str = str(identifier)
+        payload: OpenPrescribingDocumentPayload = {
+            "identifier": identifier_str,
+            "record": {key: cast(JSONValue, value) for key, value in raw.items()},
+        }
         content = canonical_json(payload)
-        doc_id = self.build_doc_id(identifier=identifier, version="v1", content=content)
-        return Document(doc_id=doc_id, source=self.source, content=json.dumps(payload), metadata={"identifier": identifier}, raw=payload)
+        doc_id = self.build_doc_id(identifier=identifier_str, version="v1", content=content)
+        return Document(
+            doc_id=doc_id,
+            source=self.source,
+            content=json.dumps(payload["record"]),
+            metadata={"identifier": identifier_str},
+            raw=payload,
+        )
 
     def validate(self, document: Document) -> None:
-        if not document.metadata.get("identifier"):
+        identifier = document.metadata.get("identifier")
+        if not isinstance(identifier, str) or not identifier:
             raise ValueError("OpenPrescribing row missing identifier")

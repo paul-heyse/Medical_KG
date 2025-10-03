@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/retrieval/service.py
-# hypothesis_version: 6.140.2
-
-[0.0, 1000, 'RetrievalService', 'RetrieverConfig', 'best_fields', 'bm25', 'bool', 'boost', 'chunk', 'chunk_id', 'cosine', 'date_range', 'dense', 'doc_id', 'enabled', 'end', 'feature_flags', 'field', 'fields', 'filter', 'filters', 'from', 'granularity', 'indexes', 'intent', 'max_tokens', 'metadata', 'min_cosine', 'minimum_should_match', 'multi_match', 'must', 'publication_date', 'query', 'range', 'rank_feature', 'rerank', 'rerank_enabled', 'score', 'section', 'should', 'splade', 'splade_terms', 'start', 'term', 'terms', 'text', 'title_path', 'top_k', 'type', 'utf-8']

@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/kg/query.py
-# hypothesis_version: 6.140.2
-
-['condition_label', 'drug_label', 'evidence_id', 'index_name', 'limit', 'query_vector', 'top_k']

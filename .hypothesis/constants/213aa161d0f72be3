@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/evaluation/__init__.py
-# hypothesis_version: 6.140.2
-
-['EvaluationHarness', 'EvaluationReport', 'EvaluationSettings', 'GoldSample', 'Prediction', 'RetrievalMetrics']

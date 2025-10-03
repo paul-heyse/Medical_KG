@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/ingestion/adapters/base.py
-# hypothesis_version: 6.140.2
-
-['auto_done', 'auto_failed', 'auto_inflight', 'error', 'resume', 'source']

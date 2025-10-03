@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/security/licenses.py
-# hypothesis_version: 6.140.2
-
-['"', 'LicenseRegistry', 'LicenseSession', 'LicenseTier', '[license required]', '[unavailable]', 'features', 'grace_period_days', 'licensed', 'r', 'redactions', 'territory', 'tiers', 'usage_limits', 'utf-8', 'vocabs']

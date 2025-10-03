@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/compat/locust.py
-# hypothesis_version: 6.140.2
-
-['HttpUser', 'HttpUserProtocol', 'P', 'R', 'TaskDecorator', 'WaitTimeFactory', 'between', 'load_locust', 'locust', 'task']

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion.models import Document, IngestionResult
@@ -15,16 +15,20 @@ class AdapterContext:
     ledger: IngestionLedger
 
 
-class BaseAdapter(ABC):
+RawPayloadT = TypeVar("RawPayloadT")
+
+
+class BaseAdapter(Generic[RawPayloadT], ABC):
     source: str
 
     def __init__(self, context: AdapterContext) -> None:
         self.context = context
 
-    async def run(self, *args: Any, **kwargs: Any) -> Iterable[IngestionResult]:
-        resume = bool(kwargs.pop("resume", False))
+    async def run(self, *args: object, **kwargs: object) -> list[IngestionResult]:
+        keyword_args: dict[str, object] = dict(kwargs)
+        resume = bool(keyword_args.pop("resume", False))
         results: list[IngestionResult] = []
-        fetcher = self.fetch(*args, **kwargs)
+        fetcher = self.fetch(*args, **keyword_args)
         if not hasattr(fetcher, "__aiter__"):
             raise TypeError("fetch() must return an AsyncIterator")
         async for raw_record in fetcher:
@@ -54,11 +58,11 @@ class BaseAdapter(ABC):
         return results
 
     @abstractmethod
-    async def fetch(self, *args: Any, **kwargs: Any) -> AsyncIterator[Any]:
+    def fetch(self, *args: Any, **kwargs: Any) -> AsyncIterator[RawPayloadT]:
         """Yield raw records from the upstream API."""
 
     @abstractmethod
-    def parse(self, raw: Any) -> Document:
+    def parse(self, raw: RawPayloadT) -> Document:
         """Transform a raw record into a :class:`Document`."""
 
     @abstractmethod

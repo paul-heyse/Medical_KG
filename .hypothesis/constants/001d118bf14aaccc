@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/compat/httpx.py
-# hypothesis_version: 6.140.2
-
-['AsyncClient', 'AsyncClientProtocol', 'Client', 'ClientProtocol', 'HTTPError', 'ResponseProtocol', 'create_async_client', 'create_client', 'httpx']

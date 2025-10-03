@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/chunking/neo4j.py
-# hypothesis_version: 6.140.2
-
-[1.0, 4096, '1', 'ChunkGraphWriter', 'Neo4jSession', 'chunk_id', 'chunk_qwen_idx', 'coherence_score', 'cosine', 'createdAt', 'curr_id', 'dimension', 'doc_id', 'embedding_qwen', 'end', 'end_char', 'facet_json', 'facet_type', 'id', 'index', 'left', 'metric', 'model', 'name', 'prev_id', 'props', 'qwen3-embedding-8b', 'right', 'score', 'section', 'section_loinc', 'splade_terms', 'start', 'start_char', 'table_digest', 'table_lines', 'text', 'title_path', 'token_window', 'tokens', 'type', 'version']

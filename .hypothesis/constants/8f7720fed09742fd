@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/extraction/validator.py
-# hypothesis_version: 6.140.2
-
-[120, 2000, '.', '/', 'DeadLetterQueue', 'ExtractionValidator', 'HR', 'OR', 'RR', 'gte', 'invalid CTCAE grade', 'invalid UCUM unit', 'lte']

@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/evaluation/models.py
-# hypothesis_version: 6.140.2
-
-['EvaluationReport', 'GoldSample', 'Prediction', 'drift', 'extraction', 'rag', 'retrieval']

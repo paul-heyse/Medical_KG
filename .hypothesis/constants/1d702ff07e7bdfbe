@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/kg/service.py
-# hypothesis_version: 6.140.2
-
-['AdverseEvent', 'Evidence', 'EvidenceVariable', 'ExtractionActivity', 'KgWriteFailure', 'KgWriteResult', 'KgWriteService', 'adverse_events', 'constraints', 'evidence', 'graph', 'label', 'nodes', 'path', 'relationships']

@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/briefing/synthesis.py
-# hypothesis_version: 6.140.2
-
-[0.0, 1e-09, 1.96, 100.0, 100, 'amount', 'build_dosing', 'build_eligibility', 'build_pico', 'build_safety_profile', 'certainty', 'ci_high', 'ci_low', 'citations', 'description', 'details', 'detect_conflicts', 'detect_gaps', 'effect', 'frequency', 'grade', 'guideline_id', 'high', 'i2', 'intervention', 'low', 'meta', 'moderate', 'outcome', 'pooled', 'rate', 'statement', 'strength', 'studies', 'study_id', 'term', 'type', 'unit', 'values', 'very high', 'very low']

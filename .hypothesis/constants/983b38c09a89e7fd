@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/chunking/tagger.py
-# hypothesis_version: 6.140.2
-
-[0.5, 1.0, 'ClinicalIntent', 'ClinicalIntentTagger', 'administered', 'adults', 'adverse', 'adverse_event', 'dosage', 'dose', 'dose|mg|ml', 'eligibility', 'endpoint', 'general', 'inclusion', 'lab_value', 'outcome', 'patients', 'pico_intervention', 'pico_outcome', 'pico_population', 'recommend', 'recommendation', 'response', 'serious', 'subjects', 'survival', 'toxicity', 'treated']

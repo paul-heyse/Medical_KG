@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/ingestion/http_client.py
-# hypothesis_version: 6.140.2
-
-[0.0, 0.1, 0.3, 0.5, 0.6, 1.0, 2.0, 5.0, 10.0, 30.0, 429, 502, 503, 504, 'GET', 'POST', 'Retry loop exhausted', '_SimpleLimiter', 'h2', 'host', 'method', 'response', 'status', 'status_code']

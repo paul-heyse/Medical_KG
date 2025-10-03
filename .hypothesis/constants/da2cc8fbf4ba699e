@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/entity_linking/decision.py
-# hypothesis_version: 6.140.2
-
-[0.7, 'DecisionEngine', 'LinkingDecision', 'deterministic', 'low-confidence', 'score-threshold']

@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/utils/optional_dependencies.py
-# hypothesis_version: 6.140.2
-
-[1.0, 'CounterProtocol', 'DocProtocol', 'GaugeProtocol', 'HistogramProtocol', 'HttpxAsyncClient', 'HttpxClient', 'HttpxModule', 'HttpxRequestProtocol', 'LocustFacade', 'LocustUserProtocol', 'NLPPipeline', 'SpanProtocol', 'TokenEncoder', 'TorchModule', '_NoopCounter', '_NoopGauge', '_NoopHistogram', 'build_counter', 'build_gauge', 'build_histogram', 'build_redis_client', 'cl100k_base', 'get_httpx_module', 'get_torch_module', 'load_locust', 'load_spacy_pipeline', 'prometheus_client', 'spacy', 'tiktoken', 'torch']

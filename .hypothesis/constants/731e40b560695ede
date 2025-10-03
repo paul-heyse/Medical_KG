@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/retrieval/api.py
-# hypothesis_version: 6.140.2
-
-[200, '/retrieve', 'TimingModel', 'before', 'create_router', 'feature_flags', 'filters', 'from', 'retrieval']

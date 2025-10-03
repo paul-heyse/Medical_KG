@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/api/auth.py
-# hypothesis_version: 6.140.2
-
-['0', 'Insufficient scope', 'Invalid API key', 'Missing credentials', 'X-API-Key', 'admin:*', 'demo-key', 'extract:write', 'facets:write', 'retrieve:read']

@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/ingestion/registry.py
-# hypothesis_version: 6.140.2
-
-['accessgudid', 'cdc_socrata', 'cdc_wonder', 'clinicaltrials', 'dailymed', 'icd11', 'loinc', 'medrxiv', 'mesh', 'nice', 'openfda', 'openfda_udi', 'openprescribing', 'pmc', 'pubmed', 'rxnorm', 'snomed', 'umls', 'uspstf', 'who_gho']

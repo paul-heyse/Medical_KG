@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/pdf/__init__.py
-# hypothesis_version: 6.140.2
-
-['ArtifactStore', 'GpuNotAvailableError', 'HyphenationRepair', 'LocalArtifactStore', 'MinerUArtifacts', 'MinerUConfig', 'MinerURunResult', 'MinerURunner', 'PdfDocument', 'PdfPipeline', 'QaGateError', 'QaGates', 'QaMetrics', 'SectionLabeler', 'TextBlock', 'TwoColumnReflow', 'detect_gpu', 'ensure_gpu']

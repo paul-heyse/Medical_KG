@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Iterator, TextIO
+from typing import Any, Iterator, TextIO, cast
 
 
 class _JsonLinesWriter:
@@ -42,7 +42,9 @@ class _JsonLinesReader:
 
 
 def open(path: Path, mode: str = "r") -> _JsonLinesReader | _JsonLinesWriter:
-    handle = Path(path).open(mode, encoding="utf-8")
+    if "b" in mode:
+        raise ValueError("jsonlines.open only supports text modes")
+    handle = cast(TextIO, Path(path).open(mode, encoding="utf-8"))
     if "r" in mode:
         return _JsonLinesReader(handle)
     return _JsonLinesWriter(handle)

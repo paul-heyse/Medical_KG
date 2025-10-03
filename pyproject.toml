@@ -171,3 +171,26 @@ module = [
     "Medical_KG.security.*",
 ]
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+    "fastapi",
+    "fastapi.*",
+    "pydantic",
+    "typer",
+    "prometheus_client",
+    "bs4",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "Medical_KG.api.*",
+    "Medical_KG.briefing.*",
+    "Medical_KG.retrieval.*",
+]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["Medical_KG.utils.optional_dependencies"]
+ignore_errors = true

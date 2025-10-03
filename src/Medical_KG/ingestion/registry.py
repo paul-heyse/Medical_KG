@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Type
+from typing import Any, Callable, Dict, Protocol, Type
 
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
 from Medical_KG.ingestion.adapters.clinical import (
@@ -13,6 +13,7 @@ from Medical_KG.ingestion.adapters.clinical import (
     OpenFdaUdiAdapter,
     RxNormAdapter,
 )
+from Medical_KG.ingestion.adapters.http import HttpAdapter
 from Medical_KG.ingestion.adapters.guidelines import (
     CdcSocrataAdapter,
     CdcWonderAdapter,
@@ -31,12 +32,14 @@ from Medical_KG.ingestion.adapters.terminology import (
 )
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 
-AdapterFactory = Callable[[AdapterContext, AsyncHttpClient], BaseAdapter]
+class AdapterFactory(Protocol):
+    def __call__(self, context: AdapterContext, client: AsyncHttpClient, **kwargs: Any) -> BaseAdapter[Any]:
+        ...
 
 
 def _register() -> Dict[str, AdapterFactory]:
-    def factory(cls: Type[BaseAdapter]) -> AdapterFactory:
-        def _builder(context: AdapterContext, client: AsyncHttpClient, **kwargs: Any) -> BaseAdapter:
+    def factory(cls: Type[HttpAdapter[Any]]) -> AdapterFactory:
+        def _builder(context: AdapterContext, client: AsyncHttpClient, **kwargs: Any) -> BaseAdapter[Any]:
             return cls(context, client, **kwargs)
 
         return _builder
@@ -68,7 +71,7 @@ def _register() -> Dict[str, AdapterFactory]:
 _REGISTRY = _register()
 
 
-def get_adapter(source: str, context: AdapterContext, client: AsyncHttpClient, **kwargs: Any) -> BaseAdapter:
+def get_adapter(source: str, context: AdapterContext, client: AsyncHttpClient, **kwargs: Any) -> BaseAdapter[Any]:
     try:
         factory = _REGISTRY[source]
     except KeyError as exc:  # pragma: no cover - defensive

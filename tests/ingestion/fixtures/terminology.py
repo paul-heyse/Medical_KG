@@ -33,6 +33,7 @@ def umls_record_without_optional_fields() -> dict[str, Any]:
     payload = umls_record()
     result = payload.get("result")
     if isinstance(result, dict):
+        result.pop("ui", None)
         result.pop("definition", None)
         result.pop("name", None)
     return payload
@@ -48,6 +49,15 @@ def loinc_record_without_display() -> dict[str, Any]:
     return payload
 
 
+def loinc_record_without_optional_fields() -> dict[str, Any]:
+    payload = loinc_record_without_display()
+    parameter = payload.get("parameter")
+    if isinstance(parameter, dict):
+        parameter.pop("code", None)
+    payload.pop("code", None)
+    return payload
+
+
 def icd11_record() -> dict[str, Any]:
     return deepcopy(_ICD11)
 
@@ -57,6 +67,12 @@ def icd11_record_without_text() -> dict[str, Any]:
     payload.pop("title", None)
     payload.pop("definition", None)
     payload.pop("browserUrl", None)
+    return payload
+
+
+def icd11_record_without_optional_fields() -> dict[str, Any]:
+    payload = icd11_record_without_text()
+    payload.pop("code", None)
     return payload
 
 
@@ -70,8 +86,25 @@ def snomed_record_without_display() -> dict[str, Any]:
     return payload
 
 
+def snomed_record_without_optional_fields() -> dict[str, Any]:
+    payload = snomed_record_without_display()
+    payload.pop("code", None)
+    return payload
+
+
 def rxnav_properties() -> dict[str, Any]:
     return deepcopy(_RXNAV)
+
+
+def rxnav_properties_without_optional_fields() -> dict[str, Any]:
+    payload = rxnav_properties()
+    props = payload.get("properties")
+    if isinstance(props, dict):
+        props.pop("name", None)
+        props.pop("synonym", None)
+        props.pop("tty", None)
+        props.pop("ndc", None)
+    return payload
 
 
 __all__ = [
@@ -81,9 +114,13 @@ __all__ = [
     "umls_record_without_optional_fields",
     "loinc_record",
     "loinc_record_without_display",
+    "loinc_record_without_optional_fields",
     "icd11_record",
     "icd11_record_without_text",
+    "icd11_record_without_optional_fields",
     "snomed_record",
     "snomed_record_without_display",
+    "snomed_record_without_optional_fields",
     "rxnav_properties",
+    "rxnav_properties_without_optional_fields",
 ]

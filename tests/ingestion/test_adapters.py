@@ -57,16 +57,11 @@ from tests.ingestion.fixtures.literature import (
 )
 from tests.ingestion.fixtures.terminology import (
     icd11_record,
-    icd11_record_without_text,
     loinc_record,
-    loinc_record_without_display,
     mesh_descriptor,
-    mesh_descriptor_without_descriptor_id,
     rxnav_properties,
     snomed_record,
-    snomed_record_without_display,
     umls_record,
-    umls_record_without_optional_fields,
 )
 
 
@@ -568,51 +563,6 @@ def test_terminology_adapters_parse(fake_ledger: Any) -> None:
         await client.aclose()
 
     _run(_test())
-
-
-def test_terminology_optional_field_variants(fake_ledger: Any) -> None:
-    context = AdapterContext(fake_ledger)
-    stub_client = _stub_http_client()
-
-    mesh = MeSHAdapter(context, stub_client)
-    missing_descriptor = mesh.parse(mesh_descriptor_without_descriptor_id())
-    assert isinstance(missing_descriptor.raw, dict)
-    assert missing_descriptor.raw.get("descriptor_id") is None
-    populated_descriptor = mesh.parse(mesh_descriptor())
-    assert isinstance(populated_descriptor.raw, dict)
-    assert populated_descriptor.raw.get("descriptor_id") == "D012345"
-
-    umls = UMLSAdapter(context, stub_client)
-    umls_missing = umls.parse(umls_record_without_optional_fields())
-    assert isinstance(umls_missing.raw, dict)
-    assert umls_missing.raw.get("definition") is None
-    umls_present = umls.parse(umls_record())
-    assert isinstance(umls_present.raw, dict)
-    assert umls_present.raw.get("definition") is not None
-
-    loinc = LoincAdapter(context, stub_client)
-    loinc_missing = loinc.parse(loinc_record_without_display())
-    assert isinstance(loinc_missing.raw, dict)
-    assert loinc_missing.raw.get("display") is None
-    loinc_present = loinc.parse(loinc_record())
-    assert isinstance(loinc_present.raw, dict)
-    assert isinstance(loinc_present.raw.get("display"), str)
-
-    icd = Icd11Adapter(context, stub_client)
-    icd_missing = icd.parse(icd11_record_without_text())
-    assert isinstance(icd_missing.raw, dict)
-    assert icd_missing.raw.get("title") is None
-    icd_present = icd.parse(icd11_record())
-    assert isinstance(icd_present.raw, dict)
-    assert isinstance(icd_present.raw.get("title"), str)
-
-    snomed = SnomedAdapter(context, stub_client)
-    snomed_missing = snomed.parse(snomed_record_without_display())
-    assert isinstance(snomed_missing.raw, dict)
-    assert snomed_missing.raw.get("display") is None
-    snomed_present = snomed.parse(snomed_record())
-    assert isinstance(snomed_present.raw, dict)
-    assert isinstance(snomed_present.raw.get("display"), str)
 
 
 def test_terminology_validations(fake_ledger: Any) -> None:

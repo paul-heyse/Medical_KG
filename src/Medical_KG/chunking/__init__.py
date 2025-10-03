@@ -6,8 +6,8 @@ from .facets import FacetGenerator
 from .indexing import ChunkIndexer, IndexedChunk
 from .metrics import ChunkMetrics, compute_metrics
 from .neo4j import ChunkGraphWriter
-from .opensearch import ChunkSearchIndexer
-from .pipeline import ChunkingPipeline, ChunkingResult
+from .opensearch import ChunkSearchIndexer, FacetVectorIndexer
+from .pipeline import ChunkingPipeline, ChunkingResult, FacetVectorRecord
 from .profiles import PROFILES, ChunkingProfile, get_profile
 from .tagger import ClinicalIntent, ClinicalIntentTagger
 
@@ -21,6 +21,8 @@ __all__ = [
     "ChunkingPipeline",
     "ChunkingProfile",
     "ChunkingResult",
+    "FacetVectorRecord",
+    "FacetVectorIndexer",
     "ClinicalIntent",
     "ClinicalIntentTagger",
     "Document",

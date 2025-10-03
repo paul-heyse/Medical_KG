@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+# ruff: noqa: E402
 fastapi = pytest.importorskip("fastapi")
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
 

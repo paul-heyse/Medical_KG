@@ -437,5 +437,6 @@ class CDKOSchema:
         return {
             "constraints": [constraint.statement for constraint in self.constraints],
             "indexes": [index.statement for index in self.indexes],
+            "node_indexes": [schema.label for schema in self.nodes.values() if schema.properties],
+            "relationship_types": list(self.relationships.keys()),
         }
-

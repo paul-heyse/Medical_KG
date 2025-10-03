@@ -29,7 +29,9 @@ class EmbeddingService:
     metrics: EmbeddingMetrics = field(default_factory=EmbeddingMetrics)
     gpu_validator: GPUValidator | None = None
 
-    def embed_texts(self, texts: Sequence[str]) -> tuple[List[List[float]], List[dict[str, float]]]:
+    def embed_texts(
+        self, texts: Sequence[str], *, sparse_texts: Sequence[str] | None = None
+    ) -> tuple[List[List[float]], List[dict[str, float]]]:
         if not texts:
             return [], []
         if self.gpu_validator:
@@ -41,8 +43,9 @@ class EmbeddingService:
         self.metrics.dense_tokens_per_second = total_tokens / dense_duration
         self.metrics.dense_batch_size = max(len(texts), 1)
 
+        sparse_inputs = list(sparse_texts) if sparse_texts is not None else list(texts)
         sparse_start = time.perf_counter()
-        sparse_vectors = self.splade.expand(texts)
+        sparse_vectors = self.splade.expand(sparse_inputs)
         sparse_duration = max(time.perf_counter() - sparse_start, 1e-6)
         total_terms = sum(len(terms) for terms in sparse_vectors)
         self.metrics.sparse_terms_per_second = total_terms / sparse_duration if total_terms else 0.0

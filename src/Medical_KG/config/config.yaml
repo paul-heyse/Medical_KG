@@ -8,7 +8,7 @@
   "sources": {
     "pubmed": {
       "base_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/",
-      "api_key": "${NCBI_API_KEY}",
+      "api_key": "${NCBI_API_KEY:demo-ncbi-key}",
       "rate_limit": {
         "requests_per_minute": 600,
         "burst": 120
@@ -20,7 +20,7 @@
     },
     "pmc": {
       "base_url": "https://www.ncbi.nlm.nih.gov/pmc/oai/oai.cgi",
-      "api_key": "${PMC_API_KEY}",
+      "api_key": "${PMC_API_KEY:demo-pmc-key}",
       "rate_limit": {
         "requests_per_minute": 300,
         "burst": 60
@@ -32,7 +32,7 @@
     },
     "clinicaltrials": {
       "base_url": "https://clinicaltrials.gov/api/v2",
-      "api_key": "${CTGOV_API_KEY}",
+      "api_key": "${CTGOV_API_KEY:demo-ctgov-key}",
       "rate_limit": {
         "requests_per_minute": 120,
         "burst": 30
@@ -44,7 +44,7 @@
     },
     "dailymed": {
       "base_url": "https://api.fda.gov/drug/label.json",
-      "api_key": "${OPEN_FDA_API_KEY}",
+      "api_key": "${OPEN_FDA_API_KEY:demo-openfda-key}",
       "rate_limit": {
         "requests_per_minute": 240,
         "burst": 60
@@ -169,7 +169,7 @@
   "kg": {
     "neo4j_uri": "${NEO4J_URI:neo4j://localhost:7687}",
     "username": "${NEO4J_USERNAME:neo4j}",
-    "password": "${NEO4J_PASSWORD}",
+    "password": "${NEO4J_PASSWORD:neo4jpass}",
     "batch_size": 500,
     "shacl_enabled": true
   },
@@ -224,7 +224,7 @@
       "issuer": "https://medical-kg/auth",
       "audience": "medical-kg-api",
       "admin_scope": "admin:config",
-      "jwt_secret": "${API_JWT_SECRET}",
+      "jwt_secret": "${API_JWT_SECRET:demo-jwt-secret}",
       "token_ttl_seconds": 3600
     },
     "cors": {

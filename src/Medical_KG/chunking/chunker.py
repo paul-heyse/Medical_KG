@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -49,6 +50,16 @@ class Chunk:
 
     def to_embedding_text(self) -> str:
         return self.text
+
+    def to_sparse_text(self) -> str:
+        parts: list[str] = [self.text]
+        if self.title_path:
+            parts.append(self.title_path)
+        if self.table_lines:
+            parts.extend(self.table_lines)
+        if self.facet_json:
+            parts.append(json.dumps(self.facet_json, sort_keys=True))
+        return "\n".join(part for part in parts if part)
 
 
 @dataclass(slots=True)

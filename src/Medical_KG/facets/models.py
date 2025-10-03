@@ -48,6 +48,7 @@ class Facet(BaseModel):
     evidence_spans: Annotated[list[EvidenceSpan], Field(min_length=1)]
     token_budget: int = 120
     is_primary: bool | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class PICOFacet(Facet):

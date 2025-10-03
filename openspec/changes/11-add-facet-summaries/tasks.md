@@ -56,28 +56,28 @@
 - [x] 7.2 Add facet_type field (keyword; values: pico|endpoint|ae|dose|eligibility|general)
 - [x] 7.3 Add facet_codes field (keyword[]; extract codes.code from all facets)
 - [x] 7.4 Set BM25F boosts (facet_json: 1.6)
-- [ ] 7.5 Include facets in SPLADE doc-side expansion (body + title_path + facet_json + table_lines)
+- [x] 7.5 Include facets in SPLADE doc-side expansion (body + title_path + facet_json + table_lines)
 
 ## 8. Optional: Facet Embeddings
 
-- [ ] 8.1 Compute Qwen embeddings for facet JSON (minified string)
-- [ ] 8.2 Store as chunk.facet_embedding_qwen (optional; off by default to save space)
-- [ ] 8.3 Create separate vector index for facet embeddings if enabled
+- [x] 8.1 Compute Qwen embeddings for facet JSON (minified string)
+- [x] 8.2 Store as chunk.facet_embedding_qwen (optional; off by default to save space)
+- [x] 8.3 Create separate vector index for facet embeddings if enabled
 
 ## 9. Deduplication
 
-- [ ] 9.1 Key facet:endpoint by (normalized_outcome_name|loinc, type, timeframe?)
-- [ ] 9.2 Key facet:ae by (meddra_pt|term_lower, grade?, arm?)
-- [ ] 9.3 Keep all originals but mark is_primary=true on highest confidence
-- [ ] 9.4 Dedupe within document only (allow same facet across different documents)
+- [x] 9.1 Key facet:endpoint by (normalized_outcome_name|loinc, type, timeframe?)
+- [x] 9.2 Key facet:ae by (meddra_pt|term_lower, grade?, arm?)
+- [x] 9.3 Keep all originals but mark is_primary=true on highest confidence
+- [x] 9.4 Dedupe within document only (allow same facet across different documents)
 
 ## 10. QA & Failure Handling
 
-- [ ] 10.1 Schema validation (reject non-conforming JSON; log with reason)
-- [ ] 10.2 Span verification (every evidence_spans[*] must be within [0, len(text)))
-- [ ] 10.3 Unit sanity (dose amount must be numeric if unit present; else drop unit)
-- [ ] 10.4 Token budget check (fail if >120 after compression)
-- [ ] 10.5 Escalation (chunks with 3 consecutive facet failures go to manual review queue)
+- [x] 10.1 Schema validation (reject non-conforming JSON; log with reason)
+- [x] 10.2 Span verification (every evidence_spans[*] must be within [0, len(text)))
+- [x] 10.3 Unit sanity (dose amount must be numeric if unit present; else drop unit)
+- [x] 10.4 Token budget check (fail if >120 after compression)
+- [x] 10.5 Escalation (chunks with 3 consecutive facet failures go to manual review queue)
 
 ## 11. APIs
 
@@ -95,7 +95,7 @@
 
 ## 13. Documentation
 
-- [ ] 13.1 Document facet schemas with examples
-- [ ] 13.2 Create facet generation guide (routing rules, prompt tuning, token budget management)
-- [ ] 13.3 Document normalization rules (units, routes, codes)
-- [ ] 13.4 Write runbook for facet quality issues (low completeness, schema violations)
+- [x] 13.1 Document facet schemas with examples
+- [x] 13.2 Create facet generation guide (routing rules, prompt tuning, token budget management)
+- [x] 13.3 Document normalization rules (units, routes, codes)
+- [x] 13.4 Write runbook for facet quality issues (low completeness, schema violations)

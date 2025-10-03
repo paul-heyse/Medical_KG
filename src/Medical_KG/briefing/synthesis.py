@@ -6,7 +6,14 @@ from collections import defaultdict
 from statistics import mean
 from typing import Iterable, Mapping, MutableMapping
 
-from .models import AdverseEvent, Citation, Dose, EligibilityConstraint, Evidence, EvidenceVariable, TopicBundle
+from .models import (
+    AdverseEvent,
+    Citation,
+    Dose,
+    EligibilityConstraint,
+    Evidence,
+    TopicBundle,
+)
 
 
 def build_pico(bundle: TopicBundle) -> Mapping[str, list[Mapping[str, object]]]:
@@ -189,9 +196,26 @@ def detect_conflicts(bundle: TopicBundle) -> list[Mapping[str, object]]:
 
 
 def detect_gaps(bundle: TopicBundle) -> list[str]:
-    mentioned_outcomes = {var.description for var in bundle.evidence_variables if var.kind == "outcome"}
-    evidenced_outcomes = {ev.outcome for ev in bundle.evidence}
-    return sorted(mentioned_outcomes - evidenced_outcomes)
+    """Return outcomes lacking support or exhibiting conflicting evidence."""
+
+    mentioned_outcomes = {
+        var.description for var in bundle.evidence_variables if var.kind == "outcome"
+    }
+    evidence_by_outcome: MutableMapping[str, list[Evidence]] = defaultdict(list)
+    for evidence in bundle.evidence:
+        evidence_by_outcome[evidence.outcome].append(evidence)
+
+    gaps: set[str] = set()
+    for outcome in mentioned_outcomes:
+        evidences = evidence_by_outcome.get(outcome, [])
+        if not evidences:
+            gaps.add(outcome)
+            continue
+        positives = any(ev.value > 1 for ev in evidences)
+        negatives = any(ev.value < 1 for ev in evidences)
+        if positives and negatives:
+            gaps.add(outcome)
+    return sorted(gaps)
 
 
 __all__ = [

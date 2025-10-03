@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
-from pathlib import Path
+
+# ruff: noqa: E402
 
 # Ensure we import the site-packages version of httpx instead of the local stub package.
 _site_package = next((path for path in sys.path if "site-packages" in path), None)
@@ -18,8 +19,8 @@ else:  # pragma: no cover - fallback for unusual environments
 import pytest
 
 from Medical_KG.app import create_app
-from Medical_KG.services.chunks import Chunk
 from Medical_KG.config.manager import SecretResolver
+from Medical_KG.services.chunks import Chunk
 
 
 @pytest.fixture

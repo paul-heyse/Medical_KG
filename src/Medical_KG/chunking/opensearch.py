@@ -7,6 +7,7 @@ from typing import Iterable, Mapping, MutableSequence, Protocol, Sequence
 
 from .chunker import Chunk
 from .indexing import IndexedChunk
+from .pipeline import FacetVectorRecord
 
 
 class OpenSearchIndices(Protocol):  # pragma: no cover
@@ -145,4 +146,54 @@ class ChunkSearchIndexer:
         return "\n".join(lines)
 
 
-__all__ = ["ChunkSearchIndexer", "OpenSearchClient"]
+
+@dataclass(slots=True)
+class FacetVectorIndexer:
+    """Manage optional facet vector index for facet embeddings."""
+
+    client: OpenSearchClient
+    index_name: str = "facets_v1"
+
+    def ensure_index(self, *, dims: int = 4096) -> None:
+        if self.client.indices.exists(self.index_name):
+            return
+        body = {
+            "mappings": {
+                "properties": {
+                    "id": {"type": "keyword"},
+                    "chunk_id": {"type": "keyword"},
+                    "doc_id": {"type": "keyword"},
+                    "facet_type": {"type": "keyword"},
+                    "embedding_qwen": {
+                        "type": "dense_vector",
+                        "dims": dims,
+                        "index": True,
+                        "similarity": "cosine",
+                    },
+                }
+            }
+        }
+        self.client.indices.create(index=self.index_name, body=body)
+
+    def index_vectors(self, records: Sequence[FacetVectorRecord]) -> None:
+        if not records:
+            return
+        dims = len(records[0].vector) if records[0].vector else 0
+        self.ensure_index(dims=dims or 4096)
+        ops: MutableSequence[Mapping[str, object]] = []
+        for record in records:
+            doc_id = f"{record.chunk_id}:{record.facet_type or 'facet'}"
+            ops.append({"index": {"_index": self.index_name, "_id": doc_id}})
+            ops.append(
+                {
+                    "id": doc_id,
+                    "chunk_id": record.chunk_id,
+                    "doc_id": record.doc_id,
+                    "facet_type": record.facet_type,
+                    "embedding_qwen": record.vector,
+                }
+            )
+        self.client.bulk(ops)
+
+
+__all__ = ["ChunkSearchIndexer", "FacetVectorIndexer", "OpenSearchClient"]

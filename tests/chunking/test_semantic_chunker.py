@@ -8,13 +8,14 @@ import pytest
 from Medical_KG.chunking import (
     ChunkGraphWriter,
     ChunkIndexer,
-    ChunkingPipeline,
     ChunkSearchIndexer,
+    ChunkingPipeline,
     Document,
     FacetGenerator,
     Section,
     Table,
 )
+from Medical_KG.chunking.opensearch import FacetVectorIndexer
 from Medical_KG.embeddings import EmbeddingService, QwenEmbeddingClient, SPLADEExpander
 
 
@@ -66,12 +67,16 @@ def test_chunking_pipeline_generates_chunks_and_metrics(
 ) -> None:
     document = build_document()
     pipeline = ChunkingPipeline(
-        facet_generator=FacetGenerator(), embedding_service=embedding_service
+        facet_generator=FacetGenerator(),
+        embedding_service=embedding_service,
+        embed_facets=True,
     )
     result = pipeline.run(document)
     assert result.chunks
     assert result.metrics.intra_coherence > 0
     assert result.metrics.inter_coherence >= 0
+    assert result.facet_vectors
+    assert all(record.vector for record in result.facet_vectors)
     if len(result.chunks) > 10:
         assert result.metrics.below_min_tokens <= int(len(result.chunks) * 0.1)
     assert result.index_documents
@@ -93,7 +98,7 @@ def test_chunking_pipeline_generates_chunks_and_metrics(
 
 def test_chunk_ids_are_stable(embedding_service: EmbeddingService) -> None:
     document = build_document()
-    pipeline = ChunkingPipeline(embedding_service=embedding_service)
+    pipeline = ChunkingPipeline(embedding_service=embedding_service, embed_facets=True)
     first = pipeline.run(document).chunks
     second = pipeline.run(document).chunks
     assert [chunk.chunk_id for chunk in first] == [chunk.chunk_id for chunk in second]
@@ -101,7 +106,7 @@ def test_chunk_ids_are_stable(embedding_service: EmbeddingService) -> None:
 
 def test_chunk_indexer_produces_multi_granularity(embedding_service: EmbeddingService) -> None:
     document = build_document()
-    pipeline = ChunkingPipeline(embedding_service=embedding_service)
+    pipeline = ChunkingPipeline(embedding_service=embedding_service, embed_facets=True)
     chunks = pipeline.run(document).chunks
     indexer = ChunkIndexer()
     docs = indexer.build_documents(chunks)
@@ -113,7 +118,7 @@ def test_chunk_indexer_produces_multi_granularity(embedding_service: EmbeddingSe
 
 def test_neighbor_merge_avoids_low_similarity(embedding_service: EmbeddingService) -> None:
     document = build_document()
-    pipeline = ChunkingPipeline(embedding_service=embedding_service)
+    pipeline = ChunkingPipeline(embedding_service=embedding_service, embed_facets=True)
     chunks = pipeline.run(document).chunks
     indexer = ChunkIndexer()
     merges = indexer.neighbor_merge(chunks, min_cosine=0.95)
@@ -126,7 +131,7 @@ def test_guardrails_keep_list_items_together(embedding_service: EmbeddingService
         text="- Primary endpoint was HR 0.8; - Secondary endpoint was OR 1.1.",
         sections=[Section(name="results", start=0, end=70)],
     )
-    pipeline = ChunkingPipeline(embedding_service=embedding_service)
+    pipeline = ChunkingPipeline(embedding_service=embedding_service, embed_facets=True)
     chunks = pipeline.run(doc).chunks
     assert len(chunks) == 1
     assert "Primary endpoint" in chunks[0].text
@@ -177,7 +182,7 @@ class FakeChunkClient:
 
 def test_chunk_graph_writer_syncs_embeddings(embedding_service: EmbeddingService) -> None:
     document = build_document()
-    pipeline = ChunkingPipeline(embedding_service=embedding_service)
+    pipeline = ChunkingPipeline(embedding_service=embedding_service, embed_facets=True)
     result = pipeline.run(document)
     chunks = result.chunks
     session = FakeChunkSession()
@@ -198,7 +203,7 @@ def test_chunk_search_indexer_indexes_multi_granularity(
     embedding_service: EmbeddingService,
 ) -> None:
     document = build_document()
-    pipeline = ChunkingPipeline(embedding_service=embedding_service)
+    pipeline = ChunkingPipeline(embedding_service=embedding_service, embed_facets=True)
     result = pipeline.run(document)
     client = FakeChunkClient()
     indexer = ChunkSearchIndexer(client)
@@ -217,3 +222,13 @@ def test_chunk_search_indexer_build_query_uses_boosts() -> None:
     query = indexer.build_query("glucose")
     fields = query["query"]["bool"]["should"][0]["multi_match"]["fields"]
     assert set(fields) == {"title_path^2.0", "facet_json^1.6", "table_lines^1.2", "body^1.0"}
+
+
+def test_facet_vector_indexer_indexes_records(embedding_service: EmbeddingService) -> None:
+    document = build_document()
+    pipeline = ChunkingPipeline(embedding_service=embedding_service, embed_facets=True)
+    result = pipeline.run(document)
+    client = FakeChunkClient()
+    indexer = FacetVectorIndexer(client)
+    indexer.index_vectors(result.facet_vectors)
+    assert client.indices.created

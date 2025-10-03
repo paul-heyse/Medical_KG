@@ -72,6 +72,7 @@ class SpanMap:
         *,
         transform: str = "offset_map",
     ) -> None:
+        new_spans: list[Span] = []
         for entry in entries:
             raw_start = int(entry.get("char_start", entry.get("raw_start", 0)))
             raw_end = int(entry.get("char_end", entry.get("raw_end", 0)))
@@ -79,15 +80,26 @@ class SpanMap:
             canonical_end = int(entry.get("canonical_end", raw_end))
             page = entry.get("page")
             bbox = entry.get("bbox") or entry.get("bounding_box")
-            self.add(
-                raw_start,
-                raw_end,
-                canonical_start,
-                canonical_end,
-                transform,
-                page=int(page) if page is not None else None,
-                bbox=bbox,
+            bbox_tuple: tuple[float, float, float, float] | None = None
+            if bbox is not None:
+                values = tuple(float(value) for value in bbox)
+                if len(values) != 4:
+                    raise ValueError("bbox must contain four coordinates")
+                bbox_tuple = values  # type: ignore[assignment]
+            new_spans.append(
+                Span(
+                    raw_start,
+                    raw_end,
+                    canonical_start,
+                    canonical_end,
+                    transform,
+                    page=int(page) if page is not None else None,
+                    bbox=bbox_tuple,
+                )
             )
+        if new_spans:
+            existing = [span for span in self.spans if span.transform != "normalize"]
+            self.spans = sorted(new_spans + existing, key=lambda span: span.canonical_start)
 
 
 @dataclass(slots=True)

@@ -1,0 +1,11 @@
+ImportError while loading conftest '/home/paul/Medical_KG/tests/conftest.py'.
+tests/conftest.py:23: in <module>
+    from Medical_KG.retrieval.models import (
+src/Medical_KG/__init__.py:5: in <module>
+    from Medical_KG.config.manager import ConfigError, ConfigManager
+src/Medical_KG/config/manager.py:20: in <module>
+    from Medical_KG.utils.optional_dependencies import GaugeProtocol, build_gauge
+E     File "/home/paul/Medical_KG/src/Medical_KG/utils/optional_dependencies.py", line 11
+E       <<<<<<< HEAD
+E       ^^
+E   SyntaxError: invalid syntax

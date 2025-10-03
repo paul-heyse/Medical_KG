@@ -8,9 +8,8 @@ existing lazy imports and graceful fallbacks when packages are not installed.
 
 from __future__ import annotations
 
-<<<<<<< HEAD
-from dataclasses import dataclass
 import importlib
+from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
     Any,

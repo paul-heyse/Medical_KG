@@ -57,15 +57,17 @@ class IngestionPipeline:
     ) -> list[PipelineResult]:
         """Execute an adapter for the supplied source synchronously."""
 
-        return asyncio.run(self._run_async(source, params=params, resume=resume))
+        return asyncio.run(self.run_async(source, params=params, resume=resume))
 
-    async def _run_async(
+    async def run_async(
         self,
         source: str,
         *,
         params: Iterable[dict[str, Any]] | None = None,
         resume: bool = False,
     ) -> list[PipelineResult]:
+        """Execute an adapter within an existing asyncio event loop."""
+
         client = self._client_factory()
         adapter = self._resolve_adapter(source, client)
         outputs: list[PipelineResult] = []

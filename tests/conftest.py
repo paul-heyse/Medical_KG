@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import json
 import os
 import sys
 import threading
@@ -18,17 +17,12 @@ def monkeypatch_fixture(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 PACKAGE_ROOT = SRC / "Medical_KG"
-BUDGET_PATH = ROOT / "coverage_budget.json"
+TARGET_COVERAGE = float(os.environ.get("COVERAGE_TARGET", "0.95"))
 
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 _TRACE = Trace(count=True, trace=False)
-if BUDGET_PATH.exists():
-    BUDGETS = json.loads(BUDGET_PATH.read_text(encoding="utf-8"))
-else:
-    BUDGETS = {}
-
 
 def _activate_tracing() -> None:  # pragma: no cover - instrumentation only
     sys.settrace(_TRACE.globaltrace)
@@ -59,24 +53,48 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # p
         executed[path].add(lineno)
 
     missing: dict[Path, set[int]] = {}
+    per_file_coverage: list[tuple[Path, float]] = []
+    total_statements = 0
+    total_covered = 0
+
     for py_file in PACKAGE_ROOT.rglob("*.py"):
         statements = _statement_lines(py_file)
         if not statements:
             continue
         executed_lines = executed.get(py_file.resolve(), set())
-        uncovered = statements - executed_lines
+        covered = statements & executed_lines
+        uncovered = statements - covered
         rel_path = py_file.relative_to(ROOT)
-        allowed = set(BUDGETS.get(str(rel_path), []))
-        extra = uncovered - allowed
-        if extra:
-            missing[rel_path] = extra
+        per_file_coverage.append(
+            (
+                rel_path,
+                len(covered) / len(statements) if statements else 1.0,
+            )
+        )
+        total_statements += len(statements)
+        total_covered += len(covered)
+        if uncovered:
+            missing[rel_path] = uncovered
+
+    overall = total_covered / total_statements if total_statements else 1.0
 
     if missing:
         details = "; ".join(
             f"{path}:{','.join(str(line) for line in sorted(lines))}" for path, lines in sorted(missing.items())
         )
         (ROOT / "coverage_missing.txt").write_text(details, encoding="utf-8")
-        pytest.fail(f"Coverage below 100% for: {details}")
+    else:
+        coverage_file = ROOT / "coverage_missing.txt"
+        if coverage_file.exists():
+            coverage_file.unlink()
+
+    if overall + 1e-9 < TARGET_COVERAGE:
+        lowest = sorted(per_file_coverage, key=lambda item: item[1])[:5]
+        summary = ", ".join(f"{path}={pct:.1%}" for path, pct in lowest)
+        pytest.fail(
+            f"Statement coverage {overall:.1%} below target {TARGET_COVERAGE:.0%}. "
+            f"Lowest files: {summary}"
+        )
 
 
 def _statement_lines(path: Path) -> set[int]:

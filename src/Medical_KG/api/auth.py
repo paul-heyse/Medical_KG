@@ -51,10 +51,8 @@ class Authenticator:
 
     def dependency(self, scope: str | None = None) -> DependencyCallable[Principal]:
         async def _dependency(
-            credentials: Annotated[
-                HTTPAuthorizationCredentials | None, Depends(self._bearer)
-            ],
-            api_key: Annotated[str | None, Header(default=None, alias="X-API-Key")],
+            credentials: HTTPAuthorizationCredentials | None = Depends(self._bearer),
+            api_key: str | None = Header(default=None, alias="X-API-Key"),
         ) -> Principal:
             principal = self.authenticate(credentials, api_key)
             if scope and not principal.has_scope(scope):

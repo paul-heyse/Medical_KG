@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import time
 from datetime import datetime, timezone
-from typing import Annotated, Callable
+from typing import Callable
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 
@@ -176,11 +176,9 @@ class ApiRouter(APIRouter):
             request: Request,
             payload: FacetGenerationRequest,
             response: Response,
-            principal: Annotated[
-                Principal, Depends(self._require_scope("facets:write"))
-            ],
-            idempotency_key: Annotated[str | None, Header(default=None, alias="Idempotency-Key")],
-            license_tier: Annotated[str, Header(default="affiliate", alias="X-License-Tier")],
+            principal: Principal = Depends(self._require_scope("facets:write")),
+            idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+            license_tier: str = Header(default="affiliate", alias="X-License-Tier"),
         ) -> FacetGenerationResponse:
             self._apply_rate_limit(principal, response)
             body = await request.body()
@@ -228,10 +226,8 @@ class ApiRouter(APIRouter):
         async def get_chunk(
             chunk_id: str,
             response: Response,
-            principal: Annotated[
-                Principal, Depends(self._require_scope("retrieve:read"))
-            ],
-            license_tier: Annotated[str, Header(default="affiliate", alias="X-License-Tier")],
+            principal: Principal = Depends(self._require_scope("retrieve:read")),
+            license_tier: str = Header(default="affiliate", alias="X-License-Tier"),
         ) -> ChunkResponse:
             self._apply_rate_limit(principal, response)
             chunk = self._chunks.get(chunk_id)
@@ -250,9 +246,7 @@ class ApiRouter(APIRouter):
         async def retrieve(
             payload: RetrieveRequest,
             response: Response,
-            principal: Annotated[
-                Principal, Depends(self._require_scope("retrieve:read"))
-            ],
+            principal: Principal = Depends(self._require_scope("retrieve:read")),
         ) -> RetrieveResponse:
             self._apply_rate_limit(principal, response)
             facet_type = payload.filters.facet_type if payload.filters else None
@@ -270,9 +264,7 @@ class ApiRouter(APIRouter):
         async def extract_pico(
             payload: ExtractionRequest,
             response: Response,
-            principal: Annotated[
-                Principal, Depends(self._require_scope("extract:write"))
-            ],
+            principal: Principal = Depends(self._require_scope("extract:write")),
         ) -> ExtractionResponse:
             self._apply_rate_limit(principal, response)
             chunks = self._load_chunks(payload.chunk_ids)
@@ -284,9 +276,7 @@ class ApiRouter(APIRouter):
         async def extract_effects(
             payload: ExtractionRequest,
             response: Response,
-            principal: Annotated[
-                Principal, Depends(self._require_scope("extract:write"))
-            ],
+            principal: Principal = Depends(self._require_scope("extract:write")),
         ) -> ExtractionResponse:
             self._apply_rate_limit(principal, response)
             chunks = self._load_chunks(payload.chunk_ids)
@@ -298,9 +288,7 @@ class ApiRouter(APIRouter):
         async def extract_ae(
             payload: ExtractionRequest,
             response: Response,
-            principal: Annotated[
-                Principal, Depends(self._require_scope("extract:write"))
-            ],
+            principal: Principal = Depends(self._require_scope("extract:write")),
         ) -> ExtractionResponse:
             self._apply_rate_limit(principal, response)
             chunks = self._load_chunks(payload.chunk_ids)
@@ -312,9 +300,7 @@ class ApiRouter(APIRouter):
         async def extract_dose(
             payload: ExtractionRequest,
             response: Response,
-            principal: Annotated[
-                Principal, Depends(self._require_scope("extract:write"))
-            ],
+            principal: Principal = Depends(self._require_scope("extract:write")),
         ) -> ExtractionResponse:
             self._apply_rate_limit(principal, response)
             chunks = self._load_chunks(payload.chunk_ids)
@@ -326,9 +312,7 @@ class ApiRouter(APIRouter):
         async def extract_eligibility(
             payload: ExtractionRequest,
             response: Response,
-            principal: Annotated[
-                Principal, Depends(self._require_scope("extract:write"))
-            ],
+            principal: Principal = Depends(self._require_scope("extract:write")),
         ) -> ExtractionResponse:
             self._apply_rate_limit(principal, response)
             chunks = self._load_chunks(payload.chunk_ids)
@@ -340,7 +324,7 @@ class ApiRouter(APIRouter):
         async def write_kg(
             payload: KgWriteRequest,
             response: Response,
-            principal: Annotated[Principal, Depends(self._require_scope("kg:write"))],
+            principal: Principal = Depends(self._require_scope("kg:write")),
         ) -> KgWriteResponse:
             self._apply_rate_limit(principal, response)
             try:

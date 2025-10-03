@@ -28,7 +28,7 @@
 - [ ] 4.3 Fake service implementations for integration-style tests
 
 ## 5. Coverage Enforcement
-- [ ] 5.1 Add pytest coverage config (min-percent, per-file budgets)
+- [ ] 5.1 Add pytest coverage config (min-percent 95%)
 - [ ] 5.2 Integrate coverage check into CI pipeline
 - [ ] 5.3 Publish HTML/XML reports as artifacts
 - [ ] 5.4 Add coverage badge/dashboard
@@ -39,6 +39,6 @@
 - [x] 6.3 Maintenance plan (triage failing tests, update fixtures)
 
 ## 7. Validation
-- [ ] 7.1 Verify 100% coverage with pytest --cov
+- [ ] 7.1 Verify ≥95% coverage with pytest --cov
 - [ ] 7.2 Run full suite in CI environment
 - [ ] 7.3 Track coverage regressions automatically

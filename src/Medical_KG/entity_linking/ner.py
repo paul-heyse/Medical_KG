@@ -1,10 +1,13 @@
 """NER helpers bridging optional scispaCy dependency."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Dict, Sequence
 
 from Medical_KG.utils.optional_dependencies import NLPPipeline, load_spacy_pipeline
+
+_ABBREVIATIONS: Dict[str, str] = {"mi": "myocardial infarction"}
 
 
 @dataclass(slots=True)
@@ -25,7 +28,26 @@ class NerPipeline:
         if self._nlp is None:
             return []
         doc = self._nlp(text)
-        return [Mention(ent.text, ent.start_char, ent.end_char, ent.label_) for ent in doc.ents]
+        mentions: list[Mention] = []
+        for ent in doc.ents:
+            raw_text = ent.text
+            normalized = _ABBREVIATIONS.get(raw_text.lower(), raw_text)
+            mention = Mention(normalized, ent.start_char, ent.end_char, ent.label_)
+            # Skip negated entities (simple heuristic)
+            prefix = text[: mention.start].lower()
+            if re.search(r"\b(no|without)\b\s*$", prefix):
+                continue
+            replaced = False
+            for idx, existing in enumerate(mentions):
+                overlaps = not (mention.end <= existing.start or mention.start >= existing.end)
+                if overlaps:
+                    if (mention.end - mention.start) > (existing.end - existing.start):
+                        mentions[idx] = mention
+                    replaced = True
+                    break
+            if not replaced:
+                mentions.append(mention)
+        return mentions
 
 
 __all__ = ["Mention", "NerPipeline"]

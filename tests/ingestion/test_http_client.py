@@ -27,6 +27,26 @@ class _MockTransport:
         return self._responses.pop(0)
 
 
+def test_http_client_uses_mock_transport(httpx_mock_transport: Any) -> None:
+    def handler(request: HttpxRequestProtocol) -> HttpxResponseProtocol:
+        assert request.method == "GET"
+        return HTTPX.Response(
+            status_code=200,
+            json={"ok": True},
+            request=request,
+        )
+
+    httpx_mock_transport(handler)
+    client = AsyncHttpClient()
+
+    async def _run() -> None:
+        payload = await client.get_json("https://example.com")
+        assert payload["ok"] is True
+
+    asyncio.run(_run())
+    asyncio.run(client.aclose())
+
+
 def test_retry_on_transient_failure(monkeypatch: Any) -> None:
     responses = [
         HTTPX.Response(status_code=502, request=HTTPX.Request("GET", "https://example.com")),
@@ -83,3 +103,80 @@ def test_timeout_propagates(monkeypatch: Any) -> None:
 
     with pytest.raises(HTTPX.TimeoutException):
         asyncio.run(_call())
+
+
+def test_get_text_and_bytes(monkeypatch: Any) -> None:
+    async def _request(self: HttpxAsyncClient, method: str, url: str, **kwargs: Any) -> HttpxResponseProtocol:
+        return HTTPX.Response(
+            status_code=200,
+            content=b"payload",
+            request=HTTPX.Request(method, url, **kwargs),
+        )
+
+    client = AsyncHttpClient()
+    monkeypatch.setattr(client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient))
+
+    async def _run() -> None:
+        text = await client.get_text("https://example.com")
+        content = await client.get_bytes("https://example.com")
+        assert text == "payload"
+        assert content == b"payload"
+
+    asyncio.run(_run())
+    asyncio.run(client.aclose())
+
+
+def test_post_uses_execute(monkeypatch: Any) -> None:
+    async def _request(self: HttpxAsyncClient, method: str, url: str, **kwargs: Any) -> HttpxResponseProtocol:
+        assert method == "POST"
+        assert kwargs["json"] == {"value": 1}
+        return HTTPX.Response(status_code=200, json={"ok": True}, request=HTTPX.Request(method, url, **kwargs))
+
+    client = AsyncHttpClient()
+    monkeypatch.setattr(client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient))
+
+    async def _run() -> None:
+        response = await client.post("https://example.com", json={"value": 1})
+        assert response.json()["ok"] is True
+
+    asyncio.run(_run())
+    asyncio.run(client.aclose())
+
+
+def test_stream_context_manager(monkeypatch: Any) -> None:
+    response = HTTPX.Response(
+        status_code=200,
+        content=b"stream",
+        request=HTTPX.Request("GET", "https://example.com"),
+    )
+
+    class _Stream:
+        async def __aenter__(self) -> HttpxResponseProtocol:
+            return response
+
+        async def __aexit__(self, *_exc: Any) -> None:
+            return None
+
+    async def _stream(self: HttpxAsyncClient, method: str, url: str, **kwargs: Any) -> Any:
+        assert method == "GET"
+        return _Stream()
+
+    client = AsyncHttpClient()
+    monkeypatch.setattr(client._client, "stream", _stream.__get__(client._client, HTTPX.AsyncClient))
+
+    async def _run() -> None:
+        async with client.stream("GET", "https://example.com") as resp:
+            assert resp.content == b"stream"
+
+    asyncio.run(_run())
+    asyncio.run(client.aclose())
+
+
+def test_set_rate_limit_resets_existing_limiter() -> None:
+    client = AsyncHttpClient(limits={"example.com": RateLimit(rate=1, per=1.0)})
+    first = client._get_limiter("example.com")
+    client.set_rate_limit("example.com", RateLimit(rate=5, per=2.0))
+    second = client._get_limiter("example.com")
+    assert first is not second
+    assert second.rate == 5
+    asyncio.run(client.aclose())

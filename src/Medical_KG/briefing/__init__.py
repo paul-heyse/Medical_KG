@@ -12,12 +12,15 @@ from .models import (
     Topic,
     TopicBundle,
 )
+from .repository import InMemoryBriefingRepository
 from .service import BriefingService, BriefingSettings
+from .repository import InMemoryBriefingRepository
 
 __all__ = [
     "router",
     "BriefingService",
     "BriefingSettings",
+    "InMemoryBriefingRepository",
     "Citation",
     "EvidenceVariable",
     "Evidence",
@@ -28,4 +31,5 @@ __all__ = [
     "Study",
     "Topic",
     "TopicBundle",
+    "InMemoryBriefingRepository",
 ]

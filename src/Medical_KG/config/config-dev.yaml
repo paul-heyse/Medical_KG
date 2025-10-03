@@ -22,10 +22,10 @@
     },
     "clinicaltrials": {
       "base_url": "https://sandbox.api.clinicaltrials.gov/api/v2",
-      "api_key": "${CTGOV_SANDBOX_KEY}"
+      "api_key": "${CTGOV_SANDBOX_KEY:demo-ctgov-sandbox}"
     },
     "dailymed": {
-      "api_key": "${OPEN_FDA_SANDBOX_KEY}"
+      "api_key": "${OPEN_FDA_SANDBOX_KEY:demo-openfda-sandbox}"
     }
   },
   "kg": {

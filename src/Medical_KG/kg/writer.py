@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Mapping
+from typing import Any, Dict, Iterable, Mapping, MutableMapping
 
 
 @dataclass(slots=True)
@@ -69,12 +69,15 @@ class KnowledgeGraphWriter:
             raise ValueError(f"Unknown node label '{label}'")
         if key not in payload:
             raise ValueError(f"Payload for {label} missing key '{key}'")
-        data = dict(payload)
+        props = dict(payload)
+        parameters: Dict[str, Any] = {"props": props}
+        if key in props:
+            parameters[key] = props[key]
+        for alias in ("id", "uri", "nct_id"):
+            if alias in props and alias not in parameters:
+                parameters[alias] = props[alias]
         cypher = f"MERGE (n:{label} {{{key}: $props.{key}}}) SET n += $props"
-        params: Dict[str, Any] = {"props": data, key: data[key]}
-        if "id" in data:
-            params.setdefault("id", data["id"])
-        self._statements.append(WriteStatement(cypher=cypher, parameters=params))
+        self._statements.append(WriteStatement(cypher=cypher, parameters=parameters))
 
     def write_document(self, payload: Mapping[str, Any]) -> None:
         self._merge_node("Document", payload)
@@ -248,7 +251,10 @@ class KnowledgeGraphWriter:
         arm_id: str | None = None,
     ) -> None:
         self._merge_node("AdverseEvent", payload)
-        rel_props = {key: payload[key] for key in ("count", "denominator", "grade") if key in payload}
+        rel_props: MutableMapping[str, Any] = {}
+        for field in ("count", "denominator", "grade"):
+            if field in payload:
+                rel_props[field] = payload[field]
         cypher = (
             "MATCH (s:Study {nct_id: $nct_id}) MATCH (ae:AdverseEvent {id: $ae_id}) "
             "MERGE (s)-[r:HAS_AE]->(ae)"
@@ -265,69 +271,17 @@ class KnowledgeGraphWriter:
                 WriteStatement(cypher=cypher_arm, parameters={"arm_id": arm_id, "ae_id": payload["id"]})
             )
 
-    def write_eligibility_constraint(
-        self,
-        payload: Mapping[str, Any],
-        *,
-        study_nct_id: str,
-        extraction_activity_id: str | None = None,
-    ) -> None:
+    def write_eligibility_constraint(self, payload: Mapping[str, Any], *, study_nct_id: str) -> None:
         self._merge_node("EligibilityConstraint", payload)
         cypher = (
             "MATCH (s:Study {nct_id: $nct_id}) MATCH (e:EligibilityConstraint {id: $constraint_id}) "
             "MERGE (s)-[:HAS_ELIGIBILITY]->(e)"
         )
-        params = {"nct_id": study_nct_id, "constraint_id": payload["id"]}
+        params = {"constraint_id": payload["id"], "nct_id": study_nct_id}
         self._statements.append(WriteStatement(cypher=cypher, parameters=params))
-        if extraction_activity_id:
-            self.link_generated_by(
-                "EligibilityConstraint",
-                payload["id"],
-                extraction_activity_id,
-                relationship="WAS_GENERATED_BY_ELIG",
-            )
 
     def write_extraction_activity(self, payload: Mapping[str, Any]) -> None:
         self._merge_node("ExtractionActivity", payload)
-
-    def write_mentions(
-        self,
-        *,
-        chunk_id: str,
-        concept_iri: str,
-        properties: Mapping[str, Any] | None = None,
-    ) -> None:
-        self.write_relationship(
-            "MENTIONS",
-            start_label="Chunk",
-            start_key="id",
-            start_value=chunk_id,
-            end_label="Concept",
-            end_key="iri",
-            end_value=concept_iri,
-            properties=properties,
-        )
-
-    def write_chunk_similarity(
-        self,
-        *,
-        from_chunk: str,
-        to_chunk: str,
-        properties: Mapping[str, Any],
-    ) -> None:
-        limited = dict(properties)
-        if "score" not in limited:
-            raise ValueError("Similarity relationship requires a score")
-        self.write_relationship(
-            "SIMILAR_TO",
-            start_label="Chunk",
-            start_key="id",
-            start_value=from_chunk,
-            end_label="Chunk",
-            end_key="id",
-            end_value=to_chunk,
-            properties=limited,
-        )
 
     def link_generated_by(
         self,
@@ -337,52 +291,50 @@ class KnowledgeGraphWriter:
         *,
         relationship: str = "WAS_GENERATED_BY",
     ) -> None:
-        mapping = RELATIONSHIP_ENDPOINTS.get(relationship)
-        if mapping is None:
-            raise ValueError(f"Unknown provenance relationship '{relationship}'")
-        start_label, start_key, end_label, end_key = mapping
-        if start_label != node_label:
-            raise ValueError("Provenance relationship start label mismatch")
+        key = NODE_KEYS.get(node_label)
+        if key is None:
+            raise ValueError(f"Unknown node label '{node_label}'")
         cypher = (
-            f"MATCH (n:{start_label} {{{start_key}: $start_id}}) MATCH (a:{end_label} {{{end_key}: $activity_id}}) "
+            f"MATCH (n:{node_label} {{{key}: $node_key}}) MATCH (a:ExtractionActivity {{id: $activity_id}}) "
             f"MERGE (n)-[:{relationship}]->(a)"
         )
-        self._statements.append(
-            WriteStatement(cypher=cypher, parameters={"start_id": node_id, "activity_id": activity_id})
-        )
+        params = {"node_key": node_id, "activity_id": activity_id}
+        if key != "id":
+            params[key] = node_id
+        self._statements.append(WriteStatement(cypher=cypher, parameters=params))
 
     def write_relationship(
         self,
         rel_type: str,
-        *args: Any,
+        start_value: Any,
+        end_value: Any,
+        properties: Mapping[str, Any] | None = None,
+        *,
         start_label: str | None = None,
         start_key: str | None = None,
-        start_value: Any | None = None,
         end_label: str | None = None,
         end_key: str | None = None,
-        end_value: Any | None = None,
-        properties: Mapping[str, Any] | None = None,
     ) -> None:
-        if args:
-            if len(args) not in {2, 3}:
-                raise TypeError("Positional relationship helper expects (start_value, end_value, [properties])")
-            start_value = args[0]
-            end_value = args[1]
-            properties = args[2] if len(args) == 3 else properties
-            start_label, start_key, end_label, end_key = RELATIONSHIP_ENDPOINTS.get(rel_type, (None, None, None, None))
-            if start_label is None or start_key is None or end_label is None or end_key is None:
-                raise ValueError(f"Unknown relationship mapping for '{rel_type}'")
-        else:
-            if None in {start_label, start_key, start_value, end_label, end_key, end_value}:
-                raise TypeError("Explicit relationship call requires all start/end parameters")
-
+        if start_label is None:
+            start_label = "Document" if rel_type == "HAS_CHUNK" else "Chunk"
+        if end_label is None:
+            end_label = "Chunk" if rel_type == "HAS_CHUNK" else "Chunk"
+        if start_key is None:
+            start_key = "id" if rel_type == "HAS_CHUNK" else NODE_KEYS.get(start_label, "id")
+        if end_key is None:
+            end_key = NODE_KEYS.get(end_label, "id")
         cypher = (
-            f"MATCH (a:{start_label} {{{start_key}: $start_val}}) MATCH (b:{end_label} {{{end_key}: $end_val}}) "
-            f"MERGE (a)-[r:{rel_type}]->(b)"
+            f"MATCH (start:{start_label} {{{start_key}: $start_value}}) "
+            f"MATCH (end:{end_label} {{{end_key}: $end_value}}) "
+            f"MERGE (start)-[:{rel_type}]->(end)"
         )
-        params: Dict[str, Any] = {"start_val": start_value, "end_val": end_value}
-        if properties:
-            cypher += " SET r += $props"
-            params["props"] = dict(properties)
-        self._statements.append(WriteStatement(cypher=cypher, parameters=params))
+        self._statements.append(
+            WriteStatement(
+                cypher=cypher,
+                parameters={
+                    "start_value": start_value,
+                    "end_value": end_value,
+                },
+            )
+        )
 

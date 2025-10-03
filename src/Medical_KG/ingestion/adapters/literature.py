@@ -171,7 +171,6 @@ class PubMedAdapter(HttpAdapter):
             authors: list[str] = []
             pub_types: list[str] = []
             if article_data is not None:
-                title = article_data.findtext("ArticleTitle", default="")
                 abstract = article_data.find("Abstract")
                 if abstract is not None:
                     for chunk in abstract.findall("AbstractText"):

@@ -8,7 +8,8 @@ from datetime import datetime, timezone
 from typing import Iterable
 
 from Medical_KG.facets.models import EvidenceSpan
-from Medical_KG.extraction.models import (
+
+from .models import (
     AdverseEventExtraction,
     DoseExtraction,
     EffectExtraction,
@@ -19,6 +20,9 @@ from Medical_KG.extraction.models import (
     ExtractionType,
     PICOExtraction,
 )
+from .normalizers import normalise_extractions
+from .prompts import PromptLibrary
+from .validator import ExtractionValidationError, ExtractionValidator
 
 P_VALUE_PATTERN = re.compile(r"p\s*(?:=|<)\s*(?P<value>[0-9.]+)", re.I)
 CI_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:–|-|to)\s*(\d+(?:\.\d+)?)")
@@ -28,6 +32,8 @@ CI_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:–|-|to)\s*(\d+(?:\.\d+)?)")
 class Chunk:
     chunk_id: str
     text: str
+    doc_id: str | None = None
+    section: str | None = None
 
 
 def _span(text: str, phrase: str) -> EvidenceSpan | None:
@@ -164,22 +170,42 @@ class ExtractionResult:
 class ClinicalExtractionService:
     """Coordinates extraction across chunk types."""
 
-    def __init__(self, model_name: str = "qwen2", model_version: str = "0.1.0") -> None:
+    def __init__(
+        self,
+        model_name: str = "qwen2",
+        model_version: str = "0.1.0",
+        *,
+        max_retries: int = 2,
+    ) -> None:
         self._model_name = model_name
         self._model_version = model_version
+        self._prompts = PromptLibrary()
+        self._validator = ExtractionValidator()
+        self._max_retries = max_retries
+        self._extractors: list[tuple[ExtractionType, callable[[Chunk], object]]]= [
+            (ExtractionType.PICO, extract_pico),
+            (ExtractionType.EFFECT, extract_effects),
+            (ExtractionType.ADVERSE_EVENT, extract_ae),
+            (ExtractionType.DOSE, extract_dose),
+            (ExtractionType.ELIGIBILITY, extract_eligibility),
+        ]
 
     def extract(self, chunk: Chunk) -> list:
         results: list = []
-        for extractor in (
-            extract_pico,
-            extract_effects,
-            extract_ae,
-            extract_dose,
-        ):
-            extraction = extractor(chunk)
-            if extraction is not None:
-                results.append(extraction)
-        results.extend(extract_eligibility(chunk))
+        for extraction_type, extractor in self._extractors:
+            if not self._should_extract(extraction_type, chunk):
+                continue
+            payload = self._invoke_with_retry(extractor, chunk)
+            if not payload:
+                continue
+            items = payload if isinstance(payload, list) else [payload]
+            normalised = normalise_extractions(items, text=chunk.text)
+            for item in normalised:
+                try:
+                    self._validator.validate(item, text=chunk.text, facet_mode=False)
+                except ExtractionValidationError:
+                    continue
+                results.append(item)
         return results
 
     def extract_many(self, chunks: Iterable[Chunk]) -> ExtractionEnvelope:
@@ -188,14 +214,49 @@ class ClinicalExtractionService:
         for chunk in chunks:
             chunk_ids.append(chunk.chunk_id)
             payload.extend(self.extract(chunk))
-        schema_hash = hashlib.sha256("clinical-extractions-v1".encode()).hexdigest()
-        prompt_hash = hashlib.sha256("clinical-prompts-v1".encode()).hexdigest()
+        schema_hash = hashlib.sha256(
+            "::".join(sorted(extraction_type.value for extraction_type, _ in self._extractors)).encode()
+        ).hexdigest()
+        prompt_hash = self._prompts.prompt_hash()
+        extracted_at = datetime.now(timezone.utc)
         return ExtractionEnvelope(
             model=self._model_name,
             version=self._model_version,
             prompt_hash=prompt_hash,
             schema_hash=schema_hash,
             ts=datetime.now(timezone.utc),
+            extracted_at=extracted_at,
             chunk_ids=chunk_ids,
             payload=payload,
         )
+
+    @property
+    def dead_letter(self):  # pragma: no cover - convenience
+        return list(self._validator.dead_letter.records)
+
+    def _invoke_with_retry(self, extractor, chunk: Chunk):
+        last_error: Exception | None = None
+        for _ in range(self._max_retries + 1):
+            try:
+                return extractor(chunk)
+            except Exception as exc:  # noqa: BLE001 - propagate after retries
+                last_error = exc
+        if last_error:
+            raise last_error
+        return None
+
+    def _should_extract(self, extraction_type: ExtractionType, chunk: Chunk) -> bool:
+        if not chunk.section:
+            return True
+        section = chunk.section.lower()
+        routing = {
+            ExtractionType.PICO: {"abstract", "methods", "registry", "results"},
+            ExtractionType.EFFECT: {"results", "outcome", "efficacy"},
+            ExtractionType.ADVERSE_EVENT: {"adverse", "safety", "ae", "results"},
+            ExtractionType.DOSE: {"dosage", "arms", "treatment", "results"},
+            ExtractionType.ELIGIBILITY: {"eligibility", "criteria"},
+        }
+        allowed = routing.get(extraction_type)
+        if not allowed:
+            return True
+        return any(token in section for token in allowed)

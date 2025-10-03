@@ -196,6 +196,7 @@ class ApiRouter(APIRouter):
                     )
                 service_chunk = FacetChunk(
                     chunk_id=chunk.chunk_id,
+                    doc_id=chunk.doc_id,
                     text=chunk.text,
                     section=chunk.section,
                     table_headers=chunk.table_headers,
@@ -370,6 +371,7 @@ class ApiRouter(APIRouter):
             chunks.append(
                 FacetChunk(
                     chunk_id=chunk.chunk_id,
+                    doc_id=chunk.doc_id,
                     text=chunk.text,
                     section=chunk.section,
                     table_headers=chunk.table_headers,

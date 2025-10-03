@@ -57,6 +57,7 @@ class AdverseEventExtraction(ExtractionBase):
     arm: str | None = None
     serious: bool | None = None
     onset_days: float | None = Field(default=None, ge=0)
+    codes: list[Code] = Field(default_factory=list)
 
 
 class DoseExtraction(ExtractionBase):
@@ -67,6 +68,7 @@ class DoseExtraction(ExtractionBase):
     route: str | None = None
     frequency_per_day: float | None = Field(default=None, ge=0)
     duration_days: float | None = Field(default=None, ge=0)
+    drug_codes: list[Code] = Field(default_factory=list)
 
 
 class EligibilityLogic(BaseModel):
@@ -102,5 +104,6 @@ class ExtractionEnvelope(BaseModel):
     prompt_hash: str
     schema_hash: str
     ts: datetime
+    extracted_at: datetime
     chunk_ids: list[str]
     payload: list[ExtractionBase]

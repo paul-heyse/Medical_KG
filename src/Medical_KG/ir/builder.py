@@ -25,13 +25,13 @@ Legacy usage without payloads remains unchanged::
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, MutableMapping, Sequence
 from html.parser import HTMLParser
-import json
 from typing import Any, List, Tuple
 
 try:  # pragma: no cover - optional dependency
-    from bs4 import BeautifulSoup
+    from bs4 import BeautifulSoup  # noqa: F401
 
     BS4_AVAILABLE = True
 except ModuleNotFoundError:  # pragma: no cover - fallback to stdlib parser
@@ -41,9 +41,9 @@ from Medical_KG.ingestion.types import (
     AdapterDocumentPayload,
     ClinicalCatalogDocumentPayload,
     GuidelineDocumentPayload,
-    LiteratureDocumentPayload,
     JSONMapping,
     JSONValue,
+    LiteratureDocumentPayload,
     is_clinical_document_payload,
     is_clinical_payload,
     is_guideline_payload,

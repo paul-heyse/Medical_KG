@@ -48,7 +48,6 @@ class BriefingFormatter:
         if not isinstance(bibliography, Sequence):
             return "\n".join(lines)
         for citation in bibliography:
-            doi = citation.get("doi")
             lines.append(f"- {citation['doc_id']} ({citation['citation_count']} references)")
         return "\n".join(lines)
 

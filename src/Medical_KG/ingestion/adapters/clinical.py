@@ -22,7 +22,8 @@ from __future__ import annotations
 import json
 import re
 import xml.etree.ElementTree as ET
-from collections.abc import AsyncIterator, Iterable, Sequence as SequenceABC
+from collections.abc import AsyncIterator, Iterable
+from collections.abc import Sequence as SequenceABC
 from typing import Mapping, MutableMapping, Sequence
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
@@ -40,7 +41,6 @@ from Medical_KG.ingestion.types import (
     OpenFdaDocumentPayload,
     RxNormDocumentPayload,
     is_clinical_document_payload,
-    narrow_to_mapping,
 )
 from Medical_KG.ingestion.utils import (
     canonical_json,

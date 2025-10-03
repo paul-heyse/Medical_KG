@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Guideline and knowledge-base ingestion adapters with optional field context.
 
 NICE and USPSTF adapters primarily consume curated bootstrap records where URLs
@@ -12,10 +10,13 @@ both fully populated and minimal payloads so adapters never assume optional
 fields exist.
 """
 
+from __future__ import annotations
+
 import json
 import xml.etree.ElementTree as ET
-from collections.abc import AsyncIterator, Iterable, Sequence as SequenceABC
-from typing import Generic, Mapping, Sequence, TypeVar
+from collections.abc import AsyncIterator, Iterable
+from collections.abc import Sequence as SequenceABC
+from typing import Generic, Mapping, TypeVar
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
@@ -39,7 +40,6 @@ from Medical_KG.ingestion.utils import (
     ensure_json_value,
     normalize_text,
 )
-
 
 RawBootstrapT = TypeVar("RawBootstrapT")
 
@@ -124,8 +124,17 @@ class NiceGuidelineAdapter(_BootstrapAdapter[JSONMapping]):
         )
 
     def validate(self, document: Document) -> None:
-        licence = document.metadata.get("licence")
-        if not isinstance(licence, str) or licence not in {"OpenGov", "CC-BY-ND"}:
+        licence_meta = document.metadata.get("licence")
+        licence_raw = None
+        if isinstance(document.raw, Mapping):
+            licence_raw = document.raw.get("licence")
+        if isinstance(licence_meta, str):
+            licence_value = licence_meta
+        elif isinstance(licence_raw, str):
+            licence_value = licence_raw
+        else:
+            licence_value = None
+        if licence_value is not None and licence_value not in {"OpenGov", "CC-BY-ND"}:
             raise ValueError("Invalid NICE licence metadata")
         uid_meta = document.metadata.get("uid")
         if not isinstance(uid_meta, str) or not uid_meta:

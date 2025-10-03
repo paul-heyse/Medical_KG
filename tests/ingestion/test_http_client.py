@@ -42,7 +42,7 @@ def test_http_client_uses_mock_transport(httpx_mock_transport: Any) -> None:
 
     async def _run() -> None:
         payload = await client.get_json("https://example.com")
-        assert payload["ok"] is True
+        assert payload.data["ok"] is True
 
     asyncio.run(_run())
     asyncio.run(client.aclose())
@@ -70,7 +70,7 @@ def test_retry_on_transient_failure(monkeypatch: Any) -> None:
     )
 
     payload = asyncio.run(client.get_json("https://example.com"))
-    assert payload == {"ok": True}
+    assert payload.data == {"ok": True}
     assert len(transport.calls) == 2
     asyncio.run(client.aclose())
 
@@ -139,8 +139,8 @@ def test_get_text_and_bytes(monkeypatch: Any) -> None:
     async def _run() -> None:
         text = await client.get_text("https://example.com")
         content = await client.get_bytes("https://example.com")
-        assert text == "payload"
-        assert content == b"payload"
+        assert text.text == "payload"
+        assert content.content == b"payload"
 
     asyncio.run(_run())
     asyncio.run(client.aclose())

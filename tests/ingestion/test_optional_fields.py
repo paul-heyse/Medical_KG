@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Optional field regression coverage for ingestion adapters.
 
 These tests exercise adapters with fixtures where every ``NotRequired`` field in
@@ -18,12 +16,14 @@ Future adapters should follow the same pattern: add fixtures representing both
 scenario tables below so each variant is validated during test execution.
 """
 
+from __future__ import annotations
+
 import importlib.util
 import types
+import typing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
-import typing
 
 import pytest
 
@@ -80,14 +80,12 @@ from tests.ingestion.fixtures.terminology import (
     icd11_record,
     icd11_record_without_optional_fields,
     loinc_record,
-    loinc_record_without_display,
     loinc_record_without_optional_fields,
     mesh_descriptor,
     mesh_descriptor_without_descriptor_id,
     rxnav_properties,
     rxnav_properties_without_optional_fields,
     snomed_record,
-    snomed_record_without_display,
     snomed_record_without_optional_fields,
     umls_record,
     umls_record_without_optional_fields,
@@ -299,7 +297,7 @@ GUIDELINE_SCENARIOS: tuple[OptionalFieldScenario, ...] = (
         metadata_optional_keys=("licence",),
         metadata_requires_absence=True,
         expect_same_content=False,
-        allow_absent_validation_error=True,
+        allow_absent_validation_error=False,
     ),
     OptionalFieldScenario(
         name="uspstf",

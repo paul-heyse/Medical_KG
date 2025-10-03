@@ -6,10 +6,10 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Iterable, Protocol
 
+from Medical_KG.ingestion import registry as ingestion_registry
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 from Medical_KG.ingestion.ledger import IngestionLedger
-from Medical_KG.ingestion import registry as ingestion_registry
 
 
 class AdapterRegistry(Protocol):

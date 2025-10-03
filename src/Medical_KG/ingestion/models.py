@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Mapping
 
-from Medical_KG.ingestion.types import DocumentRaw, JSONMapping, JSONValue, MutableJSONMapping
+from Medical_KG.ingestion.types import DocumentRaw, JSONMapping, MutableJSONMapping
 
 
 @dataclass(slots=True)

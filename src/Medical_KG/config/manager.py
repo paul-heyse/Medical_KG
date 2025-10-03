@@ -12,13 +12,13 @@ from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, MutableMapping, cast
+from typing import Any, cast
 
 import yaml
 from Medical_KG.compat.prometheus import Gauge, GaugeLike
 from Medical_KG.types import JSONMapping, JSONObject, JSONValue, MutableJSONMapping
 
-from .models import Config, PolicyDocument, validate_constraints
+from .models import AuthSettings, Config, PolicyDocument, validate_constraints
 
 CONFIG_INFO: GaugeLike = Gauge("config_info", "Current configuration metadata", ["version", "hash"])
 FEATURE_FLAG: GaugeLike = Gauge("feature_flag", "Feature flag states", ["name"])

@@ -25,7 +25,8 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
-from collections.abc import AsyncIterator, Mapping, Sequence as SequenceABC
+from collections.abc import AsyncIterator, Mapping
+from collections.abc import Sequence as SequenceABC
 from typing import Any, Iterable, Iterator
 from urllib.parse import urlparse
 

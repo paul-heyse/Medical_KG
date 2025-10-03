@@ -7,7 +7,6 @@ import unicodedata
 from typing import Mapping, Sequence
 
 from langdetect import detect
-
 from Medical_KG.ingestion.types import JSONMapping, JSONSequence, JSONValue
 
 LANGUAGE_PATTERN = re.compile(r"^[a-z]{2}")

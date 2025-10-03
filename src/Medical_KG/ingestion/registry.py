@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Protocol, Type
+from typing import Any, Dict, Protocol, Type
 
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
 from Medical_KG.ingestion.adapters.clinical import (
@@ -13,7 +13,6 @@ from Medical_KG.ingestion.adapters.clinical import (
     OpenFdaUdiAdapter,
     RxNormAdapter,
 )
-from Medical_KG.ingestion.adapters.http import HttpAdapter
 from Medical_KG.ingestion.adapters.guidelines import (
     CdcSocrataAdapter,
     CdcWonderAdapter,
@@ -22,6 +21,7 @@ from Medical_KG.ingestion.adapters.guidelines import (
     UspstfAdapter,
     WhoGhoAdapter,
 )
+from Medical_KG.ingestion.adapters.http import HttpAdapter
 from Medical_KG.ingestion.adapters.literature import MedRxivAdapter, PmcAdapter, PubMedAdapter
 from Medical_KG.ingestion.adapters.terminology import (
     Icd11Adapter,
@@ -31,6 +31,7 @@ from Medical_KG.ingestion.adapters.terminology import (
     UMLSAdapter,
 )
 from Medical_KG.ingestion.http_client import AsyncHttpClient
+
 
 class AdapterFactory(Protocol):
     def __call__(self, context: AdapterContext, client: AsyncHttpClient, **kwargs: Any) -> BaseAdapter[Any]:

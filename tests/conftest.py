@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import os
+import shutil
 import sys
 import threading
 from collections import defaultdict
@@ -10,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from types import FrameType
-from typing import Any, Callable, Dict, Iterable, Mapping, MutableMapping, Sequence, cast
+from typing import Any, Callable, Dict, Iterable, Iterator, Mapping, MutableMapping, Sequence, cast
 import types
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -20,7 +21,9 @@ TARGET_COVERAGE = float(os.environ.get("COVERAGE_TARGET", "0.95"))
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-if "fastapi" not in sys.modules:
+try:  # prefer real FastAPI when available
+    import fastapi  # noqa: F401  # pragma: no cover - import only
+except ImportError:  # pragma: no cover - fallback for environments without fastapi
     fastapi_module = types.ModuleType("fastapi")
 
     class _FastAPI:
@@ -41,8 +44,33 @@ if "fastapi" not in sys.modules:
 
             return _decorator
 
+    def Depends(dependency: Callable[..., Any]) -> Callable[..., Any]:
+        return dependency
+
+    class HTTPException(Exception):
+        def __init__(self, status_code: int, detail: Any | None = None) -> None:
+            super().__init__(detail)
+            self.status_code = status_code
+            self.detail = detail
+
+    status = types.SimpleNamespace(
+        HTTP_200_OK=200,
+        HTTP_201_CREATED=201,
+        HTTP_202_ACCEPTED=202,
+        HTTP_204_NO_CONTENT=204,
+        HTTP_400_BAD_REQUEST=400,
+        HTTP_401_UNAUTHORIZED=401,
+        HTTP_403_FORBIDDEN=403,
+        HTTP_404_NOT_FOUND=404,
+        HTTP_422_UNPROCESSABLE_ENTITY=422,
+        HTTP_500_INTERNAL_SERVER_ERROR=500,
+    )
+
     fastapi_module.FastAPI = _FastAPI
     fastapi_module.APIRouter = _APIRouter
+    fastapi_module.Depends = Depends
+    fastapi_module.HTTPException = HTTPException
+    fastapi_module.status = status
     sys.modules["fastapi"] = fastapi_module
 
 if "httpx" not in sys.modules:
@@ -203,6 +231,29 @@ def _activate_tracing() -> None:  # pragma: no cover - instrumentation only
 
 if os.environ.get("DISABLE_COVERAGE_TRACE") != "1":
     _activate_tracing()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_artifacts() -> Iterator[None]:
+    """Remove coverage and hypothesis artifacts after the test session."""
+
+    cache_env = os.environ.get("PYTEST_DISABLE_ARTIFACT_CLEANUP")
+    disable_cleanup = cache_env == "1"
+    yield
+    if disable_cleanup:
+        return
+    artifacts: list[Path] = [ROOT / ".coverage", ROOT / "coverage_missing.txt"]
+    for artifact in artifacts:
+        if artifact.exists():
+            try:
+                artifact.unlink()
+            except IsADirectoryError:
+                shutil.rmtree(artifact, ignore_errors=True)
+            except OSError:
+                pass
+    hypothesis_dir = ROOT / ".hypothesis"
+    if hypothesis_dir.exists():
+        shutil.rmtree(hypothesis_dir, ignore_errors=True)
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # pragma: no cover - instrumentation only

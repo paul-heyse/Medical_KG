@@ -68,7 +68,7 @@
 
 ## 9. Coverage & Validation
 
-- [ ] 9.1 Run `pytest tests/security/ --cov=src/Medical_KG/security --cov-report=term-missing`
-- [ ] 9.2 Verify 100% coverage for all security modules
+- [x] 9.1 Run `pytest tests/security/ --cov=src/Medical_KG/security --cov-report=term-missing`
+- [x] 9.2 Verify 100% coverage for all security modules
 - [x] 9.3 Ensure no test data leaks into logs or storage
 - [x] 9.4 Document security test patterns in `tests/security/README.md`

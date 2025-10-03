@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/catalog/neo4j.py
+# hypothesis_version: 6.140.2
+
+[4096, 'ConceptGraphWriter', 'IS_A', 'Neo4jSession', 'SAME_AS', '_', 'codes', 'concept_iri_unique', 'concept_qwen_idx', 'cosine', 'definition', 'dimension', 'embedding_qwen', 'end', 'family', 'iri', 'label', 'license_bucket', 'metric', 'name', 'ontology', 'preferred_term', 'props', 'provenance', 'release', 'splade_terms', 'start', 'synonyms', 'xrefs']

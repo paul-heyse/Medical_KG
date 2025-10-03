@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/entity_linking/service.py
+# hypothesis_version: 6.140.2
+
+[0.0, 'EntityLinkingService', 'KnowledgeGraphWriter', 'LinkingResult', 'fallback', 'llm-error']

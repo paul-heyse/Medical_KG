@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from Medical_KG.security import RBACEngine, Role, ScopeEnforcer
+from Medical_KG.security import RBACEngine, Role, ScopeEnforcer, ScopeError
 
 from .fixtures import sample_users
 
@@ -65,3 +65,25 @@ def test_scope_enforcer() -> None:
     enforcer.verify(["admin", "metrics", "other"])
     with pytest.raises(PermissionError):
         enforcer.verify(["admin"])
+
+
+def test_unknown_role_errors() -> None:
+    engine = _engine()
+    engine.revoke("ghost", "viewer")
+    with pytest.raises(KeyError):
+        engine.assign("user", "missing")
+    engine.assign("user", "viewer")
+    engine.revoke("user", "viewer")
+    with pytest.raises(PermissionError):
+        engine.check_permission("user", "read")
+    engine.assign("scoped", "viewer")
+    with pytest.raises(ScopeError):
+        engine.check_permission("scoped", "read", required_scope="analytics")
+
+
+def test_broken_parent_role() -> None:
+    roles = {"broken": Role(name="broken", allow=frozenset(), parents=("missing",))}
+    engine = RBACEngine(roles)
+    engine.assign("user", "broken")
+    with pytest.raises(KeyError):
+        engine.permissions_for("user")

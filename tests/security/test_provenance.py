@@ -55,3 +55,18 @@ def test_graph_export() -> None:
     store.record_derivation("assert-2", "assert-1")
     graph = store.as_graph()
     assert graph["assert-2"] == ("assert-1",)
+
+
+def test_activity_for_missing_assertion() -> None:
+    store = ProvenanceStore()
+    store.register_activity(_activity(1))
+    with pytest.raises(KeyError):
+        store.activity_for("unknown")
+
+
+def test_metadata_listing() -> None:
+    store = ProvenanceStore()
+    store.register_activity(_activity(1))
+    store.link_assertion("assert-1", "act-1")
+    meta = store.metadata()
+    assert meta["assert-1"]["activity_id"] == "act-1"

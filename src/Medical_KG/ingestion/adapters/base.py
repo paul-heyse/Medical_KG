@@ -24,7 +24,10 @@ class BaseAdapter(ABC):
     async def run(self, *args: Any, **kwargs: Any) -> Iterable[IngestionResult]:
         resume = bool(kwargs.pop("resume", False))
         results: list[IngestionResult] = []
-        async for raw_record in self.fetch(*args, **kwargs):
+        fetcher = self.fetch(*args, **kwargs)
+        if not hasattr(fetcher, "__aiter__"):
+            raise TypeError("fetch() must return an AsyncIterator")
+        async for raw_record in fetcher:
             document: Document | None = None
             try:
                 document = self.parse(raw_record)

@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/briefing/repository.py
+# hypothesis_version: 6.140.2
+
+['BriefingRepository', 'MedDRA', 'SNOMED', 'meddra', 'snomed']

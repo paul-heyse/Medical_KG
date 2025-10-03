@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Sequence, Tuple, cast
 
 
 @dataclass(slots=True)
@@ -33,10 +33,10 @@ class SpanMap:
     ) -> None:
         bbox_tuple: tuple[float, float, float, float] | None = None
         if bbox is not None:
-            values = tuple(float(value) for value in bbox)
-            if len(values) != 4:
+            values_list = [float(value) for value in bbox]
+            if len(values_list) != 4:
                 raise ValueError("bbox must contain four coordinates")
-            bbox_tuple = tuple(float(coord) for coord in values)
+            bbox_tuple = (values_list[0], values_list[1], values_list[2], values_list[3])
         self.spans.append(
             Span(
                 raw_start,
@@ -82,10 +82,10 @@ class SpanMap:
             bbox = entry.get("bbox") or entry.get("bounding_box")
             bbox_tuple: tuple[float, float, float, float] | None = None
             if bbox is not None:
-                values = tuple(float(value) for value in bbox)
-                if len(values) != 4:
+                values_list = [float(value) for value in bbox]
+                if len(values_list) != 4:
                     raise ValueError("bbox must contain four coordinates")
-                bbox_tuple = tuple(float(coord) for coord in values)
+                bbox_tuple = (values_list[0], values_list[1], values_list[2], values_list[3])
             new_spans.append(
                 Span(
                     raw_start,

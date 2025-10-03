@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/facets/validator.py
+# hypothesis_version: 6.140.2
+
+['FacetValidationError', 'FacetValidator', 'G', 'HR', 'KG', 'L', 'MCG', 'MG', 'MG/DAY', 'MG/KG', 'MG/ML', 'ML', 'MMOL/L', 'OR', 'RR', 'validate_facets']

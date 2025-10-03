@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/facets/router.py
+# hypothesis_version: 6.140.2
+
+['adverse', 'adverse_reactions', 'ae', 'dosage', 'eligibility', 'grade', 'hazard', 'indications', 'outcome', 'outcomes', 'ratio', 'results', 'risk', 'safety', 'section', 'table_headers', 'toxicity', 'usage']

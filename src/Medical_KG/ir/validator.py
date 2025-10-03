@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping, cast
 
 from Medical_KG.ir.models import DocumentIR, ensure_monotonic_spans
 
@@ -33,7 +33,8 @@ class IRValidator:
         return dict(self._schemas)
 
     def _load_schema(self, path: Path) -> Mapping[str, Any]:
-        return json.loads(path.read_text(encoding="utf-8"))
+        result: Any = json.loads(path.read_text(encoding="utf-8"))
+        return cast(Mapping[str, Any], result)
 
     def validate_document(self, document: DocumentIR) -> None:
         payload = document.as_dict()

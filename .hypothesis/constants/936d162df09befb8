@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/entity_linking/candidates.py
+# hypothesis_version: 6.140.2
+
+[0.0, 128, 'Candidate', 'CandidateGenerator', 'DenseClient', 'DictionaryClient', 'Hit', 'SparseClient', 'chunk_id', 'dense', 'doc_id', 'lexical', 'score', 'sparse']

@@ -4,9 +4,11 @@ import hashlib
 import json
 import re
 import unicodedata
-from typing import Any, Mapping
+from typing import Mapping, Sequence, cast
 
 from langdetect import detect
+
+from Medical_KG.ingestion.types import JSONMapping, JSONSequence, JSONValue
 
 LANGUAGE_PATTERN = re.compile(r"^[a-z]{2}")
 
@@ -35,5 +37,17 @@ def generate_doc_id(source: str, identifier: str, version: str, content: bytes) 
     return f"{source}:{identifier}#{version}:{digest}"
 
 
-def canonical_json(data: Mapping[str, Any]) -> bytes:
+def canonical_json(data: Mapping[str, JSONValue]) -> bytes:
     return json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def ensure_json_mapping(value: JSONValue, *, context: str) -> JSONMapping:
+    if not isinstance(value, Mapping):
+        raise TypeError(f"{context} expected a mapping, received {type(value).__name__}")
+    return cast(JSONMapping, value)
+
+
+def ensure_json_sequence(value: JSONValue, *, context: str) -> JSONSequence:
+    if not isinstance(value, Sequence):
+        raise TypeError(f"{context} expected a sequence, received {type(value).__name__}")
+    return cast(JSONSequence, value)

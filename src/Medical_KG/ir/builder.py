@@ -6,8 +6,9 @@ from typing import Any, List, Tuple
 
 try:  # pragma: no cover - optional dependency
     from bs4 import BeautifulSoup
+    BS4_AVAILABLE = True
 except ModuleNotFoundError:  # pragma: no cover - fallback to stdlib parser
-    BeautifulSoup = None
+    BS4_AVAILABLE = False
 
 from Medical_KG.ir.models import Block, DocumentIR, SpanMap, Table
 from Medical_KG.ir.normalizer import TextNormalizer, section_from_heading
@@ -348,8 +349,9 @@ class GuidelineBuilder(IrBuilder):
         list[tuple[str, str, str | None, dict[str, Any]]],
         list[dict[str, Any]],
     ]:
-        if BeautifulSoup is not None:
-            soup = BeautifulSoup(html, "html.parser")
+        if BS4_AVAILABLE:
+            from bs4 import BeautifulSoup as BS
+            soup = BS(html, "html.parser")
             blocks: list[tuple[str, str, str | None, dict[str, Any]]] = []
             for element in soup.find_all(["h1", "h2", "h3", "p", "li"]):
                 text = element.get_text(strip=True)

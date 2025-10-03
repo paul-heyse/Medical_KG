@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/entity_linking/detectors.py
+# hypothesis_version: 6.140.2
+
+[1.0, 'GTIN-14', 'IdentifierCandidate', 'LOINC', 'NCT', 'RxCUI', 'UNII', '\\b(NCT\\d{8})\\b', '\\b([A-Z0-9]{10})\\b', '\\b(\\d{1,7}-\\d)\\b', '\\b(\\d{14})\\b', '\\b(\\d{4,7})\\b']

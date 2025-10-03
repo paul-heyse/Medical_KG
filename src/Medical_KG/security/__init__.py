@@ -2,7 +2,7 @@
 from .audit import AuditEvent, AuditLogger
 from .licenses import LicenseRegistry, LicenseSession, LicenseTier
 from .provenance import ExtractionActivity, ProvenanceStore
-from .rbac import RBACEngine, Role, ScopeEnforcer
+from .rbac import RBACEngine, Role, ScopeEnforcer, ScopeError
 from .retention import PurgePipeline, RetentionPolicy, RetentionRecord, RetentionResult
 from .shacl import (
     ShaclIssue,
@@ -19,6 +19,7 @@ __all__ = [
     "LicenseTier",
     "LicenseSession",
     "ScopeEnforcer",
+    "ScopeError",
     "RBACEngine",
     "Role",
     "ProvenanceStore",

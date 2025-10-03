@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/chunking/chunker.py
+# hypothesis_version: 6.140.2
+
+[0.0, 1.0, 1.5, 200, ' > ', ' | ', '/', '<tr[^>]*>(.*?)</tr>', '>([^<>]+)<', 'Chunk', 'SemanticChunker', '[A-Za-z0-9]+', '\\[[0-9,\\s]+\\]$', '^(?:[-*•]|\\d+\\.)\\s', '_', 'chunk_id', 'end', 'guideline', 'imrad', 'pmc', 'registry', 'see', 'select_profile', 'spl', 'start', 'token_window', 'utf-8']

@@ -146,10 +146,20 @@ class AuditLogger:
                 handle.seek(position)
                 chunk = handle.read(step) + chunk
             lines = chunk.splitlines()
-            if not lines:
+            if not lines:  # pragma: no cover - unreachable due to earlier size check
                 return ""
-            last = json.loads(lines[-1].decode("utf-8"))
-            return str(last.get("hash", ""))
+            for raw_line in reversed(lines):
+                text = raw_line.decode("utf-8").strip()
+                if not text:
+                    continue
+                positions = [idx for idx, char in enumerate(text) if char == "{"]
+                for pos in positions:
+                    try:
+                        last = json.loads(text[pos:])
+                    except json.JSONDecodeError:  # pragma: no cover - defensive guard
+                        continue
+                    return str(last.get("hash", ""))
+            return ""
 
 
 def _chunked(iterator: Iterator[Mapping[str, object]], size: int) -> Iterable[list[Mapping[str, object]]]:

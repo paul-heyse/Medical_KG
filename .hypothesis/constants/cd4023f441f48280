@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/chunking/facets.py
+# hypothesis_version: 6.140.2
+
+[120, 'FacetGenerator', 'absence of', 'amount', 'did not', 'dose', 'endpoint', 'lab_value', 'metric', 'negated', 'no significant', 'unit', 'value', 'was not', 'without difference']

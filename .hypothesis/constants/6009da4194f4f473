@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/embeddings/splade.py
+# hypothesis_version: 6.140.2
+
+[0.05, 1.0, 400, 'SPLADEExpander', '[A-Za-z0-9]+']

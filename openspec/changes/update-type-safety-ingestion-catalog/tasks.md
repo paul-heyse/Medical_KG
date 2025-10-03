@@ -1,7 +1,7 @@
 # Implementation Tasks
 
 ## 1. Ingestion Core
-- [ ] 1.1 Add precise type annotations to `BaseAdapter`, ledger readers/writers, and registry.
+- [x] 1.1 Add precise type annotations to `BaseAdapter`, ledger readers/writers, and registry.
 - [ ] 1.2 Annotate each clinical/literature/guideline adapter fetch/parse pipeline.
 - [ ] 1.3 Provide typed JSON schema loader helpers or stubs for jsonschema usage.
 

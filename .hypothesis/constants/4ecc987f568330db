@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/extraction/metrics.py
+# hypothesis_version: 6.140.2
+
+[0.0, 0.01, 'ExtractionEvaluator', 'ExtractionMetrics']

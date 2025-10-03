@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from Medical_KG.security import AuditEvent, AuditLogger
+from Medical_KG.security import audit as audit_module
 
 from .fixtures import sample_audit_payload
 
@@ -68,3 +69,40 @@ def test_export_invalid_format(tmp_path: Path) -> None:
     logger.log(AuditEvent(category="access", payload={}))
     with pytest.raises(ValueError):
         logger.export(tmp_path / "audit.bin", format="binary")
+
+
+def test_query_filters_apply(tmp_path: Path) -> None:
+    logger = AuditLogger(tmp_path / "audit.log")
+    timestamp = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    logger.log(AuditEvent(category="login", payload={}, actor="alice", resource="console", timestamp=timestamp))
+    logger.log(AuditEvent(category="access", payload={}, actor="bob", resource="console", timestamp=timestamp))
+
+    assert logger.query(category="missing") == []
+    assert logger.query(actor="charlie") == []
+    assert logger.query(resource="other") == []
+    assert logger.query(since=timestamp + timedelta(days=1)) == []
+    assert logger.query(until=timestamp - timedelta(days=1)) == []
+
+
+def test_rotate_noop_and_tail_hash(tmp_path: Path) -> None:
+    logger = AuditLogger(tmp_path / "audit.log")
+    assert logger.rotate(max_entries=10) is None
+    assert logger.read() == []
+    assert logger._tail_hash() == ""
+
+    logger._path.write_text("", encoding="utf-8")
+    assert logger._tail_hash() == ""
+    logger._path.write_text("   ", encoding="utf-8")
+    assert logger._tail_hash() == ""
+    logger._path.write_text("bad json", encoding="utf-8")
+    assert logger._tail_hash() == ""
+
+    logger.log(AuditEvent(category="access", payload={}))
+    assert logger._tail_hash()
+
+
+def test_chunked_helper() -> None:
+    iterator = iter([{"idx": 1}, {"idx": 2}, {"idx": 3}])
+    batches = list(audit_module._chunked(iterator, 2))
+    assert len(batches) == 2
+    assert batches[0][0]["idx"] == 1

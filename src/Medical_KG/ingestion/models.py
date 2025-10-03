@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Mapping, MutableMapping
+from typing import Mapping
 
-from Medical_KG.ingestion.types import JSONValue
+from Medical_KG.ingestion.types import DocumentRaw, JSONMapping, JSONValue, MutableJSONMapping
 
 
 @dataclass(slots=True)
@@ -14,8 +14,8 @@ class Document:
     doc_id: str
     source: str
     content: str
-    metadata: MutableMapping[str, JSONValue] = field(default_factory=dict)
-    raw: JSONValue | None = None
+    metadata: MutableJSONMapping = field(default_factory=dict)
+    raw: DocumentRaw | None = None
 
     def as_record(self) -> Mapping[str, JSONValue]:
         return {
@@ -32,4 +32,4 @@ class IngestionResult:
     document: Document
     state: str
     timestamp: datetime
-    metadata: Mapping[str, JSONValue] = field(default_factory=dict)
+    metadata: JSONMapping = field(default_factory=dict)

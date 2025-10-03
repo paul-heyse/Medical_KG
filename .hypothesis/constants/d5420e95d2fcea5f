@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/briefing/qa.py
+# hypothesis_version: 6.140.2
+
+['; ', 'IntentRouter', 'No data available.', 'No dosing data', 'No eligibility data', 'No evidence found.', 'QAEngine', 'QAResult', 'adverse', 'ae', 'certainty', 'citations', 'description', 'dose', 'dosing', 'effect', 'eligibility', 'endpoint', 'exclusion', 'inclusion', 'intervention', 'meddra_pt', 'outcome', 'regimen', 'safety', 'studies', 'study_id', 'text']

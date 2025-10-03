@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/facets/models.py
+# hypothesis_version: 6.140.2
+
+[0.0, 1.0, 120, 'AdverseEventFacet', 'Code', 'Document identifier', 'DoseFacet', 'EndpointFacet', 'EvidenceSpan', 'Facet', 'FacetIndexRecord', 'FacetModel', 'FacetType', 'HR', 'MD', 'OR', 'PICOFacet', 'RR', 'SMD', '__confidence', 'ae', 'after', 'dose', 'eligibility', 'endpoint', 'general', 'pico', 'type']

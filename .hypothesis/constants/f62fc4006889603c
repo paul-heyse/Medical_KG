@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/extraction/parsers.py
+# hypothesis_version: 6.140.2
+
+[1.0, 7.0, 30.0, 365.0, ',', '.', '<=', '>', '>=', 'analyte', 'count', 'day', 'days', 'denom', 'gte', 'high', 'label', 'low', 'lte', 'month', 'normalise_number', 'op', 'parse_age_logic', 'parse_count', 'parse_lab_threshold', 'parse_p_value', 'unit', 'value', 'week', 'year']

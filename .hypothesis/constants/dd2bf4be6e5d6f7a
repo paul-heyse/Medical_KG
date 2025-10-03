@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/briefing/api_models.py
+# hypothesis_version: 6.140.2
+
+['CoverageRequest', 'DossierRequest', 'EvidenceMapRequest', 'InterviewKitRequest', 'QARequest', 'QAResponse', 'TopicOnlyRequest', 'TopicPayload']

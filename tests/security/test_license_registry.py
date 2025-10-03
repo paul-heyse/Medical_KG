@@ -101,3 +101,43 @@ def test_require_raises_for_unlicensed(tmp_path) -> None:
     registry = _registry(tmp_path)
     with pytest.raises(PermissionError):
         registry.require("MEDDRA")
+
+
+def test_usage_negative_rejected(tmp_path) -> None:
+    registry = _registry(tmp_path)
+    session = registry.create_session("basic")
+    with pytest.raises(ValueError):
+        session.record_usage("requests_per_day", -1)
+
+
+def test_unknown_tier_and_filter_denied(tmp_path) -> None:
+    registry = _registry(tmp_path)
+    with pytest.raises(KeyError):
+        registry.get_tier("unknown")
+
+    label = registry.filter_labels("SNOMED", "free", "term")
+    assert "cannot access" in label
+    assert registry.filter_labels("MEDDRA", "basic", "term") == "[license required]"
+
+
+def test_registry_parses_optional_sections(tmp_path) -> None:
+    custom = tmp_path / "custom.yml"
+    custom.write_text(
+        """
+vocabs:
+  test:
+    licensed: true
+tiers:
+  limited:
+    features: null
+    usage_limits: null
+    redactions:
+      test: '"quoted"'
+""",
+        encoding="utf-8",
+    )
+    registry = LicenseRegistry.from_yaml(custom)
+    assert "limited" in registry.available_tiers()
+    tier = registry.get_tier("limited")
+    assert tier.redactions["TEST"] == "quoted"
+    assert registry.filter_labels("TEST", "limited", "label") == "label"

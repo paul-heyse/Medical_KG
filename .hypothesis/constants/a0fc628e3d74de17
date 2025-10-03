@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/ir/__init__.py
+# hypothesis_version: 6.140.2
+
+['Block', 'DocumentIR', 'IRValidator', 'NormalizedText', 'SpanMap', 'Table', 'TextNormalizer', 'ValidationError']

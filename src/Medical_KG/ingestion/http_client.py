@@ -90,7 +90,7 @@ class AsyncHttpClient:
         self._client: AsyncClientProtocol = create_async_client(
             timeout=timeout, headers=headers, http2=http2_enabled
         )
-        self._limits = limits or {}
+        self._limits: Dict[str, RateLimit] = dict(limits or {})
         self._default_rate = default_rate or RateLimit(rate=5, per=1.0)
         self._limiters: Dict[str, _SimpleLimiter] = {}
         self._retries = retries
@@ -117,7 +117,7 @@ class AsyncHttpClient:
                 try:
                     start = time()
                     response = await self._client.request(method, url, **kwargs)
-                    HTTP_REQUESTS.labels(method, parsed.netloc, str(response.status_code)).inc()
+                    HTTP_REQUESTS.labels(method=method, host=parsed.netloc, status=str(response.status_code)).inc()
                     HTTP_LATENCY.observe(time() - start)
                     response.raise_for_status()
                     return response
@@ -126,7 +126,7 @@ class AsyncHttpClient:
                     if status not in {429, 502, 503, 504}:
                         raise
                     last_error = exc
-                    HTTP_REQUESTS.labels(method, parsed.netloc, exc.__class__.__name__).inc()
+                    HTTP_REQUESTS.labels(method=method, host=parsed.netloc, status=exc.__class__.__name__).inc()
                     jitter = random.uniform(0, backoff / 2)
                     await asyncio.sleep(backoff + jitter)
                     backoff = min(backoff * 2, 5.0)
@@ -161,7 +161,7 @@ class AsyncHttpClient:
         limiter = self._get_limiter(parsed.netloc)
         async with limiter:
             async with self._client.stream(method, url, **kwargs) as response:
-                HTTP_REQUESTS.labels(method, parsed.netloc, str(response.status_code)).inc()
+                HTTP_REQUESTS.labels(method=method, host=parsed.netloc, status=str(response.status_code)).inc()
                 HTTP_LATENCY.observe(response.elapsed.total_seconds() if response.elapsed else 0.0)
                 response.raise_for_status()
                 yield response

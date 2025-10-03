@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/security/__init__.py
+# hypothesis_version: 6.140.2
+
+['AuditEvent', 'AuditLogger', 'ExtractionActivity', 'LicenseRegistry', 'LicenseSession', 'LicenseTier', 'ProvenanceStore', 'PurgePipeline', 'RBACEngine', 'RetentionPolicy', 'RetentionRecord', 'RetentionResult', 'Role', 'ScopeEnforcer', 'ScopeError', 'ShaclIssue', 'compose_shapes', 'load_shapes', 'validate_on_write', 'validate_shacl']

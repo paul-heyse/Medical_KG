@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Any, Dict, Iterable, Mapping
+from typing import Any, Dict, Iterable, Iterator, Mapping, cast
 
 import jsonlines
 
@@ -26,7 +26,7 @@ class IngestionLedger:
         self._latest: Dict[str, LedgerEntry] = {}
         if path.exists():
             with jsonlines.open(path, mode="r") as reader:
-                for row in reader:
+                for row in cast(Iterator[Dict[str, Any]], reader):
                     entry = LedgerEntry(
                         doc_id=row["doc_id"],
                         state=row["state"],
@@ -51,7 +51,7 @@ class IngestionLedger:
         with self._lock:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             with jsonlines.open(self._path, mode="a") as writer:
-                writer.write(payload)
+                cast(Any, writer).write(payload)
             self._latest[doc_id] = entry
         return entry
 
@@ -59,7 +59,7 @@ class IngestionLedger:
         return self._latest.get(doc_id)
 
     def entries(self, *, state: str | None = None) -> Iterable[LedgerEntry]:
-        entries = self._latest.values()
+        entries = list(self._latest.values())
         if state is None:
-            return list(entries)
+            return entries
         return [entry for entry in entries if entry.state == state]

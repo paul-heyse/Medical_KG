@@ -5,6 +5,13 @@ import re
 from pathlib import Path
 from typing import Any, Mapping, cast
 
+from Medical_KG.ingestion.types import (
+    AdapterDocumentPayload,
+    is_clinical_document_payload,
+    is_pmc_payload,
+    is_pubmed_payload,
+)
+
 from Medical_KG.ir.models import DocumentIR, ensure_monotonic_spans
 
 
@@ -36,7 +43,12 @@ class IRValidator:
         result: Any = json.loads(path.read_text(encoding="utf-8"))
         return cast(Mapping[str, Any], result)
 
-    def validate_document(self, document: DocumentIR) -> None:
+    def validate_document(
+        self,
+        document: DocumentIR,
+        *,
+        raw: AdapterDocumentPayload | None = None,
+    ) -> None:
         payload = document.as_dict()
         if not document.doc_id:
             raise ValidationError("Document must have a doc_id")
@@ -57,6 +69,8 @@ class IRValidator:
             raise ValidationError(str(exc)) from exc
         self._validate_offsets(document)
         self._validate_span_map(payload["span_map"])
+        if raw is not None:
+            self._validate_payload(document, raw)
 
     def _validate_document_payload(self, payload: Mapping[str, Any]) -> None:
         schema = self._schemas["document"]
@@ -177,3 +191,40 @@ class IRValidator:
             if "page" in entry and entry["page"] is not None and entry["page"] < 1:
                 raise ValidationError("Span map page numbers must be >= 1")
             previous_end = canonical_end
+
+    def _validate_payload(
+        self,
+        document: DocumentIR,
+        raw: AdapterDocumentPayload,
+    ) -> None:
+        provenance = document.provenance
+        if is_clinical_document_payload(raw):
+            if provenance.get("nct_id") != raw["nct_id"]:
+                raise ValidationError("Clinical IR documents must include NCT ID provenance")
+        if is_pubmed_payload(raw):
+            pubmed_info = provenance.get("pubmed")
+            pmid_source: Any | None = None
+            if isinstance(pubmed_info, Mapping):
+                pmid_source = pubmed_info.get("pmid")
+            if pmid_source is None:
+                pmid_source = provenance.get("pmid")
+            if pmid_source != raw["pmid"]:
+                raise ValidationError("PubMed IR documents must include PMID provenance")
+            expected_pmcid = raw.get("pmcid")
+            if expected_pmcid:
+                pmcid_source: Any | None = None
+                if isinstance(pubmed_info, Mapping):
+                    pmcid_source = pubmed_info.get("pmcid")
+                if pmcid_source is None:
+                    pmcid_source = provenance.get("pmcid")
+                if pmcid_source != expected_pmcid:
+                    raise ValidationError("PubMed IR documents must include PMCID provenance when available")
+        if is_pmc_payload(raw):
+            pmcid_source = provenance.get("pmcid")
+            if pmcid_source != raw["pmcid"]:
+                pubmed_info = provenance.get("pubmed")
+                if not (
+                    isinstance(pubmed_info, Mapping)
+                    and pubmed_info.get("pmcid") == raw["pmcid"]
+                ):
+                    raise ValidationError("PMC IR documents must include PMCID provenance")

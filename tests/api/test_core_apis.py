@@ -146,7 +146,7 @@ def test_rate_limiting_and_retrieval_headers(app: FastAPI) -> None:
 
 def test_kg_write_happy_path_and_validation_error(app: FastAPI) -> None:
     headers: dict[str, str] = {"X-API-Key": "demo-key"}
-    valid_payload: dict[str, object] = {
+    valid_payload = {
         "nodes": [
             {
                 "id": "outcome-1",
@@ -161,6 +161,10 @@ def test_kg_write_happy_path_and_validation_error(app: FastAPI) -> None:
                 "outcome_loinc": "LP12345-6",
                 "provenance": ["doc-1"],
                 "spans": [{"start": 10, "end": 20}],
+                "outcome": {
+                    "id": "outcome-1",
+                    "loinc": "LP12345-6",
+                },
             },
         ],
         "relationships": [

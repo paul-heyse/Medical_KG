@@ -232,3 +232,134 @@ async def test_rank_normalization_and_deduplication(
     result = shared[0]
     assert result.scores.bm25 == pytest.approx(1.0)
     assert result.scores.fused is not None
+
+
+def test_bm25_handles_date_range_and_invalid_hits(
+    fake_vector_client: FakeVectorClient,
+    fake_query_embedder: FakeQwenEmbedder,
+    fake_splade_encoder: FakeSpladeEncoder,
+    retrieval_rules: list[IntentRule],
+) -> None:
+    hits = {
+        "bm25-index": [
+            {"doc_id": "missing-chunk", "text": "ignored", "score": 0.1},
+            {
+                "chunk_id": "valid-chunk",
+                "doc_id": "doc-1",
+                "text": "valid",
+                "score": 1.0,
+                "metadata": {},
+            },
+        ]
+    }
+    opensearch = FakeOpenSearchClient(hits_by_index=hits)
+    service = RetrievalService(
+        opensearch=opensearch,
+        vector=fake_vector_client,
+        embedder=fake_query_embedder,
+        splade=fake_splade_encoder,
+        intents=retrieval_rules,
+        config=RetrieverConfig(
+            bm25_index="bm25-index",
+            splade_index="splade-index",
+            dense_index="dense-index",
+            max_top_k=5,
+            default_top_k=5,
+            rrf_k=10,
+            rerank_top_n=2,
+            weights={"bm25": 1.0},
+            neighbor_merge={"min_cosine": 0.0, "max_tokens": 2000},
+            query_cache_seconds=1,
+            embedding_cache_seconds=1,
+            expansion_cache_seconds=1,
+            slo_ms=1500.0,
+            multi_granularity={"enabled": False, "indexes": {}},
+        ),
+        reranker=None,
+        ontology=StubOntology(),
+    )
+    request = RetrievalRequest(query="term", filters={"date_range": {"gte": "2024-01-01"}})
+    context = service._context(request)
+    results = service._bm25(
+        request.query,
+        context,
+        index="bm25-index",
+        expanded_terms={},
+        granularity="chunk",
+    )
+    assert [result.chunk_id for result in results] == ["valid-chunk"]
+    executed_body = opensearch.executed[0][1]
+    filters = executed_body["query"]["bool"]["filter"]
+    assert {"range": {"publication_date": {"gte": "2024-01-01"}}} in filters
+
+
+def test_splade_and_dense_skip_invalid_hits(
+    fake_vector_client: FakeVectorClient,
+    fake_query_embedder: FakeQwenEmbedder,
+    fake_splade_encoder: FakeSpladeEncoder,
+    retrieval_rules: list[IntentRule],
+) -> None:
+    opensearch = FakeOpenSearchClient(hits_by_index={"splade-index": [{"doc_id": "doc"}]})
+    vector = FakeVectorClient(hits=[{"doc_id": "doc"}])
+    service = RetrievalService(
+        opensearch=opensearch,
+        vector=vector,
+        embedder=fake_query_embedder,
+        splade=fake_splade_encoder,
+        intents=retrieval_rules,
+        config=RetrieverConfig(
+            bm25_index="bm25-index",
+            splade_index="splade-index",
+            dense_index="dense-index",
+            max_top_k=5,
+            default_top_k=5,
+            rrf_k=10,
+            rerank_top_n=2,
+            weights={"bm25": 0.0, "splade": 1.0, "dense": 1.0},
+            neighbor_merge={"min_cosine": 0.0, "max_tokens": 2000},
+            query_cache_seconds=1,
+            embedding_cache_seconds=1,
+            expansion_cache_seconds=1,
+            slo_ms=1500.0,
+            multi_granularity={"enabled": False, "indexes": {}},
+        ),
+        reranker=None,
+        ontology=StubOntology(),
+    )
+    context = service._context(RetrievalRequest(query="term"))
+    assert service._splade("term", context) == []
+    assert service._dense("term", context) == []
+
+
+@pytest.mark.asyncio
+async def test_rrf_fallback_when_no_results(
+    fake_query_embedder: FakeQwenEmbedder,
+    retrieval_rules: list[IntentRule],
+) -> None:
+    empty_service = RetrievalService(
+        opensearch=FakeOpenSearchClient(hits_by_index={"bm25-index": [], "splade-index": []}),
+        vector=FakeVectorClient(hits=[]),
+        embedder=fake_query_embedder,
+        splade=FakeSpladeEncoder({}),
+        intents=retrieval_rules,
+        config=RetrieverConfig(
+            bm25_index="bm25-index",
+            splade_index="splade-index",
+            dense_index="dense-index",
+            max_top_k=5,
+            default_top_k=5,
+            rrf_k=10,
+            rerank_top_n=2,
+            weights={"bm25": 1.0, "splade": 1.0, "dense": 1.0},
+            neighbor_merge={"min_cosine": 0.0, "max_tokens": 2000},
+            query_cache_seconds=1,
+            embedding_cache_seconds=1,
+            expansion_cache_seconds=1,
+            slo_ms=1500.0,
+            multi_granularity={"enabled": False, "indexes": {}},
+        ),
+        reranker=None,
+        ontology=StubOntology(),
+    )
+    response = await empty_service.retrieve(RetrievalRequest(query="no-results"))
+    assert response.results == []

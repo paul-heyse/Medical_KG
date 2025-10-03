@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Mapping
+from typing import Any, Dict, Mapping, MutableMapping
 
 
 @dataclass(slots=True)
@@ -90,7 +90,7 @@ class RetrievalResponse:
     latency_ms: float
     from_: int
     size: int
-    metadata: Mapping[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

@@ -5,20 +5,21 @@ from dataclasses import asdict, dataclass
 from typing import Any, Iterable, Mapping, Protocol, Sequence
 
 from .models import RetrievalResult, RetrieverScores
+from .types import EmbeddingVector, SearchHit, VectorHit
 
 
 class OpenSearchClient(Protocol):  # pragma: no cover - interface definition
-    def search(self, *, index: str, body: Mapping[str, Any], size: int) -> Sequence[Mapping[str, Any]]:
+    def search(self, *, index: str, body: Mapping[str, Any], size: int) -> Sequence[SearchHit]:
         ...
 
 
 class VectorSearchClient(Protocol):  # pragma: no cover - interface definition
-    def query(self, *, index: str, embedding: Sequence[float], top_k: int) -> Sequence[Mapping[str, Any]]:
+    def query(self, *, index: str, embedding: EmbeddingVector, top_k: int) -> Sequence[VectorHit]:
         ...
 
 
 class EmbeddingClient(Protocol):  # pragma: no cover - interface definition
-    def embed(self, text: str) -> Sequence[float]:
+    def embed(self, text: str) -> EmbeddingVector:
         ...
 
 
@@ -77,7 +78,7 @@ class InMemoryVector(VectorSearchClient):
     def __init__(self, hits: Iterable[InMemorySearchHit]):
         self._hits = list(hits)
 
-    def query(self, *, index: str, embedding: Sequence[float], top_k: int) -> Sequence[Mapping[str, Any]]:
+    def query(self, *, index: str, embedding: EmbeddingVector, top_k: int) -> Sequence[VectorHit]:
         _ = index, embedding
         return [asdict(hit) for hit in self._hits[:top_k]]
 
@@ -94,7 +95,7 @@ class ConstantEmbeddingClient(EmbeddingClient):
     def __init__(self, vector: Sequence[float] | None = None) -> None:
         self._vector = list(vector or [0.1, 0.2, 0.3])
 
-    def embed(self, text: str) -> Sequence[float]:
+    def embed(self, text: str) -> EmbeddingVector:
         _ = text
         return list(self._vector)
 

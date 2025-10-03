@@ -46,7 +46,7 @@
 ## 7. Authentication & Authorization Tests
 
 - [x] 7.1 Test JWT validation: valid token → authorized request
-- [ ] 7.2 Test JWT validation: expired token → 401 Unauthorized
+- [x] 7.2 Test JWT validation: expired token → 401 Unauthorized
 - [x] 7.3 Test API key handling: valid key → authorized request
 - [x] 7.4 Test scope enforcement: restricted scope → filtered results
 - [x] 7.5 Test missing credentials → 401 Unauthorized
@@ -55,12 +55,12 @@
 
 - [x] 8.1 Test `/retrieve` endpoint with mock service: success case
 - [x] 8.2 Test `/retrieve` endpoint: validation error on malformed request
-- [ ] 8.3 Test streaming response for large result sets
+- [x] 8.3 Test streaming response for large result sets
 - [x] 8.4 Test rate limiting headers (`X-RateLimit-*`)
 
 ## 9. Coverage & Validation
 
-- [ ] 9.1 Run `pytest tests/retrieval/ --cov=src/Medical_KG/retrieval --cov-report=term-missing`
-- [ ] 9.2 Verify ≥95% coverage for all retrieval modules
+- [x] 9.1 Run `pytest tests/retrieval/ --cov=src/Medical_KG/retrieval --cov-report=term-missing`
+- [x] 9.2 Verify ≥95% coverage for all retrieval modules
 - [x] 9.3 Ensure no external service calls in test suite
 - [x] 9.4 Document retrieval test patterns in `tests/retrieval/README.md`

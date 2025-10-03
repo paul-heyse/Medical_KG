@@ -17,6 +17,7 @@ from typing import Any, Dict, Mapping, MutableMapping, Optional, cast
 import yaml
 
 from Medical_KG.compat.prometheus import Gauge, GaugeLike
+from Medical_KG.types import JSONMapping, JSONValue, MutableJSONMapping, JSONObject
 from .models import Config, PolicyDocument, validate_constraints
 
 

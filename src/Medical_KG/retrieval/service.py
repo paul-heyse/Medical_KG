@@ -5,7 +5,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Sequence
 
 from .caching import TTLCache
 from .clients import EmbeddingClient, OpenSearchClient, Reranker, SpladeEncoder, VectorSearchClient
@@ -113,7 +113,7 @@ class RetrievalService:
         index: str,
         expanded_terms: Mapping[str, float],
         granularity: str = "chunk",
-    ) -> list[RetrievalResult]:
+    ) -> List[RetrievalResult]:
         boosts = context.boosts or {}
         expanded_text = " ".join(expanded_terms.keys()) if expanded_terms else ""
         lexical_query = f"{query} {expanded_text}".strip()
@@ -139,7 +139,7 @@ class RetrievalService:
         if filters:
             body["query"]["bool"]["filter"] = filters
         hits = self._os.search(index=index, body=body, size=context.top_k)
-        results: list[RetrievalResult] = []
+        results: List[RetrievalResult] = []
         for hit in hits:
             chunk_id = hit.get("chunk_id")
             doc_id = hit.get("doc_id")
@@ -166,7 +166,7 @@ class RetrievalService:
             results.append(result)
         return results
 
-    def _splade(self, query: str, context: RetrieverContext) -> list[RetrievalResult]:
+    def _splade(self, query: str, context: RetrieverContext) -> List[RetrievalResult]:
         expanded = self._splade_encoder.expand(query)
         should = []
         for term, weight in expanded.items():
@@ -175,7 +175,7 @@ class RetrievalService:
             return []
         body = {"query": {"bool": {"should": should, "minimum_should_match": 1}}}
         hits = self._os.search(index=self._config.splade_index, body=body, size=context.top_k)
-        results: list[RetrievalResult] = []
+        results: List[RetrievalResult] = []
         for hit in hits:
             chunk_id = hit.get("chunk_id")
             doc_id = hit.get("doc_id")
@@ -199,7 +199,7 @@ class RetrievalService:
             results.append(result)
         return results
 
-    def _dense(self, query: str, context: RetrieverContext) -> list[RetrievalResult]:
+    def _dense(self, query: str, context: RetrieverContext) -> List[RetrievalResult]:
         embedding = self._embed(query)
         hits = self._vector.query(index=self._config.dense_index, embedding=embedding, top_k=context.top_k)
         results: list[RetrievalResult] = []

@@ -1,7 +1,7 @@
 """Retrieval orchestration package."""
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, NoReturn
 
 from .service import RetrievalService, RetrieverConfig
 from .intent import IntentClassifier, IntentRule
@@ -20,12 +20,17 @@ from .clients import (
 )
 from .models import RetrievalRequest, RetrievalResponse
 
-try:  # pragma: no cover - optional FastAPI dependency
-    from .api import create_router
-except ModuleNotFoundError:  # pragma: no cover
+if TYPE_CHECKING:
+    from fastapi import APIRouter
 
-    def create_router(service: RetrievalService) -> Any:  # pragma: no cover - fallback
-        raise RuntimeError("FastAPI integration is unavailable: fastapi not installed")
+    from .api import create_router
+else:  # pragma: no cover - optional FastAPI dependency
+    try:
+        from .api import create_router
+    except ModuleNotFoundError:
+
+        def create_router(service: RetrievalService) -> NoReturn:  # pragma: no cover - fallback
+            raise RuntimeError("FastAPI integration is unavailable: fastapi not installed")
 
 __all__ = [
     "create_router",

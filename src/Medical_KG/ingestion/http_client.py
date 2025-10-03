@@ -17,6 +17,14 @@ from Medical_KG.compat.httpx import (
     create_async_client,
 )
 from Medical_KG.compat.prometheus import Counter, Histogram
+from Medical_KG.utils.optional_dependencies import (
+    CounterProtocol,
+    HistogramProtocol,
+    HttpxModule,
+    build_counter,
+    build_histogram,
+    get_httpx_module,
+)
 
 HTTPX: HttpxModule = get_httpx_module()
 

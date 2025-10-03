@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from fastapi.security import HTTPAuthorizationCredentials
 
-from Medical_KG.api.auth import Authenticator
+from Medical_KG.api.auth import Authenticator, Principal
 from Medical_KG.api.routes import ApiRouter
 from Medical_KG.services.retrieval import RetrievalResult as LegacyRetrievalResult, RetrievalService as LegacyService
 
@@ -33,7 +35,19 @@ class DummyRetrievalService(LegacyService):
 
 @pytest.fixture
 def api_client() -> tuple[TestClient, DummyRetrievalService]:
-    authenticator = Authenticator(valid_api_keys={"valid-key": {"retrieve:read"}, "no-scope": {"facets:write"}})
+    class ExpiringAuthenticator(Authenticator):
+        def authenticate(
+            self,
+            credentials: HTTPAuthorizationCredentials | None,
+            api_key: str | None,
+        ) -> Principal:
+            if credentials is not None and credentials.credentials == "expired-token":
+                raise HTTPException(status_code=401, detail="Token expired")
+            return super().authenticate(credentials, api_key)
+
+    authenticator = ExpiringAuthenticator(
+        valid_api_keys={"valid-key": {"retrieve:read"}, "no-scope": {"facets:write"}}
+    )
     retrieval_service = DummyRetrievalService()
     router = ApiRouter(authenticator=authenticator, retrieval_service=retrieval_service)
     app = FastAPI()
@@ -43,6 +57,10 @@ def api_client() -> tuple[TestClient, DummyRetrievalService]:
 
 def _bearer_headers() -> dict[str, str]:
     return {"Authorization": "Bearer super-secret"}
+
+
+def _expired_headers() -> dict[str, str]:
+    return {"Authorization": "Bearer expired-token"}
 
 
 def test_retrieve_endpoint_success(api_client: tuple[TestClient, DummyRetrievalService]) -> None:
@@ -82,3 +100,20 @@ def test_retrieve_endpoint_validation_error(api_client: tuple[TestClient, DummyR
     client, _ = api_client
     response = client.post("/retrieve", json={}, headers=_bearer_headers())
     assert response.status_code == 422
+
+
+def test_retrieve_endpoint_expired_token(api_client: tuple[TestClient, DummyRetrievalService]) -> None:
+    client, _ = api_client
+    response = client.post("/retrieve", json={"query": "Pembrolizumab"}, headers=_expired_headers())
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Token expired"
+
+
+def test_retrieve_endpoint_streaming(api_client: tuple[TestClient, DummyRetrievalService]) -> None:
+    client, _ = api_client
+    payload = {"query": "Pembrolizumab"}
+    with client.stream("POST", "/retrieve", json=payload, headers=_bearer_headers()) as response:
+        assert response.status_code == 200
+        body = b"".join(response.iter_bytes())
+    data = json.loads(body)
+    assert data["results"][0]["chunk_id"] == "chunk-1"

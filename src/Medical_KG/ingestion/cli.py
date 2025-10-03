@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 import typer
 
@@ -22,11 +22,23 @@ def _available_sources() -> list[str]:
     return _resolve_registry().available_sources()
 
 
-def _load_batch(path: Path) -> Iterable[dict[str, Any]]:
-    for line in path.read_text().splitlines():
-        if not line.strip():
-            continue
-        yield json.loads(line)
+def _load_batch(path: Path) -> Iterator[dict[str, Any]]:
+    with path.open("r", encoding="utf-8") as handle:
+        for index, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError as exc:  # pragma: no cover - CLI validation
+                raise typer.BadParameter(
+                    f"Invalid JSON on line {index} of {path}: {exc.msg}"
+                ) from exc
+            if not isinstance(payload, dict):
+                raise typer.BadParameter(
+                    "Batch entries must be JSON objects; "
+                    f"found {type(payload).__name__} on line {index}"
+                )
+            yield payload
 
 
 def _build_pipeline(ledger_path: Path) -> IngestionPipeline:

@@ -8,6 +8,17 @@ validate attribute access.  When payload fragments are already JSON-compatible
 we use ``narrow_to_mapping`` or ``narrow_to_sequence`` instead of ``typing.cast``.
 Inline comments call out the relevant ``Medical_KG.ingestion.types`` definitions
 when optional fields require normalisation.
+
+Optional field overview:
+
+* PubMed frequently supplies ``doi``/``journal`` metadata; `pmcid` and
+  `pubdate` are less consistent, so tests assert both populated and missing
+  variants.
+* MedRxiv exposes an optional ``date`` stamp that can be missing when records
+  are embargoed.
+* PMC records do not expose `NotRequired` keys but media elements may omit
+  captions; the adapter normalises blank strings to keep downstream processing
+  predictable.
 """
 
 from __future__ import annotations

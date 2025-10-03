@@ -1,5 +1,17 @@
 from __future__ import annotations
 
+"""Guideline and knowledge-base ingestion adapters with optional field context.
+
+NICE and USPSTF adapters primarily consume curated bootstrap records where URLs
+are usually present but licence identifiers (NICE) and stable IDs (USPSTF) are
+less reliable. Knowledge-base adapters wrap tabular datasets; WHO GHO exposes
+optional ``indicator``/``country``/``year`` values while CDC Socrata and
+OpenPrescribing derive identifiers from row content when explicit primary keys
+are missing. The tests in ``tests/ingestion/test_optional_fields.py`` exercise
+both fully populated and minimal payloads so adapters never assume optional
+fields exist.
+"""
+
 import json
 import xml.etree.ElementTree as ET
 from collections.abc import AsyncIterator, Iterable, Sequence as SequenceABC
@@ -95,6 +107,9 @@ class NiceGuidelineAdapter(_BootstrapAdapter[JSONMapping]):
             "url": url_value if isinstance(url_value, str) else None,
             "licence": licence_value if isinstance(licence_value, str) else None,
         }
+        # ``url`` and ``licence`` are ``NotRequired``; fixture coverage asserts both
+        # fully populated and empty cases so the adapter never assumes their
+        # presence.
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=payload["uid"], version="v1", content=content)
         metadata: dict[str, JSONValue] = {"uid": payload["uid"]}
@@ -140,6 +155,8 @@ class UspstfAdapter(_BootstrapAdapter[JSONMapping]):
             "status": status_value if isinstance(status_value, str) else None,
             "url": url_value if isinstance(url_value, str) else None,
         }
+        # USPSTF payloads occasionally omit ``id``/``status``/``url``; optional field
+        # tests confirm validation only enforces status when present.
         content = canonical_json(payload)
         identifier = payload["id"] or payload["title"]
         doc_id = self.build_doc_id(identifier=identifier, version="v1", content=content)
@@ -195,6 +212,9 @@ class CdcSocrataAdapter(_BootstrapAdapter[JSONMapping]):
             "identifier": identifier,
             "record": record_payload,
         }
+        # CDC Socrata exposes optional ``row_id``; when absent we synthesise an
+        # identifier from state/year/indicator so downstream code still receives a
+        # stable key.
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=identifier, version="v1", content=content)
         metadata: dict[str, JSONValue] = {"identifier": identifier}
@@ -292,6 +312,9 @@ class WhoGhoAdapter(_BootstrapAdapter[JSONMapping]):
             "country": country_value if isinstance(country_value, str) else None,
             "year": year_value if isinstance(year_value, str) else None,
         }
+        # Indicator/country/year arrive inconsistently; treat them as optional to
+        # keep the payload aligned with ``WhoGhoDocumentPayload`` and rely on tests
+        # to verify both populated and blank variants.
         identifier = (
             f"{payload['indicator'] or 'unknown'}-"
             f"{payload['country'] or 'unknown'}-"

@@ -53,8 +53,8 @@ def loinc_record_without_optional_fields() -> dict[str, Any]:
     payload = loinc_record_without_display()
     parameter = payload.get("parameter")
     if isinstance(parameter, dict):
-        parameter.pop("code", None)
-    payload.pop("code", None)
+        parameter["code"] = None
+    payload["code"] = "unknown"
     return payload
 
 
@@ -88,7 +88,7 @@ def snomed_record_without_display() -> dict[str, Any]:
 
 def snomed_record_without_optional_fields() -> dict[str, Any]:
     payload = snomed_record_without_display()
-    payload.pop("code", None)
+    payload["code"] = "unknown"
     return payload
 
 

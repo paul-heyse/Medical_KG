@@ -17,7 +17,14 @@ from Medical_KG.ingestion.adapters.clinical import (
     RxNormAdapter,
     UdiValidator,
 )
-from Medical_KG.ingestion.adapters.guidelines import CdcSocrataAdapter, NiceGuidelineAdapter
+from Medical_KG.ingestion.adapters.guidelines import (
+    CdcSocrataAdapter,
+    CdcWonderAdapter,
+    NiceGuidelineAdapter,
+    OpenPrescribingAdapter,
+    UspstfAdapter,
+    WhoGhoAdapter,
+)
 from Medical_KG.ingestion.adapters.literature import (
     LiteratureFallback,
     LiteratureFallbackError,
@@ -43,7 +50,22 @@ from tests.ingestion.fixtures.clinical import (
     openfda_faers_record,
     openfda_udi_record,
 )
-from tests.ingestion.fixtures.guidelines import cdc_socrata_record, nice_guideline
+from tests.ingestion.fixtures.guidelines import (
+    cdc_socrata_record,
+    cdc_socrata_record_with_identifier,
+    cdc_socrata_record_without_row_identifier,
+    cdc_wonder_xml,
+    cdc_wonder_xml_without_rows,
+    nice_guideline,
+    nice_guideline_with_optional_fields,
+    nice_guideline_without_optional_fields,
+    openprescribing_record_with_row_identifier,
+    openprescribing_record_without_row_identifier,
+    uspstf_record_with_optional_fields,
+    uspstf_record_without_optional_fields,
+    who_gho_record_with_optional_fields,
+    who_gho_record_without_optional_fields,
+)
 from tests.ingestion.fixtures.literature import (
     medrxiv_record,
     medrxiv_record_without_date,
@@ -619,6 +641,134 @@ def test_literature_optional_field_variants(fake_ledger: Any) -> None:
     medrxiv_present = medrxiv.parse(medrxiv_record())
     assert isinstance(medrxiv_present.raw, dict)
     assert medrxiv_present.raw.get("date") is not None
+
+
+@pytest.mark.parametrize(
+    (
+        "adapter_factory",
+        "present_payload",
+        "absent_payload",
+        "raw_optional_keys",
+        "metadata_optional_keys",
+        "allow_absent_validation_error",
+    ),
+    (
+        (
+            lambda context, client: NiceGuidelineAdapter(context, client),
+            nice_guideline_with_optional_fields,
+            nice_guideline_without_optional_fields,
+            ("url", "licence"),
+            ("licence",),
+            False,
+        ),
+        (
+            lambda context, client: UspstfAdapter(context, client),
+            uspstf_record_with_optional_fields,
+            uspstf_record_without_optional_fields,
+            ("id", "status", "url"),
+            ("id", "status"),
+            True,
+        ),
+    ),
+    ids=("nice", "uspstf"),
+)
+def test_guideline_optional_field_variants(
+    fake_ledger: Any,
+    adapter_factory: Callable[[AdapterContext, AsyncHttpClient], BaseAdapter[Any]],
+    present_payload: Callable[[], Any],
+    absent_payload: Callable[[], Any],
+    raw_optional_keys: tuple[str, ...],
+    metadata_optional_keys: tuple[str, ...],
+    allow_absent_validation_error: bool,
+) -> None:
+    context = AdapterContext(fake_ledger)
+    adapter = adapter_factory(context, _stub_http_client())
+    present_document = adapter.parse(present_payload())
+    absent_document = adapter.parse(absent_payload())
+    assert isinstance(present_document.raw, dict)
+    assert isinstance(absent_document.raw, dict)
+    for key in raw_optional_keys:
+        assert key in present_document.raw
+        assert present_document.raw[key] not in (None, "", [], {})
+        if key in absent_document.raw:
+            assert absent_document.raw[key] in (None, "", [], {})
+    for key in metadata_optional_keys:
+        assert key in present_document.metadata
+        assert key not in absent_document.metadata
+    adapter.validate(present_document)
+    if allow_absent_validation_error:
+        with pytest.raises(ValueError):
+            adapter.validate(absent_document)
+    else:
+        adapter.validate(absent_document)
+
+
+@pytest.mark.parametrize(
+    (
+        "adapter_factory",
+        "present_payload",
+        "absent_payload",
+        "raw_optional_keys",
+        "allow_absent_validation_error",
+    ),
+    (
+        (
+            lambda context, client: CdcSocrataAdapter(context, client),
+            cdc_socrata_record_with_identifier,
+            cdc_socrata_record_without_row_identifier,
+            (),
+            False,
+        ),
+        (
+            lambda context, client: CdcWonderAdapter(context, client),
+            cdc_wonder_xml,
+            cdc_wonder_xml_without_rows,
+            (),
+            True,
+        ),
+        (
+            lambda context, client: WhoGhoAdapter(context, client),
+            who_gho_record_with_optional_fields,
+            who_gho_record_without_optional_fields,
+            ("indicator", "country", "year"),
+            False,
+        ),
+        (
+            lambda context, client: OpenPrescribingAdapter(context, client),
+            openprescribing_record_with_row_identifier,
+            openprescribing_record_without_row_identifier,
+            (),
+            False,
+        ),
+    ),
+    ids=("cdc_socrata", "cdc_wonder", "who_gho", "openprescribing"),
+)
+def test_knowledge_base_optional_field_variants(
+    fake_ledger: Any,
+    adapter_factory: Callable[[AdapterContext, AsyncHttpClient], BaseAdapter[Any]],
+    present_payload: Callable[[], Any],
+    absent_payload: Callable[[], Any],
+    raw_optional_keys: tuple[str, ...],
+    allow_absent_validation_error: bool,
+) -> None:
+    context = AdapterContext(fake_ledger)
+    adapter = adapter_factory(context, _stub_http_client())
+    present_document = adapter.parse(present_payload())
+    absent_document = adapter.parse(absent_payload())
+    assert isinstance(present_document.raw, dict)
+    assert isinstance(absent_document.raw, dict)
+    for key in raw_optional_keys:
+        assert key in present_document.raw
+        assert present_document.raw[key] not in (None, "", [], {})
+        if key in absent_document.raw:
+            assert absent_document.raw[key] in (None, "", [], {})
+    adapter.validate(present_document)
+    if allow_absent_validation_error:
+        with pytest.raises(ValueError):
+            adapter.validate(absent_document)
+    else:
+        adapter.validate(absent_document)
+
 
 def test_literature_fallback_returns_first_success() -> None:
     document = Document(doc_id="doc-1", source="pubmed", content="text")

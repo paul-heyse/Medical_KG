@@ -33,4 +33,17 @@ class NeighborMerger:
         return merged
 
 
-__all__ = ["NeighborMerger"]
+def filter_by_relationship(
+    results: Iterable[RetrievalResult],
+    allowed_relationships: Iterable[str] | None,
+) -> List[RetrievalResult]:
+    allowed = {value.lower() for value in allowed_relationships or []}
+    filtered: List[RetrievalResult] = []
+    for result in results:
+        relationship = str(result.metadata.get("relationship", "")).lower()
+        if not allowed or not relationship or relationship in allowed:
+            filtered.append(result)
+    return filtered
+
+
+__all__ = ["NeighborMerger", "filter_by_relationship"]

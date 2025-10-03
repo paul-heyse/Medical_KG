@@ -2,10 +2,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from .api_models import (
+    CoverageRequest,
+    DossierRequest,
+    EvidenceMapRequest,
+    InterviewKitRequest,
+    QARequest,
+    QAResponse,
+    TopicOnlyRequest,
+)
 from .models import Topic
 from .repository import BriefingRepository, InMemoryBriefingRepository
 from .service import BriefingService
@@ -21,7 +30,9 @@ def _get_dependencies() -> _Dependencies:
     return _Dependencies(repository=InMemoryBriefingRepository())
 
 
-def _get_service(deps: _Dependencies = Depends(_get_dependencies)) -> BriefingService:
+def _get_service(
+    deps: Annotated[_Dependencies, Depends(_get_dependencies)]
+) -> BriefingService:
     return BriefingService(deps.repository)
 
 
@@ -29,24 +40,31 @@ router = APIRouter(prefix="/briefing", tags=["briefing"])
 
 
 @router.post("/dossier")
-async def create_dossier(request: dict[str, Any], service: BriefingService = Depends(_get_service)) -> dict[str, Any]:
+async def create_dossier(
+    request: DossierRequest,
+    service: Annotated[BriefingService, Depends(_get_service)],
+) -> dict[str, object]:
+    topic = Topic(
+        condition=request.topic.condition,
+        intervention=request.topic.intervention,
+        outcome=request.topic.outcome,
+    )
     try:
-        topic = _parse_topic(request)
-    except KeyError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    format = request.get("format")
-    try:
-        return service.dossier(topic, format=format)
+        return service.dossier(topic, format=request.format)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.post("/evidence-map")
-async def create_evidence_map(request: dict[str, Any], service: BriefingService = Depends(_get_service)) -> dict[str, Any]:
-    try:
-        topic = _parse_topic(request)
-    except KeyError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+async def create_evidence_map(
+    request: EvidenceMapRequest,
+    service: Annotated[BriefingService, Depends(_get_service)],
+) -> dict[str, object]:
+    topic = Topic(
+        condition=request.topic.condition,
+        intervention=request.topic.intervention,
+        outcome=request.topic.outcome,
+    )
     try:
         return service.evidence_map(topic)
     except KeyError as exc:
@@ -54,11 +72,15 @@ async def create_evidence_map(request: dict[str, Any], service: BriefingService 
 
 
 @router.post("/interview-kit")
-async def create_interview_kit(request: dict[str, Any], service: BriefingService = Depends(_get_service)) -> dict[str, Any]:
-    try:
-        topic = _parse_topic(request)
-    except KeyError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+async def create_interview_kit(
+    request: InterviewKitRequest,
+    service: Annotated[BriefingService, Depends(_get_service)],
+) -> dict[str, object]:
+    topic = Topic(
+        condition=request.topic.condition,
+        intervention=request.topic.intervention,
+        outcome=request.topic.outcome,
+    )
     try:
         return service.interview_kit(topic)
     except KeyError as exc:
@@ -66,11 +88,15 @@ async def create_interview_kit(request: dict[str, Any], service: BriefingService
 
 
 @router.post("/coverage")
-async def create_coverage(request: dict[str, Any], service: BriefingService = Depends(_get_service)) -> dict[str, Any]:
-    try:
-        topic = _parse_topic(request)
-    except KeyError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+async def create_coverage(
+    request: CoverageRequest,
+    service: Annotated[BriefingService, Depends(_get_service)],
+) -> dict[str, object]:
+    topic = Topic(
+        condition=request.topic.condition,
+        intervention=request.topic.intervention,
+        outcome=request.topic.outcome,
+    )
     try:
         return service.coverage(topic)
     except KeyError as exc:
@@ -78,37 +104,26 @@ async def create_coverage(request: dict[str, Any], service: BriefingService = De
 
 
 @router.post("/qa")
-async def real_time_qa(request: dict[str, Any], service: BriefingService = Depends(_get_service)) -> dict[str, Any]:
+async def real_time_qa(
+    request: QARequest,
+    service: Annotated[BriefingService, Depends(_get_service)],
+) -> QAResponse:
+    topic = Topic(
+        condition=request.topic.condition,
+        intervention=request.topic.intervention,
+        outcome=request.topic.outcome,
+    )
     try:
-        topic = _parse_topic(request)
-    except KeyError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    query = request.get("query")
-    if not isinstance(query, str) or not query.strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="query is required")
-    try:
-        result = service.qa(topic, query)
+        result = service.qa(topic, request.query)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return {
-        "answer": result.answer,
-        "intent": result.intent,
-        "evidence": list(result.evidence),
-        "conflicts": list(result.conflicts),
-        "gaps": list(result.gaps),
-    }
-
-
-def _parse_topic(request: dict[str, Any]) -> Topic:
-    topic = request.get("topic")
-    if not isinstance(topic, dict):
-        raise KeyError("topic is required")
-    condition = topic.get("condition")
-    intervention = topic.get("intervention")
-    outcome = topic.get("outcome")
-    if not all(isinstance(value, str) and value for value in (condition, intervention, outcome)):
-        raise KeyError("topic requires condition/intervention/outcome")
-    return Topic(condition=condition, intervention=intervention, outcome=outcome)
+    return QAResponse(
+        answer=result.answer,
+        intent=result.intent,
+        evidence=list(result.evidence),
+        conflicts=list(result.conflicts),
+        gaps=list(result.gaps),
+    )
 
 
 __all__ = ["router"]

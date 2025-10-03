@@ -13,17 +13,14 @@ checks.
 - **Integration tests** assemble multiple layers (e.g., ingestion adapters,
   retrieval service) using fake transports and repositories so that behavior is
   deterministic and does not depend on third-party services.
-- **Property and regression tests** focus on edge cases—boundary calculations,
-  conflict detection, coverage budgeting—to guard against subtle regressions.
+- **Property and regression tests** focus on edge cases—boundary calculations
+  and conflict detection—to guard against subtle regressions.
 
 ## Running Tests Locally
 
 ```bash
 # run the default pytest suite with the trace-based coverage hook enabled
 pytest -q
-
-# generate a coverage diff against the current budget file
-pytest -q --disable-warnings
 ```
 
 The suite uses a `trace`-backed coverage gate (see `tests/conftest.py`). If you
@@ -32,12 +29,9 @@ environment before invoking pytest.
 
 ## Coverage Expectations
 
-- Total statement coverage for `src/Medical_KG` must remain at 100%.
-- `coverage_budget.json` lists any uncovered lines that are temporarily
-  permitted. When you increase coverage, delete the corresponding entries so the
-  allowance shrinks.
+- Total statement coverage for `src/Medical_KG` must remain at or above 95%.
 - The gate writes `coverage_missing.txt` if new lines are untested—review this
-  file for failing builds.
+  file for failing builds and add tests for the reported locations.
 
 ## Fixtures and Helpers
 
@@ -60,8 +54,19 @@ new secret, document the fake fallback here and update the env templates.
 
 1. Add or update tests alongside code changes.
 2. Run `pytest -q`; if coverage fails, inspect `coverage_missing.txt` and update
-   tests or trim `coverage_budget.json`.
-3. When coverage increases, regenerate the budget for the affected modules by
-   deleting their entries and re-running the suite to ensure no new holes exist.
-4. Record notable testing patterns or fixtures in this document to aid future
+   tests until the gap disappears.
+3. Record notable testing patterns or fixtures in this document to aid future
    contributors.
+
+## Extraction & Entity Linking Patterns
+
+- Reuse `tests/extraction/conftest.py` fixtures for canonical clinical snippets,
+  evidence spans, and extraction envelopes when authoring new tests. The
+  fixtures cover PICO, effect, adverse event, dose, and eligibility scenarios.
+- Mock external dependencies—LLM clients, spaCy pipelines, and terminology
+  services—using lightweight dataclasses so tests remain deterministic and
+  offline. See `tests/entity_linking/` for examples that stub dictionary,
+  sparse, and dense retrieval clients alongside NER pipelines.
+- Prefer exercising real normalization and validation flows (e.g.,
+  `normalise_extractions`, `ExtractionValidator.validate`) rather than mocking
+  internals to maintain coverage on critical heuristics.

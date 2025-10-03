@@ -18,13 +18,14 @@ from Medical_KG.compat.httpx import (
 )
 from Medical_KG.compat.prometheus import Counter, Histogram
 
+HTTPX: HttpxModule = get_httpx_module()
 
-HTTP_REQUESTS = Counter(
+HTTP_REQUESTS: CounterProtocol = build_counter(
     "ingest_http_requests_total",
     "Number of HTTP requests made by the ingestion system",
     labelnames=("method", "host", "status"),
 )
-HTTP_LATENCY = Histogram(
+HTTP_LATENCY: HistogramProtocol = build_histogram(
     "ingest_http_request_duration_seconds",
     "Latency of HTTP requests made by the ingestion system",
     buckets=(0.1, 0.3, 0.6, 1.0, 2.0, 5.0, 10.0),

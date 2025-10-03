@@ -39,6 +39,7 @@
         }
       }
     },
+    "created_at": {"type": "string"},
     "provenance": {"type": "object"}
   },
   "additionalProperties": false

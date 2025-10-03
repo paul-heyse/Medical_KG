@@ -11,6 +11,7 @@ from typing import Callable, List, Sequence
 
 from Medical_KG.compat import ClientProtocol, create_client
 
+HTTPX: HttpxModule = get_httpx_module()
 
 @dataclass(slots=True)
 class QwenEmbeddingClient:

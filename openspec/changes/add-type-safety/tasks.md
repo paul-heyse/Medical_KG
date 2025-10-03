@@ -1,9 +1,9 @@
 # Implementation Tasks
 
 ## 1. Suppression Audit
-- [ ] 1.1 Enumerate all `# type: ignore` comments and justify or remove
-- [ ] 1.2 Inspect pyproject mypy config (exclude, ignore_missing_imports)
-- [ ] 1.3 Document modules relying on untyped third-party packages
+- [x] 1.1 Enumerate all `# type: ignore` comments and justify or remove
+- [x] 1.2 Inspect pyproject mypy config (exclude, ignore_missing_imports)
+- [x] 1.3 Document modules relying on untyped third-party packages
 
 ## 2. Core Library Typing
 - [ ] 2.1 Annotate config manager, ingestion adapters, CLI, briefing, KG writer

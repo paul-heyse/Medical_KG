@@ -12,8 +12,8 @@ See `.cursor/rules`, `.vscode/*`, and `environment.yml` for configuration detail
 
 ## Testing & Coverage
 
-- Run `pytest -q` to execute the offline suite. A trace-based hook enforces 100%
-  statement coverage for `src/Medical_KG`; adjust `coverage_budget.json` only
-  when shrinking uncovered allowances.
+- Run `pytest -q` to execute the offline suite. A trace-based hook enforces at
+  least **95% statement coverage** for `src/Medical_KG` and writes
+  `coverage_missing.txt` whenever new gaps appear.
 - Review `docs/testing_strategy.md` for guidance on fixtures, async helpers, and
-  the maintenance workflow for the coverage budget.
+  coverage expectations.

@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from typing import Iterable, Mapping
+from typing import Annotated, Iterable, Mapping
 
-from fastapi import Depends, HTTPException, Header, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from Medical_KG.api.types import DependencyCallable
 
 @dataclass(frozen=True)
 class Principal:
@@ -48,7 +49,7 @@ class Authenticator:
             scopes = frozenset({"retrieve:read", "facets:write", "extract:write"})
         return Principal(subject=f"bearer:{token_hash[:8]}", scopes=scopes)
 
-    def dependency(self, scope: str | None = None):
+    def dependency(self, scope: str | None = None) -> DependencyCallable[Principal]:
         async def _dependency(
             credentials: HTTPAuthorizationCredentials | None = Depends(self._bearer),
             api_key: str | None = Header(default=None, alias="X-API-Key"),

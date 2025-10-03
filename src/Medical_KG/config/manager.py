@@ -1,4 +1,5 @@
-"""Configuration loading, validation, and hot-reload support."""
+"""Configuration loader and validator with strict typing support."""
+
 from __future__ import annotations
 
 import base64
@@ -7,6 +8,7 @@ import hmac
 import json
 import os
 import re
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,7 +44,7 @@ class ConfigVersion:
     hash: str
 
     @classmethod
-    def from_payload(cls, payload: Mapping[str, Any]) -> "ConfigVersion":
+    def from_payload(cls, payload: JSONMapping) -> "ConfigVersion":
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         version = f"{datetime.now(timezone.utc).isoformat()}+{digest[:12]}"
@@ -52,10 +54,10 @@ class ConfigVersion:
 class SecretResolver:
     """Resolves ${VAR} placeholders using environment variables or provided mapping."""
 
-    def __init__(self, env: Optional[Mapping[str, str]] = None):
+    def __init__(self, env: Mapping[str, str] | None = None):
         self._env = dict(env or os.environ)
 
-    def resolve(self, key: str, default: Optional[str] = None) -> str:
+    def resolve(self, key: str, default: str | None = None) -> str:
         if key in self._env:
             return self._env[key]
         if default is not None:
@@ -71,9 +73,9 @@ class ConfigValidator:
             self._schema = json.load(handle)
         self._definitions = self._schema.get("definitions", {})
 
-    def validate(self, payload: Mapping[str, Any]) -> None:
+    def validate(self, payload: JSONMapping) -> None:
         errors: list[str] = []
-        self._validate_schema(payload, self._schema, [], errors)
+        self._validate_schema(dict(payload), self._schema, [], errors)
         if errors:
             raise ConfigError("; ".join(errors))
 
@@ -83,12 +85,12 @@ class ConfigValidator:
             if not ref.startswith("#/definitions/"):
                 raise ConfigError(f"Unsupported $ref: {ref}")
             key = ref.split("/")[-1]
-            return self._definitions[key]
+            return cast(Mapping[str, Any], self._definitions[key])
         return schema
 
     def _validate_schema(
         self,
-        value: Any,
+        value: JSONValue,
         schema: Mapping[str, Any],
         path: list[str],
         errors: list[str],
@@ -144,7 +146,6 @@ class ConfigValidator:
             if not isinstance(value, bool):
                 errors.append(self._format_path(path, "expected boolean"))
         else:
-            # fallback: still walk subschemas if present
             if isinstance(value, MutableMapping) and "properties" in schema:
                 self._validate_schema(value, {"type": "object", **schema}, path, errors)
 
@@ -168,9 +169,9 @@ class ConfigManager:
 
     def __init__(
         self,
-        base_path: Optional[Path] = None,
-        env: Optional[str] = None,
-        secret_resolver: Optional[SecretResolver] = None,
+        base_path: Path | None = None,
+        env: str | None = None,
+        secret_resolver: SecretResolver | None = None,
     ) -> None:
         self.base_path = base_path or Path(__file__).resolve().parent
         env_value = env if env is not None else os.getenv("CONFIG_ENV", "dev")
@@ -194,8 +195,11 @@ class ConfigManager:
         policy_path = self.base_path / "policy.yaml"
         with policy_path.open("r", encoding="utf-8") as handle:
             policy_data = yaml.safe_load(handle) or {}
+        if not isinstance(policy_data, MutableMapping):
+            raise ConfigError("policy.yaml must contain a mapping at the root")
         try:
-            return PolicyDocument.from_dict(policy_data)
+            normalized = dict(cast(MutableJSONMapping, policy_data))
+            return PolicyDocument.from_dict(normalized)
         except ValueError as exc:
             raise ConfigError(f"policy.yaml invalid: {exc}") from exc
 
@@ -220,50 +224,50 @@ class ConfigManager:
         self._version = version
         self._emit_metrics()
 
-    def raw_payload(self) -> Dict[str, Any]:
+    def raw_payload(self) -> JSONObject:
         """Return the merged configuration payload prior to validation."""
         return self._load_configuration_payload()
 
-    def _load_configuration_payload(self) -> Dict[str, Any]:
-        payload: Dict[str, Any] = self._load_yaml(self.base_path / "config.yaml")
+    def _load_configuration_payload(self) -> JSONObject:
+        payload = self._load_yaml(self.base_path / "config.yaml")
         env_specific = self.base_path / f"config-{self.env}.yaml"
         if env_specific.exists():
             payload = self._deep_merge(payload, self._load_yaml(env_specific))
         override_path = self.base_path / "config-override.yaml"
         if override_path.exists():
             payload = self._deep_merge(payload, self._load_yaml(override_path))
-        payload = self._apply_env_overrides(payload)
-        return payload
+        return self._apply_env_overrides(payload)
 
-    def _load_yaml(self, path: Path) -> Dict[str, Any]:
+    def _load_yaml(self, path: Path) -> JSONObject:
         with path.open("r", encoding="utf-8") as handle:
             data = yaml.safe_load(handle) or {}
         if not isinstance(data, MutableMapping):
             raise ConfigError(f"{path.name} must contain a mapping at the root")
-        return dict(data)
+        return dict(cast(MutableJSONMapping, data))
 
     def _deep_merge(
-        self, base: MutableMapping[str, Any], overlay: Mapping[str, Any]
-    ) -> Dict[str, Any]:
-        result: Dict[str, Any] = dict(base)
+        self, base: MutableJSONMapping, overlay: JSONMapping
+    ) -> JSONObject:
+        result: JSONObject = dict(base)
         for key, value in overlay.items():
             if (
                 key in result
                 and isinstance(result[key], MutableMapping)
                 and isinstance(value, Mapping)
             ):
-                result[key] = self._deep_merge(result[key], value)
+                result[key] = self._deep_merge(
+                    cast(MutableJSONMapping, result[key]), value
+                )
             else:
                 result[key] = value
         return result
 
-    def _apply_env_overrides(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        result = dict(payload)
-        # handle explicit mappings
+    def _apply_env_overrides(self, payload: JSONObject) -> JSONObject:
+        result: JSONObject = dict(payload)
         for env_name, dotted_path in ENV_SIMPLE_PATHS.items():
             if env_name in os.environ:
-                self._set_dotted_key(result, dotted_path, self._parse_env_value(os.environ[env_name]))
-        # handle MEDCFG__ style overrides
+                parsed = self._parse_env_value(os.environ[env_name])
+                self._set_dotted_key(result, dotted_path, parsed)
         for env_name, value in os.environ.items():
             if not env_name.startswith("MEDCFG__"):
                 continue
@@ -271,14 +275,17 @@ class ConfigManager:
             self._set_dotted_key(result, dotted, self._parse_env_value(value))
         return result
 
-    def _parse_env_value(self, raw: str) -> Any:
+    def _parse_env_value(self, raw: str) -> JSONValue:
         raw = raw.strip()
-        if raw.lower() in {"true", "false"}:
-            return raw.lower() == "true"
+        lowered = raw.lower()
+        if lowered in {"true", "false"}:
+            return lowered == "true"
         try:
-            return json.loads(raw)
+            loaded = json.loads(raw)
         except json.JSONDecodeError:
-            pass
+            loaded = None
+        else:
+            return cast(JSONValue, loaded)
         try:
             if "." in raw:
                 return float(raw)
@@ -286,9 +293,11 @@ class ConfigManager:
         except ValueError:
             return raw
 
-    def _set_dotted_key(self, payload: Dict[str, Any], dotted_path: str, value: Any) -> None:
+    def _set_dotted_key(
+        self, payload: MutableJSONMapping, dotted_path: str, value: JSONValue
+    ) -> None:
         parts = dotted_path.split(".")
-        cursor: MutableMapping[str, Any] = payload
+        cursor: MutableJSONMapping = payload
         for part in parts[:-1]:
             next_value = cursor.get(part)
             if not isinstance(next_value, MutableMapping):
@@ -297,8 +306,8 @@ class ConfigManager:
             cursor = cast(MutableMapping[str, Any], next_value)
         cursor[parts[-1]] = value
 
-    def _resolve_placeholders(self, payload: Mapping[str, Any]) -> Dict[str, Any]:
-        def _resolve(value: Any) -> Any:
+    def _resolve_placeholders(self, payload: JSONMapping) -> JSONObject:
+        def _resolve(value: JSONValue) -> JSONValue:
             if isinstance(value, str):
                 return self._resolve_string(value)
             if isinstance(value, Mapping):
@@ -319,9 +328,10 @@ class ConfigManager:
 
     def _validate_licensing(self, config: Config) -> None:
         for vocab_name, vocab_config in config.catalog_vocabs().items():
+            vocab_mapping = vocab_config if isinstance(vocab_config, Mapping) else {}
             policy_entry = self.policy.vocabs.get(vocab_name.upper())
-            requires_license = bool(vocab_config.get("requires_license"))
-            enabled = bool(vocab_config.get("enabled"))
+            requires_license = bool(vocab_mapping.get("requires_license"))
+            enabled = bool(vocab_mapping.get("enabled"))
             if (
                 enabled
                 and requires_license
@@ -338,29 +348,29 @@ class ConfigManager:
         for name, enabled in self._config.feature_flags().items():
             FEATURE_FLAG.labels(name=name).set(1 if enabled else 0)
 
-    def validate_jwt(self, token: str) -> Mapping[str, Any]:
+    def validate_jwt(self, token: str) -> Mapping[str, JSONValue]:
         secret = self._config.auth_secret()
         claims = self._decode_jwt(token, secret)
         issuer = claims.get("iss")
         audience = claims.get("aud")
-        expected = self._config.auth_settings()
-        if issuer != expected["issuer"]:
+        expected: AuthSettings = self._config.auth_settings()
+        if issuer != expected.issuer:
             raise ConfigError("Invalid token issuer")
-        if audience != expected["audience"]:
+        if audience != expected.audience:
             raise ConfigError("Invalid token audience")
         scope_field = claims.get("scope") or claims.get("scopes")
         scopes: set[str]
         if isinstance(scope_field, str):
             scopes = set(scope_field.split())
         elif isinstance(scope_field, list):
-            scopes = set(scope_field)
+            scopes = {str(item) for item in scope_field}
         else:
             scopes = set()
-        if expected["admin_scope"] not in scopes:
+        if expected.admin_scope not in scopes:
             raise ConfigError("Admin scope missing from token")
-        return claims
+        return cast(Mapping[str, JSONValue], claims)
 
-    def _decode_jwt(self, token: str, secret: str) -> Dict[str, Any]:
+    def _decode_jwt(self, token: str, secret: str) -> JSONObject:
         try:
             header_b64, payload_b64, signature_b64 = token.split(".")
         except ValueError as exc:  # pragma: no cover - defensive
@@ -375,13 +385,15 @@ class ConfigManager:
         if header.get("alg") != "HS256":
             raise ConfigError("Unsupported JWT algorithm")
         payload = json.loads(_b64url_decode(payload_b64))
-        return payload
+        if not isinstance(payload, MutableMapping):
+            raise ConfigError("JWT payload must be an object")
+        return cast(JSONObject, payload)
 
 
-def mask_secrets(data: Mapping[str, Any]) -> Dict[str, Any]:
+def mask_secrets(data: JSONMapping) -> JSONObject:
     """Return a deep copy of *data* with secret fields masked."""
 
-    def _mask(value: Any, key: Optional[str] = None) -> Any:
+    def _mask(value: JSONValue, key: str | None = None) -> JSONValue:
         if isinstance(value, Mapping):
             return {child_key: _mask(child_val, child_key) for child_key, child_val in value.items()}
         if isinstance(value, list):

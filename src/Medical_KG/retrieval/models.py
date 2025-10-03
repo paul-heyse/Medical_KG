@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional
+from typing import Any, Mapping
 
 
 @dataclass(slots=True)
@@ -20,8 +20,8 @@ class RetrieverScores:
     fused: float | None = None
     rerank: float | None = None
 
-    def as_dict(self) -> Dict[str, float]:
-        payload: Dict[str, float] = {}
+    def as_dict(self) -> dict[str, float]:
+        payload: dict[str, float] = {}
         if self.bm25 is not None:
             payload["bm25"] = self.bm25
         if self.splade is not None:
@@ -83,8 +83,8 @@ class RetrievalRequest:
 
 @dataclass(slots=True)
 class RetrievalResponse:
-    results: List[RetrievalResult]
-    timings: List[RetrieverTiming]
+    results: list[RetrievalResult]
+    timings: list[RetrieverTiming]
     expanded_terms: Mapping[str, float]
     intent: str
     latency_ms: float
@@ -114,17 +114,17 @@ class RetrieverContext:
     multi_granularity: Mapping[str, Any]
 
 
-def merge_metadata(*items: Mapping[str, Any]) -> Dict[str, Any]:
-    merged: Dict[str, Any] = {}
+def merge_metadata(*items: Mapping[str, Any]) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
     for item in items:
         merged.update({k: v for k, v in item.items() if v is not None})
     return merged
 
 
-def normalize_filters(filters: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+def normalize_filters(filters: Mapping[str, Any] | None) -> dict[str, Any]:
     if not filters:
         return {}
-    normalized: Dict[str, Any] = {}
+    normalized: dict[str, Any] = {}
     for key, value in filters.items():
         if value is None:
             continue

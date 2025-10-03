@@ -5,7 +5,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from .caching import TTLCache
 from .clients import EmbeddingClient, OpenSearchClient, Reranker, SpladeEncoder, VectorSearchClient
@@ -113,7 +113,7 @@ class RetrievalService:
         index: str,
         expanded_terms: Mapping[str, float],
         granularity: str = "chunk",
-    ) -> List[RetrievalResult]:
+    ) -> list[RetrievalResult]:
         boosts = context.boosts or {}
         expanded_text = " ".join(expanded_terms.keys()) if expanded_terms else ""
         lexical_query = f"{query} {expanded_text}".strip()
@@ -127,7 +127,7 @@ class RetrievalService:
             ],
             "type": "best_fields",
         }
-        body: Dict[str, Any] = {"query": {"bool": {"must": [{"multi_match": multi_match}]}}}
+        body: dict[str, Any] = {"query": {"bool": {"must": [{"multi_match": multi_match}]}}}
         filters = [
             {"terms": {field: value}}
             for field, value in context.filters.items()
@@ -139,24 +139,34 @@ class RetrievalService:
         if filters:
             body["query"]["bool"]["filter"] = filters
         hits = self._os.search(index=index, body=body, size=context.top_k)
-        results = []
+        results: list[RetrievalResult] = []
         for hit in hits:
+            chunk_id = hit.get("chunk_id")
+            doc_id = hit.get("doc_id")
+            if not isinstance(chunk_id, str) or not isinstance(doc_id, str):
+                continue
+            text = str(hit.get("text", ""))
+            title_path = hit.get("title_path") if isinstance(hit.get("title_path"), str) else None
+            section = hit.get("section") if isinstance(hit.get("section"), str) else None
+            metadata_raw = hit.get("metadata", {})
+            metadata = metadata_raw if isinstance(metadata_raw, Mapping) else {}
+            score = float(hit.get("score", 0.0))
             result = RetrievalResult(
-                chunk_id=hit.get("chunk_id"),
-                doc_id=hit.get("doc_id"),
-                text=hit.get("text", ""),
-                title_path=hit.get("title_path"),
-                section=hit.get("section"),
-                score=float(hit.get("score", 0.0)),
-                scores=RetrieverScores(bm25=float(hit.get("score", 0.0))),
-                start=hit.get("start"),
-                end=hit.get("end"),
-                metadata=merge_metadata(hit.get("metadata", {}), {"granularity": granularity}),
+                chunk_id=chunk_id,
+                doc_id=doc_id,
+                text=text,
+                title_path=title_path,
+                section=section,
+                score=score,
+                scores=RetrieverScores(bm25=score),
+                start=hit.get("start") if isinstance(hit.get("start"), int) else None,
+                end=hit.get("end") if isinstance(hit.get("end"), int) else None,
+                metadata=merge_metadata(metadata, {"granularity": granularity}),
             )
             results.append(result)
         return results
 
-    def _splade(self, query: str, context: RetrieverContext) -> List[RetrievalResult]:
+    def _splade(self, query: str, context: RetrieverContext) -> list[RetrievalResult]:
         expanded = self._splade_encoder.expand(query)
         should = []
         for term, weight in expanded.items():
@@ -165,42 +175,53 @@ class RetrievalService:
             return []
         body = {"query": {"bool": {"should": should, "minimum_should_match": 1}}}
         hits = self._os.search(index=self._config.splade_index, body=body, size=context.top_k)
-        results = []
+        results: list[RetrievalResult] = []
         for hit in hits:
+            chunk_id = hit.get("chunk_id")
+            doc_id = hit.get("doc_id")
+            if not isinstance(chunk_id, str) or not isinstance(doc_id, str):
+                continue
             score = float(hit.get("score", 0.0))
+            metadata_raw = hit.get("metadata", {})
+            metadata = metadata_raw if isinstance(metadata_raw, Mapping) else {}
             result = RetrievalResult(
-                chunk_id=hit.get("chunk_id"),
-                doc_id=hit.get("doc_id"),
-                text=hit.get("text", ""),
-                title_path=hit.get("title_path"),
-                section=hit.get("section"),
+                chunk_id=chunk_id,
+                doc_id=doc_id,
+                text=str(hit.get("text", "")),
+                title_path=hit.get("title_path") if isinstance(hit.get("title_path"), str) else None,
+                section=hit.get("section") if isinstance(hit.get("section"), str) else None,
                 score=score,
                 scores=RetrieverScores(splade=score),
-                start=hit.get("start"),
-                end=hit.get("end"),
-                metadata=hit.get("metadata", {}),
+                start=hit.get("start") if isinstance(hit.get("start"), int) else None,
+                end=hit.get("end") if isinstance(hit.get("end"), int) else None,
+                metadata=metadata,
             )
             results.append(result)
         return results
 
-    def _dense(self, query: str, context: RetrieverContext) -> List[RetrievalResult]:
+    def _dense(self, query: str, context: RetrieverContext) -> list[RetrievalResult]:
         embedding = self._embed(query)
         hits = self._vector.query(index=self._config.dense_index, embedding=embedding, top_k=context.top_k)
-        results: List[RetrievalResult] = []
+        results: list[RetrievalResult] = []
         for hit in hits:
+            chunk_id = hit.get("chunk_id")
+            doc_id = hit.get("doc_id")
+            if not isinstance(chunk_id, str) or not isinstance(doc_id, str):
+                continue
             score = float(hit.get("score", 0.0))
-            metadata = dict(hit.get("metadata", {}))
+            metadata_raw = hit.get("metadata", {})
+            metadata = dict(metadata_raw) if isinstance(metadata_raw, Mapping) else {}
             metadata.setdefault("cosine", score)
             result = RetrievalResult(
-                chunk_id=hit.get("chunk_id"),
-                doc_id=hit.get("doc_id"),
-                text=hit.get("text", ""),
-                title_path=hit.get("title_path"),
-                section=hit.get("section"),
+                chunk_id=chunk_id,
+                doc_id=doc_id,
+                text=str(hit.get("text", "")),
+                title_path=hit.get("title_path") if isinstance(hit.get("title_path"), str) else None,
+                section=hit.get("section") if isinstance(hit.get("section"), str) else None,
                 score=score,
                 scores=RetrieverScores(dense=score),
-                start=hit.get("start"),
-                end=hit.get("end"),
+                start=hit.get("start") if isinstance(hit.get("start"), int) else None,
+                end=hit.get("end") if isinstance(hit.get("end"), int) else None,
                 metadata=metadata,
             )
             results.append(result)

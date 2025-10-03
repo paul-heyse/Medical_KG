@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Mapping
+from typing import Dict, Iterable, Mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +22,7 @@ class ProvenanceStore:
     def __init__(self) -> None:
         self._activities: Dict[str, ExtractionActivity] = {}
         self._links: Dict[str, str] = {}
+        self._derivations: Dict[str, set[str]] = {}
 
     def register_activity(self, activity: ExtractionActivity) -> None:
         self._activities[activity.activity_id] = activity
@@ -49,6 +50,52 @@ class ProvenanceStore:
                 for assertion_id, activity_id in self._links.items()
             )
         }
+
+    def trace_lineage(self, assertion_id: str) -> list[str]:
+        lineage: list[str] = [assertion_id]
+        visited = set(lineage)
+        queue = [assertion_id]
+        while queue:
+            current = queue.pop()
+            parents = self._derivations.get(current, set())
+            for parent in parents:
+                if parent not in visited:
+                    lineage.append(parent)
+                    visited.add(parent)
+                    queue.append(parent)
+        return lineage
+
+    def record_derivation(self, child_id: str, parent_id: str) -> None:
+        bucket = self._derivations.setdefault(child_id, set())
+        bucket.add(parent_id)
+
+    def prov_o(self) -> Mapping[str, object]:
+        entities = {assertion: {"prov:wasGeneratedBy": link} for assertion, link in self._links.items()}
+        activities = {
+            activity_id: {
+                "prov:type": "Extraction",
+                "prov:startedAtTime": activity.timestamp.isoformat(),
+                "prov:usedModel": activity.model,
+            }
+            for activity_id, activity in self._activities.items()
+        }
+        derivations = [
+            {"prov:generatedEntity": child, "prov:usedEntity": parent}
+            for child, parents in self._derivations.items()
+            for parent in parents
+        ]
+        return {
+            "@context": {"prov": "http://www.w3.org/ns/prov#"},
+            "entity": entities,
+            "activity": activities,
+            "wasDerivedFrom": derivations,
+        }
+
+    def as_graph(self) -> Mapping[str, Iterable[str]]:
+        graph: Dict[str, set[str]] = {}
+        for child, parents in self._derivations.items():
+            graph.setdefault(child, set()).update(parents)
+        return {node: tuple(sorted(parents)) for node, parents in graph.items()}
 
 
 __all__ = ["ExtractionActivity", "ProvenanceStore"]

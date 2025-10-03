@@ -1,6 +1,7 @@
 """NER helpers bridging optional scispaCy dependency."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -16,6 +17,8 @@ class Mention:
 
 
 class NerPipeline:
+    """Thin wrapper around spaCy pipelines with typed fallbacks."""
+
     def __init__(self, model: str = "en_core_sci_sm") -> None:
         try:
             self._nlp: PipelineProtocol | None = load_pipeline(model)

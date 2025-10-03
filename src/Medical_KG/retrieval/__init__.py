@@ -1,6 +1,8 @@
 """Retrieval orchestration package."""
 from __future__ import annotations
 
+from typing import Any
+
 from .service import RetrievalService, RetrieverConfig
 from .intent import IntentClassifier, IntentRule
 from .ontology import OntologyExpander, OntologyTerm, ConceptCatalogClient
@@ -22,8 +24,8 @@ try:  # pragma: no cover - optional FastAPI dependency
     from .api import create_router
 except ModuleNotFoundError:  # pragma: no cover
 
-    def create_router(service: RetrievalService):
-        return service.create_router()
+    def create_router(service: RetrievalService) -> Any:  # pragma: no cover - fallback
+        raise RuntimeError("FastAPI integration is unavailable: fastapi not installed")
 
 __all__ = [
     "create_router",

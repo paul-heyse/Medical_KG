@@ -59,8 +59,8 @@ def parse_temporal_constraint(text: str) -> dict[str, float] | None:
         return None
     value = float(match.group("value"))
     unit = match.group("unit").lower()
-    unit_days = {"day": 1, "week": 7, "month": 30, "year": 365}
-    return {"op": "<=", "days": value * unit_days.get(unit, 1)}
+    unit_days: dict[str, float] = {"day": 1.0, "week": 7.0, "month": 30.0, "year": 365.0}
+    return {"op": "<=", "days": value * unit_days.get(unit, 1.0)}
 
 
 def parse_lab_threshold(text: str) -> dict[str, str | float] | None:

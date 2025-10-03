@@ -20,3 +20,11 @@ repos:
     hooks:
       - id: mypy
         exclude: ^ops/
+      - id: mypy
+        name: mypy (core services)
+        args:
+          - --strict
+          - src/Medical_KG/config
+          - src/Medical_KG/utils/optional_dependencies.py
+          - src/Medical_KG/cli.py
+        pass_filenames: false

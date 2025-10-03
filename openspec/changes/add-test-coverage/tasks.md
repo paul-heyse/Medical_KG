@@ -2,7 +2,7 @@
 
 ## 1. Test Suite Stabilization
 - [ ] 1.1 Export missing test utilities (e.g., InMemoryBriefingRepository)
-- [ ] 1.2 Bundle schema references locally to avoid external fetches
+- [x] 1.2 Bundle schema references locally to avoid external fetches
 - [ ] 1.3 Mock external dependencies (NCBI, Kafka, OpenSearch, GPUs)
 - [ ] 1.4 Fix flaky assertions & nondeterministic randomness
 - [ ] 1.5 Document required secrets and provide defaults for tests
@@ -14,7 +14,7 @@
 
 ## 3. Unit & Integration Tests
 - [x] 3.1 Briefing service & formatters edge cases
-- [ ] 3.2 IR builder/validator schema validations
+- [x] 3.2 IR builder/validator schema validations
 - [ ] 3.3 Ingestion adapters (clinical, guidelines, literature, terminology)
 - [ ] 3.4 Retrieval service (auth, caching, ranking fallbacks)
 - [ ] 3.5 Security modules (license enforcement, retention policies)

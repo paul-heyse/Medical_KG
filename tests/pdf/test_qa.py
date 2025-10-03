@@ -40,3 +40,20 @@ def test_qa_gates_rejects_poor_ocr_and_tables() -> None:
 
     with pytest.raises(QaGateError):
         gates.evaluate(blocks=blocks, confidences=[0.2, 0.3], tables=tables)
+
+
+def test_qa_gates_page_and_language_checks() -> None:
+    gates = QaGates(min_pages=2, max_pages=5, allowed_languages=("en",))
+    blocks = [
+        TextBlock(page=1, y=100, text="Introduction"),
+        TextBlock(page=2, y=150, text="Conclusion"),
+    ]
+
+    metrics = gates.evaluate(blocks=blocks, confidences=[1.0], tables=[], page_count=2)
+    assert metrics.table_count == 0
+
+    with pytest.raises(QaGateError):
+        gates.evaluate(blocks=blocks[:1], confidences=[1.0], tables=[], page_count=1)
+
+    with pytest.raises(QaGateError):
+        gates.evaluate(blocks=blocks, confidences=[1.0], tables=[], language="non-en")

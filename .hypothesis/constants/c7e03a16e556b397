@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/observability/__init__.py
+# hypothesis_version: 6.140.2
+
+['configure_logging', 'setup_tracing']

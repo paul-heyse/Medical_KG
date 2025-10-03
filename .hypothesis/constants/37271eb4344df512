@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/chunking/indexing.py
+# hypothesis_version: 6.140.2
+
+[0.0, 0.25, 0.3, 1.0, 512, 'ChunkIndexer', 'IndexedChunk', 'chunk', 'paragraph', 'section']

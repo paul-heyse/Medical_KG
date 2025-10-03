@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/briefing/citation.py
+# hypothesis_version: 6.140.2
+
+['CitationError', 'CitationManager', 'citation_count', 'doc_id']

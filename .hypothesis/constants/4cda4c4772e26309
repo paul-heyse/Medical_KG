@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/briefing/__init__.py
+# hypothesis_version: 6.140.2
+
+['AdverseEvent', 'BriefingService', 'BriefingSettings', 'Citation', 'Dose', 'Evidence', 'EvidenceVariable', 'Study', 'Topic', 'TopicBundle', 'router']

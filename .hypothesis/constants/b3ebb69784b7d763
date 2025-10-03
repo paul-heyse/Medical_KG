@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/ingestion/__init__.py
+# hypothesis_version: 6.140.2
+
+['AsyncHttpClient', 'Document', 'IngestionLedger', 'IngestionResult', 'available_sources', 'get_adapter']

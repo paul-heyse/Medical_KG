@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/pdf/service.py
+# hypothesis_version: 6.140.2
+
+[0.9, 100, 200, 'ArtifactStore', 'Introduction', 'LocalArtifactStore', 'PdfDocument', 'PdfPipeline', 'Study overview', 'blocks_uri', 'markdown_uri', 'mineru_artifacts', 'mineru_cli_args', 'mineru_inflight', 'mineru_run_id', 'mineru_version', 'pdf_ir_ready', 'qa_metrics', 'tables_uri', 'v1']

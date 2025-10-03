@@ -1,6 +1,9 @@
 from Medical_KG.pdf.postprocess import (
+    EquationNormaliser,
+    FigureCaptionExtractor,
     HeaderFooterSuppressor,
     HyphenationRepair,
+    ReferenceExtractor,
     SectionLabeler,
     TextBlock,
     TwoColumnReflow,
@@ -74,3 +77,26 @@ def test_hyphenation_repair_and_section_labeling() -> None:
         "introduction",
         "methods",
     ]
+
+
+def test_equation_and_metadata_extractors() -> None:
+    normaliser = EquationNormaliser()
+    text = "The hazard ratio was $  HR   = 0.8 $."
+    assert normaliser.normalise(text) == "The hazard ratio was $ HR = 0.8 $."
+
+    extractor = ReferenceExtractor()
+    blocks = [
+        TextBlock(page=1, y=100, text="References"),
+        TextBlock(page=1, y=120, text="1. Doe J. Example."),
+        TextBlock(page=1, y=140, text="2] Smith A. Sample."),
+    ]
+    references = extractor.extract(blocks)
+    assert references == [
+        {"index": "1", "citation": "Doe J. Example."},
+        {"index": "2", "citation": "Smith A. Sample."},
+    ]
+
+    figures = FigureCaptionExtractor().extract(
+        [TextBlock(page=1, y=160, text="Figure 2. Study design diagram")]
+    )
+    assert figures == [{"figure": "2", "caption": "Study design diagram"}]

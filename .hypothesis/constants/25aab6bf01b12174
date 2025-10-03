@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/ir/models.py
+# hypothesis_version: 6.140.2
+
+['bbox', 'blocks', 'bounding_box', 'canonical_end', 'canonical_start', 'caption', 'char_end', 'char_start', 'created_at', 'doc_id', 'end', 'headers', 'language', 'meta', 'normalize', 'offset_map', 'page', 'provenance', 'raw_end', 'raw_start', 'raw_text', 'rows', 'section', 'source', 'span_map', 'start', 'tables', 'text', 'transform', 'type', 'uri']

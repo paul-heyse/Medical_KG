@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/facets/__init__.py
+# hypothesis_version: 6.140.2
+
+['AdverseEventFacet', 'DoseFacet', 'EndpointFacet', 'Facet', 'FacetService', 'FacetType', 'PICOFacet']

@@ -1,6 +1,7 @@
 """Quality gates for MinerU output."""
 from __future__ import annotations
 
+import string
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Sequence
 
@@ -20,9 +21,20 @@ class QaGateError(RuntimeError):
 
 
 class QaGates:
-    def __init__(self, *, reading_order_threshold: float = 0.85, ocr_threshold: float = 0.8) -> None:
+    def __init__(
+        self,
+        *,
+        reading_order_threshold: float = 0.85,
+        ocr_threshold: float = 0.8,
+        min_pages: int = 1,
+        max_pages: int = 200,
+        allowed_languages: Sequence[str] = ("en",),
+    ) -> None:
         self._reading_order_threshold = reading_order_threshold
         self._ocr_threshold = ocr_threshold
+        self._min_pages = min_pages
+        self._max_pages = max_pages
+        self._allowed_languages = tuple(allowed_languages)
 
     def reading_order(self, blocks: Sequence[TextBlock]) -> float:
         if not blocks:
@@ -51,6 +63,8 @@ class QaGates:
         blocks: Sequence[TextBlock],
         confidences: Sequence[float],
         tables: Sequence[Mapping[str, object]],
+        page_count: int | None = None,
+        language: str | None = None,
     ) -> QaMetrics:
         reading_score = self.reading_order(blocks)
         if reading_score < self._reading_order_threshold:
@@ -60,6 +74,14 @@ class QaGates:
             raise QaGateError("OCR confidence below threshold")
         if tables and not self.tables_valid(tables):
             raise QaGateError("Table rectangularization failed")
+        if page_count is not None:
+            if page_count < self._min_pages:
+                raise QaGateError("PDF shorter than minimum page requirement")
+            if page_count > self._max_pages:
+                raise QaGateError("PDF exceeds maximum page limit")
+        detected_language = language or self.detect_language("\n".join(block.text for block in blocks))
+        if self._allowed_languages and detected_language not in self._allowed_languages:
+            raise QaGateError(f"Unsupported language: {detected_language}")
         suppressed = len(blocks) - len({block.text for block in blocks})
         return QaMetrics(
             reading_order_score=reading_score,
@@ -67,6 +89,14 @@ class QaGates:
             table_count=len(tables),
             header_footer_suppressed=max(0, suppressed),
         )
+
+    def detect_language(self, text: str) -> str:
+        letters = [char for char in text if char.isalpha()]
+        if not letters:
+            return "unknown"
+        ascii_letters = sum(1 for char in letters if char in string.ascii_letters)
+        ratio = ascii_letters / len(letters)
+        return "en" if ratio >= 0.6 else "non-en"
 
 
 __all__ = ["QaGates", "QaGateError", "QaMetrics"]

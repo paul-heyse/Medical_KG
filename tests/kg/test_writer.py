@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from Medical_KG.kg.writer import KnowledgeGraphWriter, WriteStatement
+
+from tests.kg.fixtures import FakeNeo4jDriver
 
 
 @pytest.fixture()
@@ -97,3 +101,58 @@ def test_statements_property_returns_copy(writer: KnowledgeGraphWriter) -> None:
     assert isinstance(statements[0], WriteStatement)
     statements.clear()
     assert list(writer.statements)  # original unchanged
+
+
+def _execute(writer: KnowledgeGraphWriter, driver: FakeNeo4jDriver) -> None:
+    statements = list(writer.statements)
+
+    def _tx(tx: Any) -> None:
+        for statement in statements:
+            tx.run(statement.cypher, statement.parameters)
+
+    session = driver.session()
+    session.write_transaction(_tx)
+
+
+def test_batch_transaction_rolls_back_on_error(writer: KnowledgeGraphWriter) -> None:
+    driver = FakeNeo4jDriver()
+    writer.write_document({"uri": "doc://rollback", "id": "doc-rollback"})
+    writer.write_relationship(
+        "SIMILAR_TO",
+        "chunk-start",
+        "chunk-end",
+        start_label="Chunk",
+        end_label="Chunk",
+    )
+    with pytest.raises(ValueError):
+        _execute(writer, driver)
+    assert driver.get_node("Document", "doc://rollback") is None
+
+
+def test_property_updates_remove_nulls() -> None:
+    driver = FakeNeo4jDriver()
+    writer = KnowledgeGraphWriter()
+    writer.write_document({"uri": "doc://update", "id": "doc-update", "title": "Initial", "language": "en"})
+    _execute(writer, driver)
+
+    writer = KnowledgeGraphWriter()
+    writer.write_document({"uri": "doc://update", "id": "doc-update", "title": None, "language": "fr"})
+    _execute(writer, driver)
+
+    node = driver.get_node("Document", "doc://update")
+    assert node is not None
+    assert node["language"] == "fr"
+    assert "title" not in node
+
+
+def test_constraint_violation_raises(writer: KnowledgeGraphWriter) -> None:
+    driver = FakeNeo4jDriver()
+    driver.add_unique_constraint("Document", "id")
+    writer.write_document({"uri": "doc://one", "id": "conflict"})
+    _execute(writer, driver)
+
+    writer = KnowledgeGraphWriter()
+    writer.write_document({"uri": "doc://two", "id": "conflict"})
+    with pytest.raises(ValueError):
+        _execute(writer, driver)
+    assert driver.get_node("Document", "doc://two") is None

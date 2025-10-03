@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
 
 MODULE_PATH = Path(__file__).resolve().parents[2] / "ops" / "load_test" / "check_thresholds.py"
-_spec = importlib.util.spec_from_file_location("load_test_thresholds", MODULE_PATH)
+MODULE_NAME = "ops.load_test.check_thresholds"
+_spec = importlib.util.spec_from_file_location(MODULE_NAME, MODULE_PATH)
 if _spec is None or _spec.loader is None:  # pragma: no cover - defensive
     raise RuntimeError("Unable to import check_thresholds module")
 _module = importlib.util.module_from_spec(_spec)
+# ensure module is registered so dataclasses in Python 3.12+ can resolve __module__ metadata
+sys.modules.setdefault(MODULE_NAME, _module)
 _spec.loader.exec_module(_module)
 
 load_metrics = _module.load_metrics

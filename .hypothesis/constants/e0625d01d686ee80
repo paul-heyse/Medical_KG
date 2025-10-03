@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/infrastructure/models.py
+# hypothesis_version: 6.140.2
+
+['/metrics', '1Gi', '500m', 'DeploymentTarget', 'EnvironmentConfig', 'GPUProfile', 'ServiceConfig', 'cpu', 'gpu', 'image', 'memory', 'name', 'ports', 'replicas', 'resources', 'summarize_services']

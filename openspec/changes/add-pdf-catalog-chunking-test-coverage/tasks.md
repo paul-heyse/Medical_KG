@@ -2,27 +2,27 @@
 
 ## 1. Test Fixtures & Mocks
 
-- [ ] 1.1 Create sample PDF files: simple text, tables, equations, multi-column, scanned (OCR)
-- [ ] 1.2 Create sample MinerU JSON outputs for each PDF type
+- [x] 1.1 Create sample PDF files: simple text, tables, equations, multi-column, scanned (OCR)
+- [x] 1.2 Create sample MinerU JSON outputs for each PDF type
 - [ ] 1.3 Create sample concept catalog files (UMLS MRCONSO.RRF, RxNorm, SNOMED)
-- [ ] 1.4 Create sample license policies for catalog loaders
+- [x] 1.4 Create sample license policies for catalog loaders
 - [x] 1.5 Mock GPU availability for MinerU service
 
 ## 2. PDF Service Tests
 
 - [x] 2.1 Test PDF → IR conversion: verify blocks, paragraphs, tables, metadata
-- [ ] 2.2 Test table extraction: verify cell text, row/column spans, and captions
+- [x] 2.2 Test table extraction: verify cell text, row/column spans, and captions
 - [ ] 2.3 Test OCR handling: verify scanned PDFs are processed correctly
 - [x] 2.4 Test metadata preservation: verify title, authors, DOI, publication date
-- [ ] 2.5 Test multi-column layout: verify correct reading order
+- [x] 2.5 Test multi-column layout: verify correct reading order
 - [x] 2.6 Test error handling: verify corrupted PDFs are rejected with clear errors
 
 ## 3. PDF Post-Processing Tests
 
 - [x] 3.1 Test header/footer removal: verify repeated text is stripped
-- [ ] 3.2 Test equation normalization: verify LaTeX equations are formatted consistently
-- [ ] 3.3 Test reference extraction: verify bibliography is parsed into citations
-- [ ] 3.4 Test figure caption extraction: verify captions are linked to figures
+- [x] 3.2 Test equation normalization: verify LaTeX equations are formatted consistently
+- [x] 3.3 Test reference extraction: verify bibliography is parsed into citations
+- [x] 3.4 Test figure caption extraction: verify captions are linked to figures
 - [x] 3.5 Test hyphenation repair: verify split words are rejoined
 
 ## 4. PDF QA Validation Tests
@@ -30,8 +30,8 @@
 - [x] 4.1 Test structure checks: verify required sections (title, abstract, body) are present
 - [x] 4.2 Test missing section detection: verify warnings for missing methods/results
 - [x] 4.3 Test quality scoring: verify low-quality PDFs (OCR errors, garbled text) are flagged
-- [ ] 4.4 Test page count validation: verify minimum/maximum page limits
-- [ ] 4.5 Test language detection: verify non-English PDFs are handled appropriately
+- [x] 4.4 Test page count validation: verify minimum/maximum page limits
+- [x] 4.5 Test language detection: verify non-English PDFs are handled appropriately
 
 ## 5. Concept Catalog Loader Tests
 
@@ -84,7 +84,7 @@
 ## 11. Guardrails Tests
 
 - [x] 11.1 Test list item grouping: verify numbered/bulleted lists stay together
-- [ ] 11.2 Test table preservation: verify tables are not split across chunks
+- [x] 11.2 Test table preservation: verify tables are not split across chunks
 - [ ] 11.3 Test code block handling: verify code blocks are preserved intact
 - [ ] 11.4 Test section boundaries: verify chunks respect section headers
 - [ ] 11.5 Test quote preservation: verify block quotes are not split

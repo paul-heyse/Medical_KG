@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/security/shacl.py
+# hypothesis_version: 6.140.2
+
+['; ', 'SHACLError', 'ShaclIssue', 'adverse_events', 'compose_shapes', 'constraints', 'end', 'evidence', 'generated_by', 'grade', 'id', 'load_shapes', 'outcome', 'outcome_loinc', 'required', 'shape', 'spans', 'start', 'target', 'unit_ucum', 'utf-8', 'validate_on_write', 'validate_shacl']

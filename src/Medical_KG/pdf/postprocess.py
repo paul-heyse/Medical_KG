@@ -1,6 +1,7 @@
 """Medical-specific post-processing on MinerU output."""
 from __future__ import annotations
 
+import re
 from collections import Counter
 from dataclasses import dataclass
 from typing import Iterable, List, Mapping, MutableMapping, Sequence
@@ -47,6 +48,19 @@ class HyphenationRepair:
         return text.replace("-\n", "")
 
 
+class EquationNormaliser:
+    """Normalise LaTeX-style inline equations to a consistent format."""
+
+    _inline_pattern = re.compile(r"\$(.+?)\$")
+
+    def normalise(self, text: str) -> str:
+        def _cleanup(match: re.Match[str]) -> str:
+            content = re.sub(r"\s+", " ", match.group(1).strip())
+            return f"$ {content} $"
+
+        return re.sub(self._inline_pattern, _cleanup, text)
+
+
 class SectionLabeler:
     SECTIONS = {
         "introduction": "introduction",
@@ -68,10 +82,53 @@ class SectionLabeler:
         return labeled
 
 
+class ReferenceExtractor:
+    """Extract simple reference entries from labeled text blocks."""
+
+    _reference_marker = re.compile(r"^(\d+)[.\]]\s+(.*)")
+
+    def extract(self, blocks: Sequence[TextBlock]) -> List[dict[str, str]]:
+        references: List[dict[str, str]] = []
+        in_reference_section = False
+        for block in blocks:
+            text = block.text.strip()
+            if not text:
+                continue
+            if text.lower().startswith("references"):
+                in_reference_section = True
+                continue
+            if not in_reference_section:
+                continue
+            match = self._reference_marker.match(text)
+            if match:
+                references.append({"index": match.group(1), "citation": match.group(2)})
+        return references
+
+
+class FigureCaptionExtractor:
+    """Identify figure captions and associate them with figure numbers."""
+
+    _figure_pattern = re.compile(r"^figure\s+(\d+)[.:]\s*(.+)$", re.IGNORECASE)
+
+    def extract(self, blocks: Sequence[TextBlock]) -> List[dict[str, str]]:
+        captions: List[dict[str, str]] = []
+        for block in blocks:
+            text = block.text.strip()
+            if not text:
+                continue
+            match = self._figure_pattern.match(text)
+            if match:
+                captions.append({"figure": match.group(1), "caption": match.group(2)})
+        return captions
+
+
 __all__ = [
     "TextBlock",
     "TwoColumnReflow",
     "HeaderFooterSuppressor",
     "HyphenationRepair",
+    "EquationNormaliser",
     "SectionLabeler",
+    "ReferenceExtractor",
+    "FigureCaptionExtractor",
 ]

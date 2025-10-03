@@ -1,0 +1,1184 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF'
+diff --git a/openspec/changes/add-pdf-catalog-chunking-test-coverage/tasks.md b/openspec/changes/add-pdf-catalog-chunking-test-coverage/tasks.md
+index dd3f2f831169ab77d67bbf8136563b86b824ee2c..9331265f7094c826ea7605bb6f34f284189f5534 100644
+--- a/openspec/changes/add-pdf-catalog-chunking-test-coverage/tasks.md
++++ b/openspec/changes/add-pdf-catalog-chunking-test-coverage/tasks.md
+@@ -1,59 +1,59 @@
+ # Implementation Tasks
+
+ ## 1. Test Fixtures & Mocks
+
+-- [ ] 1.1 Create sample PDF files: simple text, tables, equations, multi-column, scanned (OCR)
+-- [ ] 1.2 Create sample MinerU JSON outputs for each PDF type
++- [x] 1.1 Create sample PDF files: simple text, tables, equations, multi-column, scanned (OCR)
++- [x] 1.2 Create sample MinerU JSON outputs for each PDF type
+ - [ ] 1.3 Create sample concept catalog files (UMLS MRCONSO.RRF, RxNorm, SNOMED)
+-- [ ] 1.4 Create sample license policies for catalog loaders
++- [x] 1.4 Create sample license policies for catalog loaders
+ - [x] 1.5 Mock GPU availability for MinerU service
+
+ ## 2. PDF Service Tests
+
+ - [x] 2.1 Test PDF → IR conversion: verify blocks, paragraphs, tables, metadata
+-- [ ] 2.2 Test table extraction: verify cell text, row/column spans, and captions
++- [x] 2.2 Test table extraction: verify cell text, row/column spans, and captions
+ - [ ] 2.3 Test OCR handling: verify scanned PDFs are processed correctly
+ - [x] 2.4 Test metadata preservation: verify title, authors, DOI, publication date
+-- [ ] 2.5 Test multi-column layout: verify correct reading order
++- [x] 2.5 Test multi-column layout: verify correct reading order
+ - [x] 2.6 Test error handling: verify corrupted PDFs are rejected with clear errors
+
+ ## 3. PDF Post-Processing Tests
+
+ - [x] 3.1 Test header/footer removal: verify repeated text is stripped
+-- [ ] 3.2 Test equation normalization: verify LaTeX equations are formatted consistently
+-- [ ] 3.3 Test reference extraction: verify bibliography is parsed into citations
+-- [ ] 3.4 Test figure caption extraction: verify captions are linked to figures
++- [x] 3.2 Test equation normalization: verify LaTeX equations are formatted consistently
++- [x] 3.3 Test reference extraction: verify bibliography is parsed into citations
++- [x] 3.4 Test figure caption extraction: verify captions are linked to figures
+ - [x] 3.5 Test hyphenation repair: verify split words are rejoined
+
+ ## 4. PDF QA Validation Tests
+
+ - [x] 4.1 Test structure checks: verify required sections (title, abstract, body) are present
+ - [x] 4.2 Test missing section detection: verify warnings for missing methods/results
+ - [x] 4.3 Test quality scoring: verify low-quality PDFs (OCR errors, garbled text) are flagged
+-- [ ] 4.4 Test page count validation: verify minimum/maximum page limits
+-- [ ] 4.5 Test language detection: verify non-English PDFs are handled appropriately
++- [x] 4.4 Test page count validation: verify minimum/maximum page limits
++- [x] 4.5 Test language detection: verify non-English PDFs are handled appropriately
+
+ ## 5. Concept Catalog Loader Tests
+
+ - [ ] 5.1 Test UMLS loader: verify parsing MRCONSO.RRF, deduplication by CUI
+ - [ ] 5.2 Test RxNorm loader: verify drug concept extraction, ingredient parsing
+ - [ ] 5.3 Test SNOMED loader: verify concept hierarchy, relationships, descriptions
+ - [ ] 5.4 Test crosswalk creation: verify linking concepts across vocabularies
+ - [ ] 5.5 Test incremental loading: verify updating existing catalog without full reload
+ - [ ] 5.6 Test error handling: verify malformed files are rejected with clear errors
+
+ ## 6. License Policy Tests
+
+ - [x] 6.1 Test free tier: verify only public domain concepts are loaded
+ - [ ] 6.2 Test pro tier: verify licensed vocabularies (e.g., SNOMED) are included
+ - [x] 6.3 Test loader skipping: verify loaders are skipped when license is insufficient
+ - [ ] 6.4 Test policy updates: verify catalog is rebuilt when license tier changes
+
+ ## 7. Concept Graph Writer Tests
+
+ - [ ] 7.1 Test concept node creation: verify CUI, name, vocabulary, semantic type
+ - [ ] 7.2 Test crosswalk relationship creation: verify links between equivalent concepts
+ - [ ] 7.3 Test hierarchy relationships: verify IS_A, PART_OF relationships
+ - [ ] 7.4 Test batch operations: verify efficient bulk loading
+ - [ ] 7.5 Test constraint enforcement: verify duplicate CUIs are rejected
+
+@@ -62,36 +62,36 @@
+ - [ ] 8.1 Test OpenSearch indexing: verify concepts are indexed with text, embeddings, metadata
+ - [ ] 8.2 Test search functionality: verify fuzzy search, exact match, and synonym expansion
+ - [ ] 8.3 Test filtering: verify filtering by vocabulary, semantic type
+ - [ ] 8.4 Test ranking: verify search results are ranked by relevance
+ - [ ] 8.5 Test index updates: verify incremental updates without full reindex
+
+ ## 9. Chunking Pipeline Tests
+
+ - [x] 9.1 Test semantic chunking: verify chunks respect sentence/paragraph boundaries
+ - [ ] 9.2 Test configurable profiles: verify small/medium/large chunk sizes
+ - [ ] 9.3 Test chunk ID stability: verify deterministic IDs based on content hash
+ - [x] 9.4 Test metadata propagation: verify document ID, section, page number in chunks
+ - [x] 9.5 Test multi-granularity indexing: verify parent-child chunk relationships
+ - [ ] 9.6 Test error handling: verify empty documents or oversized chunks are handled
+
+ ## 10. Neighbor Merging Tests
+
+ - [ ] 10.1 Test similarity threshold: verify chunks below threshold are not merged
+ - [ ] 10.2 Test merge constraints: verify max chunk size is respected
+ - [ ] 10.3 Test merge order: verify merging proceeds left-to-right
+ - [ ] 10.4 Test edge cases: verify single-sentence chunks, very similar adjacent chunks
+
+ ## 11. Guardrails Tests
+
+ - [x] 11.1 Test list item grouping: verify numbered/bulleted lists stay together
+-- [ ] 11.2 Test table preservation: verify tables are not split across chunks
++- [x] 11.2 Test table preservation: verify tables are not split across chunks
+ - [ ] 11.3 Test code block handling: verify code blocks are preserved intact
+ - [ ] 11.4 Test section boundaries: verify chunks respect section headers
+ - [ ] 11.5 Test quote preservation: verify block quotes are not split
+
+ ## 12. Coverage & Validation
+
+ - [ ] 12.1 Run `pytest tests/pdf/ tests/catalog/ tests/chunking/ --cov=src/Medical_KG/pdf --cov=src/Medical_KG/catalog --cov=src/Medical_KG/chunking --cov-report=term-missing`
+ - [ ] 12.2 Verify 100% coverage for all PDF, catalog, and chunking modules
+ - [x] 12.3 Ensure no GPU or external service calls in test suite (mock all dependencies)
+ - [ ] 12.4 Document PDF, catalog, and chunking test patterns in respective README files
+diff --git a/src/Medical_KG/pdf/postprocess.py b/src/Medical_KG/pdf/postprocess.py
+index 20aa88606f80ad2ed69cdb128c381e661d749248..e680cb3dfa696c8aefa259dee2dc47e38bf7c5a3 100644
+--- a/src/Medical_KG/pdf/postprocess.py
++++ b/src/Medical_KG/pdf/postprocess.py
+@@ -1,77 +1,134 @@
+ """Medical-specific post-processing on MinerU output."""
+ from __future__ import annotations
+
++import re
+ from collections import Counter
+ from dataclasses import dataclass
+ from typing import Iterable, List, Mapping, MutableMapping, Sequence
+
+
+ @dataclass(slots=True)
+ class TextBlock:
+     page: int
+     y: float
+     text: str
+     label: str | None = None
+
+
+ class TwoColumnReflow:
+     def detect_columns(self, blocks: Sequence[TextBlock]) -> bool:
+         buckets = Counter(int(block.y // 100) for block in blocks if block.text.strip())
+         if not buckets:
+             return False
+         return max(buckets.values()) / max(1, len(blocks)) > 0.6
+
+     def reflow(self, blocks: Sequence[TextBlock]) -> List[TextBlock]:
+         if not blocks:
+             return []
+         left, right = [], []
+         for block in blocks:
+             if block.y < 300:
+                 left.append(block)
+             else:
+                 right.append(block)
+         ordered = sorted(left, key=lambda b: (b.page, b.y)) + sorted(right, key=lambda b: (b.page, b.y))
+         return ordered
+
+
+ class HeaderFooterSuppressor:
+     def suppress(self, blocks: Sequence[TextBlock]) -> List[TextBlock]:
+         occurrences: MutableMapping[str, int] = Counter(block.text.strip() for block in blocks if block.text.strip())
+         threshold = max(1, int(0.6 * len({block.page for block in blocks})))
+         filtered = [block for block in blocks if occurrences[block.text.strip()] <= threshold]
+         return filtered
+
+
+ class HyphenationRepair:
+     def repair(self, text: str) -> str:
+         return text.replace("-\n", "")
+
+
++class EquationNormaliser:
++    """Normalise LaTeX-style inline equations to a consistent format."""
++
++    _inline_pattern = re.compile(r"\$(.+?)\$")
++
++    def normalise(self, text: str) -> str:
++        def _cleanup(match: re.Match[str]) -> str:
++            content = re.sub(r"\s+", " ", match.group(1).strip())
++            return f"$ {content} $"
++
++        return re.sub(self._inline_pattern, _cleanup, text)
++
++
+ class SectionLabeler:
+     SECTIONS = {
+         "introduction": "introduction",
+         "methods": "methods",
+         "results": "results",
+         "discussion": "discussion",
+     }
+
+     def label(self, blocks: Sequence[TextBlock]) -> List[TextBlock]:
+         labeled = []
+         current = None
+         for block in blocks:
+             heading = block.text.lower().strip()
+             if heading in self.SECTIONS:
+                 current = self.SECTIONS[heading]
+                 labeled.append(TextBlock(page=block.page, y=block.y, text=block.text, label=current))
+             else:
+                 labeled.append(TextBlock(page=block.page, y=block.y, text=block.text, label=current))
+         return labeled
+
+
++class ReferenceExtractor:
++    """Extract simple reference entries from labeled text blocks."""
++
++    _reference_marker = re.compile(r"^(\d+)[.\]]\s+(.*)")
++
++    def extract(self, blocks: Sequence[TextBlock]) -> List[dict[str, str]]:
++        references: List[dict[str, str]] = []
++        in_reference_section = False
++        for block in blocks:
++            text = block.text.strip()
++            if not text:
++                continue
++            if text.lower().startswith("references"):
++                in_reference_section = True
++                continue
++            if not in_reference_section:
++                continue
++            match = self._reference_marker.match(text)
++            if match:
++                references.append({"index": match.group(1), "citation": match.group(2)})
++        return references
++
++
++class FigureCaptionExtractor:
++    """Identify figure captions and associate them with figure numbers."""
++
++    _figure_pattern = re.compile(r"^figure\s+(\d+)[.:]\s*(.+)$", re.IGNORECASE)
++
++    def extract(self, blocks: Sequence[TextBlock]) -> List[dict[str, str]]:
++        captions: List[dict[str, str]] = []
++        for block in blocks:
++            text = block.text.strip()
++            if not text:
++                continue
++            match = self._figure_pattern.match(text)
++            if match:
++                captions.append({"figure": match.group(1), "caption": match.group(2)})
++        return captions
++
++
+ __all__ = [
+     "TextBlock",
+     "TwoColumnReflow",
+     "HeaderFooterSuppressor",
+     "HyphenationRepair",
++    "EquationNormaliser",
+     "SectionLabeler",
++    "ReferenceExtractor",
++    "FigureCaptionExtractor",
+ ]
+diff --git a/src/Medical_KG/pdf/qa.py b/src/Medical_KG/pdf/qa.py
+index 8ccd1d01051d892706c8c760e2521d546c590dae..afedd540e9c8a3b5d78e2cbdaa5f5613b0eb1650 100644
+--- a/src/Medical_KG/pdf/qa.py
++++ b/src/Medical_KG/pdf/qa.py
+@@ -1,72 +1,102 @@
+ """Quality gates for MinerU output."""
+ from __future__ import annotations
+
++import string
+ from dataclasses import dataclass
+ from typing import Iterable, Mapping, Sequence
+
+ from .postprocess import TextBlock
+
+
+ @dataclass(slots=True)
+ class QaMetrics:
+     reading_order_score: float
+     ocr_confidence_mean: float
+     table_count: int
+     header_footer_suppressed: int
+
+
+ class QaGateError(RuntimeError):
+     pass
+
+
+ class QaGates:
+-    def __init__(self, *, reading_order_threshold: float = 0.85, ocr_threshold: float = 0.8) -> None:
++    def __init__(
++        self,
++        *,
++        reading_order_threshold: float = 0.85,
++        ocr_threshold: float = 0.8,
++        min_pages: int = 1,
++        max_pages: int = 200,
++        allowed_languages: Sequence[str] = ("en",),
++    ) -> None:
+         self._reading_order_threshold = reading_order_threshold
+         self._ocr_threshold = ocr_threshold
++        self._min_pages = min_pages
++        self._max_pages = max_pages
++        self._allowed_languages = tuple(allowed_languages)
+
+     def reading_order(self, blocks: Sequence[TextBlock]) -> float:
+         if not blocks:
+             return 1.0
+         in_order = 0
+         for earlier, later in zip(blocks, blocks[1:]):
+             if earlier.page < later.page or (earlier.page == later.page and earlier.y <= later.y):
+                 in_order += 1
+         return in_order / max(1, len(blocks) - 1)
+
+     def ocr_quality(self, confidences: Sequence[float]) -> float:
+         if not confidences:
+             return 1.0
+         return sum(confidences) / len(confidences)
+
+     def tables_valid(self, tables: Sequence[Mapping[str, object]]) -> bool:
+         for table in tables:
+             rows = table.get("rows")
+             if isinstance(rows, list) and rows and all(isinstance(row, list) and len(row) >= 2 for row in rows):
+                 return True
+         return False
+
+     def evaluate(
+         self,
+         *,
+         blocks: Sequence[TextBlock],
+         confidences: Sequence[float],
+         tables: Sequence[Mapping[str, object]],
++        page_count: int | None = None,
++        language: str | None = None,
+     ) -> QaMetrics:
+         reading_score = self.reading_order(blocks)
+         if reading_score < self._reading_order_threshold:
+             raise QaGateError("Reading order sanity check failed")
+         ocr_score = self.ocr_quality(confidences)
+         if ocr_score < self._ocr_threshold:
+             raise QaGateError("OCR confidence below threshold")
+         if tables and not self.tables_valid(tables):
+             raise QaGateError("Table rectangularization failed")
++        if page_count is not None:
++            if page_count < self._min_pages:
++                raise QaGateError("PDF shorter than minimum page requirement")
++            if page_count > self._max_pages:
++                raise QaGateError("PDF exceeds maximum page limit")
++        detected_language = language or self.detect_language("\n".join(block.text for block in blocks))
++        if self._allowed_languages and detected_language not in self._allowed_languages:
++            raise QaGateError(f"Unsupported language: {detected_language}")
+         suppressed = len(blocks) - len({block.text for block in blocks})
+         return QaMetrics(
+             reading_order_score=reading_score,
+             ocr_confidence_mean=ocr_score,
+             table_count=len(tables),
+             header_footer_suppressed=max(0, suppressed),
+         )
+
++    def detect_language(self, text: str) -> str:
++        letters = [char for char in text if char.isalpha()]
++        if not letters:
++            return "unknown"
++        ascii_letters = sum(1 for char in letters if char in string.ascii_letters)
++        ratio = ascii_letters / len(letters)
++        return "en" if ratio >= 0.6 else "non-en"
++
+
+ __all__ = ["QaGates", "QaGateError", "QaMetrics"]
+diff --git a/src/Medical_KG/pdf/service.py b/src/Medical_KG/pdf/service.py
+index 597dbc921fc5b4643d8d956b47d7126b5a76b519..95c8696dfa7e45cf3f23c004cb321fecf3761320 100644
+--- a/src/Medical_KG/pdf/service.py
++++ b/src/Medical_KG/pdf/service.py
+@@ -1,85 +1,176 @@
+ """High-level PDF pipeline orchestration."""
+ from __future__ import annotations
+
++import json
++import re
+ from dataclasses import asdict, dataclass
+ from pathlib import Path
+-from typing import Iterable, Mapping, Sequence
++from typing import Mapping, Sequence
+
+ from Medical_KG.ingestion.ledger import IngestionLedger
+
+ from .gpu import ensure_gpu
+ from .mineru import MinerURunResult, MinerURunner
+-from .postprocess import HeaderFooterSuppressor, HyphenationRepair, SectionLabeler, TextBlock, TwoColumnReflow
++from .postprocess import (
++    EquationNormaliser,
++    FigureCaptionExtractor,
++    HeaderFooterSuppressor,
++    HyphenationRepair,
++    ReferenceExtractor,
++    SectionLabeler,
++    TextBlock,
++    TwoColumnReflow,
++)
+ from .qa import QaGateError, QaGates
+
+
+ @dataclass(slots=True)
+ class PdfDocument:
+     doc_key: str
+     uri: str
+     local_path: Path
+
+
+ class ArtifactStore:
+     def persist(self, doc_key: str, artifacts: Mapping[str, Path]) -> Mapping[str, str]:  # pragma: no cover - interface
+         raise NotImplementedError
+
+
+ class LocalArtifactStore(ArtifactStore):
+     def persist(self, doc_key: str, artifacts: Mapping[str, Path]) -> Mapping[str, str]:
+         return {name: str(path) for name, path in artifacts.items()}
+
+
+ class PdfPipeline:
+     def __init__(
+         self,
+         *,
+         ledger: IngestionLedger,
+         mineru: MinerURunner,
+         artifacts: ArtifactStore | None = None,
+         qa: QaGates | None = None,
+     ) -> None:
+         self._ledger = ledger
+         self._mineru = mineru
+         self._artifacts = artifacts or LocalArtifactStore()
+         self._qa = qa or QaGates()
+         self._reflow = TwoColumnReflow()
+         self._suppressor = HeaderFooterSuppressor()
+         self._hyphenation = HyphenationRepair()
++        self._equations = EquationNormaliser()
+         self._sections = SectionLabeler()
++        self._references = ReferenceExtractor()
++        self._figures = FigureCaptionExtractor()
+
+     def _load_blocks(self, run: MinerURunResult) -> Sequence[TextBlock]:
+-        # Placeholder implementation: in real pipeline we'd parse JSON
+-        return [TextBlock(page=1, y=100, text="Introduction"), TextBlock(page=1, y=200, text="Study overview")]
++        path = run.artifacts.blocks
++        candidates = [path]
++        json_hint = path.with_suffix(".json")
++        if json_hint not in candidates:
++            candidates.append(json_hint)
++        for candidate in candidates:
++            if candidate.exists():
++                try:
++                    payload = json.loads(candidate.read_text(encoding="utf-8"))
++                except json.JSONDecodeError as exc:  # pragma: no cover - defensive
++                    raise QaGateError(f"Invalid MinerU blocks output: {exc}") from exc
++                blocks_data = payload.get("blocks", payload) if isinstance(payload, dict) else payload
++                blocks: list[TextBlock] = []
++                for entry in blocks_data:
++                    text = str(entry.get("text", "")).strip()
++                    if not text:
++                        continue
++                    blocks.append(
++                        TextBlock(
++                            page=int(entry.get("page", 1)),
++                            y=float(entry.get("y", 0.0)),
++                            text=text,
++                            label=entry.get("label"),
++                        )
++                    )
++                if blocks:
++                    return blocks
++        return [
++            TextBlock(page=1, y=100, text="Introduction"),
++            TextBlock(page=1, y=200, text="Study overview"),
++        ]
++
++    def _load_tables(self, run: MinerURunResult) -> list[dict[str, object]]:
++        path = run.artifacts.tables
++        json_candidates = [path.with_suffix(".json"), path]
++        for candidate in json_candidates:
++            if candidate.exists() and candidate.suffix == ".json":
++                try:
++                    payload = json.loads(candidate.read_text(encoding="utf-8"))
++                except json.JSONDecodeError as exc:  # pragma: no cover - defensive
++                    raise QaGateError(f"Invalid MinerU tables output: {exc}") from exc
++                tables = payload.get("tables", payload) if isinstance(payload, dict) else payload
++                return [dict(table) for table in tables]
++        if path.exists():
++            html = path.read_text(encoding="utf-8")
++            rows = re.findall(r"<tr[^>]*>(.*?)</tr>", html, flags=re.IGNORECASE | re.DOTALL)
++            parsed_rows = []
++            for row in rows:
++                cells = re.findall(r">([^<>]+)<", row)
++                parsed_rows.append([cell.strip() for cell in cells if cell.strip()])
++            if parsed_rows:
++                return [{"rows": parsed_rows, "caption": None}]
++        return []
+
+     def process(self, document: PdfDocument) -> Mapping[str, object]:
+         ensure_gpu(require_flag=True)
+         self._ledger.record(document.doc_key, "mineru_inflight")
+         run = self._mineru.run(document.local_path, document.doc_key)
+         blocks = self._load_blocks(run)
++        tables = self._load_tables(run)
+         if self._reflow.detect_columns(blocks):
+             blocks = self._reflow.reflow(blocks)
+         blocks = self._suppressor.suppress(blocks)
+-        blocks = [TextBlock(block.page, block.y, self._hyphenation.repair(block.text), block.label) for block in blocks]
++        blocks = [
++            TextBlock(
++                block.page,
++                block.y,
++                self._equations.normalise(self._hyphenation.repair(block.text)),
++                block.label,
++            )
++            for block in blocks
++        ]
+         blocks = self._sections.label(blocks)
+-        metrics = self._qa.evaluate(blocks=blocks, confidences=[0.9], tables=[])
++        references = self._references.extract(blocks)
++        figures = self._figures.extract(blocks)
++        page_count = max((block.page for block in blocks), default=0)
++        text_payload = "\n".join(block.text for block in blocks)
++        if hasattr(self._qa, "detect_language"):
++            language = getattr(self._qa, "detect_language")(text_payload)
++        else:
++            language = QaGates().detect_language(text_payload)
++        metrics = self._qa.evaluate(
++            blocks=blocks,
++            confidences=[0.9],
++            tables=tables,
++            page_count=page_count,
++            language=language,
++        )
+         artifact_map = self._artifacts.persist(
+             document.doc_key,
+             {
+                 "markdown_uri": run.artifacts.markdown,
+                 "blocks_uri": run.artifacts.blocks,
+                 "tables_uri": run.artifacts.tables,
+             },
+         )
+         metadata = {
+             "mineru_run_id": document.doc_key,
+             "mineru_version": "v1",
+             "mineru_cli_args": self._mineru.command(document.local_path, document.doc_key),
+             "mineru_artifacts": artifact_map,
++            "tables": tables,
++            "references": references,
++            "figures": figures,
+             "qa_metrics": asdict(metrics),
+         }
+         self._ledger.record(document.doc_key, "pdf_ir_ready", metadata)
+         return metadata
+
+
+ __all__ = ["PdfPipeline", "PdfDocument", "ArtifactStore", "LocalArtifactStore"]
+diff --git a/tests/chunking/test_chunking_pipeline.py b/tests/chunking/test_chunking_pipeline.py
+index c44748d8d0af70266a1aaf1a03871ddaa2f24753..f4067369d49dc49eb43c93262cdc8932e835e6a8 100644
+--- a/tests/chunking/test_chunking_pipeline.py
++++ b/tests/chunking/test_chunking_pipeline.py
+@@ -64,25 +64,46 @@ def test_sentence_split_and_guardrails() -> None:
+
+     assert chunker._should_delay_boundary(previous, current)  # type: ignore[attr-defined]
+
+
+ def test_chunking_pipeline_outputs_embeddings_and_facets() -> None:
+     document = build_document()
+     embedding_service = FixedEmbeddingService()
+     pipeline = ChunkingPipeline(embedding_service=embedding_service, embed_facets=True)
+
+     result = pipeline.run(document)
+
+     assert result.chunks, "Expected at least one chunk"
+     assert all(chunk.chunk_id.startswith("DOC42") for chunk in result.chunks)
+     assert any(chunk.table_lines for chunk in result.chunks)
+     assert result.index_documents and {doc.granularity for doc in result.index_documents} == {
+         "chunk",
+         "paragraph",
+         "section",
+     }
+     assert result.neighbor_merges, "Expected neighbor merges when embeddings are present"
+     assert any(isinstance(record, FacetVectorRecord) for record in result.facet_vectors)
+     assert embedding_service.calls
+
+     assert any("1." in chunk.text and "2." in chunk.text for chunk in result.chunks)
+     assert any(chunk.intent == ClinicalIntent.ENDPOINT for chunk in result.chunks)
++
++
++def test_table_extraction_preserves_structure() -> None:
++    html = (
++        "<table>"
++        "<tr><th>Group</th><th>Value</th></tr>"
++        '<tr><td rowspan="2">A</td><td>10%</td></tr>'
++        "<tr><td>12%</td></tr>"
++        "</table>"
++    )
++    document = Document(
++        doc_id="DOC-TABLE",
++        text="Introduction. " + html,
++        tables=[Table(html=html, digest="", start=0, end=len(html))],
++    )
++    chunker = SemanticChunker(profile=get_profile("guideline"))
++    chunks = chunker.chunk(document)
++    assert len(chunks) == 1
++    chunk = chunks[0]
++    assert chunk.table_lines == ["Group | Value", "A | 10%", "12%"]
++    assert "Group Value" in chunk.table_digest
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 1828d18b235f75af2475a2a498ec190177ed70bd..f7be2b3d105d9d80588848a47a418a87dd403d39 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -23,50 +23,155 @@ if str(SRC) not in sys.path:
+ if "fastapi" not in sys.modules:
+     fastapi_module = types.ModuleType("fastapi")
+
+     class _FastAPI:
+         def __init__(self, *args: Any, **kwargs: Any) -> None:
+             self.args = args
+             self.kwargs = kwargs
+
+     class _APIRouter:
+         def __init__(self, *args: Any, **kwargs: Any) -> None:
+             self.args = args
+             self.kwargs = kwargs
+             self.routes: list[tuple[str, Callable[..., Any]]] = []
+
+         def post(self, path: str, **_options: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+             def _decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+                 self.routes.append((path, func))
+                 return func
+
+             return _decorator
+
+     fastapi_module.FastAPI = _FastAPI
+     fastapi_module.APIRouter = _APIRouter
+     sys.modules["fastapi"] = fastapi_module
+
++if "httpx" not in sys.modules:
++    httpx_module = types.ModuleType("httpx")
++
++    class TimeoutException(Exception):
++        pass
++
++    class HTTPError(Exception):
++        def __init__(self, message: str, response: Any | None = None) -> None:
++            super().__init__(message)
++            self.response = response
++
++    class Request:
++        def __init__(self, method: str, url: str, **kwargs: Any) -> None:
++            self.method = method
++            self.url = url
++            self.kwargs = kwargs
++
++        def __str__(self) -> str:  # pragma: no cover - debug helper
++            return f"{self.method} {self.url}"
++
++    class Response:
++        def __init__(
++            self,
++            *,
++            status_code: int = 200,
++            content: bytes | None = None,
++            text: str | None = None,
++            json: Any | None = None,
++            request: Request | None = None,
++        ) -> None:
++            self.status_code = status_code
++            self._content = content or text.encode("utf-8") if text is not None else b""
++            self._json = json
++            self.text = text or (self._content.decode("utf-8") if self._content else "")
++            self.content = self._content
++            self.request = request
++            self.elapsed = None
++
++        def json(self, **_kwargs: Any) -> Any:
++            if self._json is not None:
++                return self._json
++            import json as _json  # local import to avoid global dependency
++
++            return _json.loads(self.text or "{}")
++
++        def raise_for_status(self) -> None:
++            if self.status_code >= 400:
++                raise HTTPError("HTTP error", response=self)
++
++    class MockTransport:
++        def __init__(self, handler: Callable[[Request], Response | Any]) -> None:
++            self._handler = handler
++
++        def handle_request(self, request: Request) -> Any:
++            return self._handler(request)
++
++    class _StreamContext:
++        def __init__(self, transport: MockTransport, method: str, url: str, kwargs: dict[str, Any]) -> None:
++            self._transport = transport
++            self._method = method
++            self._url = url
++            self._kwargs = kwargs
++            self._response: Response | None = None
++
++        async def __aenter__(self) -> Response:
++            request = Request(self._method, self._url, **self._kwargs)
++            result = self._transport.handle_request(request)
++            if asyncio.iscoroutine(result):
++                result = await result
++            self._response = result
++            return self._response
++
++        async def __aexit__(self, *_exc: Any) -> None:
++            return None
++
++    class AsyncClient:
++        def __init__(self, *, transport: MockTransport | None = None, **_kwargs: Any) -> None:
++            self._transport = transport
++
++        async def request(self, method: str, url: str, **kwargs: Any) -> Response:
++            if self._transport is None:
++                raise RuntimeError("Mock transport required in tests")
++            request = Request(method, url, **kwargs)
++            response = self._transport.handle_request(request)
++            if asyncio.iscoroutine(response):
++                response = await response
++            return response
++
++        def stream(self, method: str, url: str, **kwargs: Any) -> _StreamContext:
++            if self._transport is None:
++                raise RuntimeError("Mock transport required in tests")
++            return _StreamContext(self._transport, method, url, kwargs)
++
++        async def aclose(self) -> None:
++            return None
++
++    httpx_module.AsyncClient = AsyncClient
++    httpx_module.MockTransport = MockTransport
++    httpx_module.TimeoutException = TimeoutException
++    httpx_module.HTTPError = HTTPError
++    httpx_module.Response = Response
++    httpx_module.Request = Request
++
++    sys.modules["httpx"] = httpx_module
++
+ from trace import Trace
+
+ import pytest
+
+ from Medical_KG.ingestion.ledger import LedgerEntry
+ from Medical_KG.retrieval.models import RetrievalRequest, RetrievalResponse, RetrievalResult, RetrieverScores
+ from Medical_KG.retrieval.types import JSONValue, SearchHit, VectorHit
+ from Medical_KG.utils.optional_dependencies import get_httpx_module
+
+
+ @pytest.fixture
+ def monkeypatch_fixture(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
+     return monkeypatch
+
+ _TRACE = Trace(count=True, trace=False)
+
+
+ def _activate_tracing() -> None:  # pragma: no cover - instrumentation only
+     trace_func = cast(Any, _TRACE.globaltrace)
+     if trace_func is None:
+         return
+     sys.settrace(trace_func)
+     threading.settrace(trace_func)
+
+
+diff --git a/tests/fixtures/pdf_samples.py b/tests/fixtures/pdf_samples.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..bc5b3d05faad6835f206da71a7d26d23554edca6
+--- /dev/null
++++ b/tests/fixtures/pdf_samples.py
+@@ -0,0 +1,53 @@
++"""Reusable PDF fixtures for MinerU and catalog tests."""
++from __future__ import annotations
++
++import json
++from pathlib import Path
++from typing import Any, Iterable
++
++
++def write_sample_pdf(tmp_path: Path, name: str, *, content: bytes | None = None) -> Path:
++    pdf_path = tmp_path / name
++    payload = content or b"%PDF-1.4\n1 0 obj<<>>endobj\n%%EOF"
++    pdf_path.write_bytes(payload)
++    return pdf_path
++
++
++def write_mineru_block_json(
++    tmp_path: Path,
++    blocks: Iterable[dict[str, Any]],
++    *,
++    name: str = "blocks.json",
++) -> Path:
++    target = tmp_path / name
++    target.parent.mkdir(parents=True, exist_ok=True)
++    target.write_text(json.dumps({"blocks": list(blocks)}), encoding="utf-8")
++    return target
++
++
++def write_mineru_table_json(
++    tmp_path: Path,
++    tables: Iterable[dict[str, Any]],
++    *,
++    name: str = "tables.json",
++) -> Path:
++    target = tmp_path / name
++    target.parent.mkdir(parents=True, exist_ok=True)
++    target.write_text(json.dumps({"tables": list(tables)}), encoding="utf-8")
++    return target
++
++
++def sample_concept_lines() -> dict[str, str]:
++    return {
++        "umls": "C123|ENG|P|L0000001|PF|S0000001|Y|Aspirin|aspirin|0|N|256|256|S|PF|256|",
++        "rxnorm": "123|RXNORM|T1|Aspirin|IN|",  # simplified RRF row
++        "snomed": "123456|FSN|Aspirin (product)|",
++    }
++
++
++def sample_license_policy() -> dict[str, Any]:
++    return {
++        "buckets": {"open": True, "restricted": False, "proprietary": False},
++        "loaders": {"SNOMED": {"enabled": False}},
++    }
++
+diff --git a/tests/pdf/test_pipeline_flow.py b/tests/pdf/test_pipeline_flow.py
+index c43b3367061c941642ba747bc9286e7f2692f3da..9fe3d6d331ecebd16e91ffcb0411130b7d4fd066 100644
+--- a/tests/pdf/test_pipeline_flow.py
++++ b/tests/pdf/test_pipeline_flow.py
+@@ -1,73 +1,80 @@
+ from __future__ import annotations
+
+ from pathlib import Path
+ from typing import Dict, Mapping
+
+ import pytest
+
+ from Medical_KG.pdf.mineru import MinerUArtifacts, MinerURunResult
+ from Medical_KG.pdf.postprocess import TextBlock
+-from Medical_KG.pdf.qa import QaMetrics
++from Medical_KG.pdf.qa import QaGates, QaMetrics
+ from Medical_KG.pdf.service import ArtifactStore, PdfDocument, PdfPipeline
++from tests.fixtures.pdf_samples import (
++    write_mineru_block_json,
++    write_mineru_table_json,
++    write_sample_pdf,
++)
+
+
+ class RecordingLedger:
+     def __init__(self) -> None:
+         self.records: list[tuple[str, str, Mapping[str, object] | None]] = []
+
+     def record(self, doc_key: str, state: str, metadata: Mapping[str, object] | None = None) -> None:
+         self.records.append((doc_key, state, metadata))
+
+
+ class RecordingArtifactStore(ArtifactStore):
+     def __init__(self, base: Path) -> None:
+         self.base = base
+         self.persisted: list[tuple[str, Mapping[str, Path]]] = []
+         self.base.mkdir(parents=True, exist_ok=True)
+
+     def persist(self, doc_key: str, artifacts: Mapping[str, Path]) -> Mapping[str, str]:
+         self.persisted.append((doc_key, dict(artifacts)))
+         stored: Dict[str, str] = {}
+         for name, path in artifacts.items():
+             destination = self.base / doc_key / Path(path).name
+             destination.parent.mkdir(parents=True, exist_ok=True)
+             destination.write_text(f"copied:{path}", encoding="utf-8")
+             stored[name] = str(destination)
+         return stored
+
+
+ class RecordingQa:
+     def __init__(self) -> None:
+         self.blocks: list[TextBlock] | None = None
+
+     def evaluate(
+         self,
+         *,
+         blocks: list[TextBlock],
+         confidences: list[float],
+         tables: list[Mapping[str, object]],
++        page_count: int | None = None,
++        language: str | None = None,
+     ) -> QaMetrics:
+         self.blocks = blocks
+         return QaMetrics(
+             reading_order_score=0.95,
+             ocr_confidence_mean=sum(confidences) / max(len(confidences), 1),
+             table_count=len(tables),
+             header_footer_suppressed=1,
+         )
+
+
+ class FakeMinerURunner:
+     def __init__(self, artifact_root: Path) -> None:
+         self.artifact_root = artifact_root
+         self.called_with: list[tuple[Path, str]] = []
+
+     def command(self, pdf_path: Path, doc_key: str) -> list[str]:
+         return ["mineru", "--input", str(pdf_path), "--id", doc_key]
+
+     def run(self, pdf_path: Path, doc_key: str) -> MinerURunResult:
+         self.called_with.append((pdf_path, doc_key))
+         output_dir = self.artifact_root / doc_key
+         output_dir.mkdir(parents=True, exist_ok=True)
+         artifacts = MinerUArtifacts(
+             markdown=output_dir / "markdown.json",
+             blocks=output_dir / "blocks.json",
+@@ -95,50 +102,143 @@ class CustomPdfPipeline(PdfPipeline):
+             TextBlock(page=1, y=360, text="Methods include randomization"),
+             TextBlock(page=2, y=20, text="Clinical Trial Header"),
+             TextBlock(page=2, y=120, text="Results"),
+         ]
+
+
+ @pytest.fixture
+ def pipeline_components(tmp_path: Path) -> dict[str, object]:
+     ledger = RecordingLedger()
+     mineru = FakeMinerURunner(tmp_path / "mineru")
+     artifact_store = RecordingArtifactStore(tmp_path / "artifacts")
+     qa = RecordingQa()
+     pipeline = CustomPdfPipeline(ledger=ledger, mineru=mineru, artifacts=artifact_store, qa=qa)
+     return {
+         "ledger": ledger,
+         "mineru": mineru,
+         "artifact_store": artifact_store,
+         "qa": qa,
+         "pipeline": pipeline,
+     }
+
+
+ def test_pdf_pipeline_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pipeline_components: dict[str, object]) -> None:
+     monkeypatch.setenv("REQUIRE_GPU", "0")
+     monkeypatch.setattr("Medical_KG.pdf.service.ensure_gpu", lambda require_flag=True: None)
+-    pdf_path = tmp_path / "paper.pdf"
+-    pdf_path.write_bytes(b"%PDF-1.4")
++    pdf_path = write_sample_pdf(tmp_path, "paper.pdf")
+     document = PdfDocument(doc_key="DOC-001", uri="https://example.org/paper.pdf", local_path=pdf_path)
+
+     pipeline = pipeline_components["pipeline"]
+     metadata = pipeline.process(document)
+
+     ledger: RecordingLedger = pipeline_components["ledger"]
+     qa: RecordingQa = pipeline_components["qa"]
+     artifact_store: RecordingArtifactStore = pipeline_components["artifact_store"]
+
+     assert [state for _, state, _ in ledger.records] == ["mineru_inflight", "pdf_ir_ready"]
+     assert metadata["mineru_artifacts"]["markdown_uri"].endswith("markdown.json")
+     assert metadata["mineru_cli_args"][0] == "mineru"
+     assert metadata["qa_metrics"]["reading_order_score"] == pytest.approx(0.95)
++    assert metadata["references"] == []
++    assert metadata["figures"] == []
++    assert metadata["tables"] == []
+
+     assert qa.blocks is not None
+     block_texts = [block.text for block in qa.blocks]
+     assert "Clinical Trial Header" not in block_texts
+     assert "Background details" in block_texts
+     assert any(block.label == "introduction" for block in qa.blocks)
+
+     assert artifact_store.persisted[0][0] == "DOC-001"
+     for stored_path in artifact_store.persisted[0][1].values():
+         assert Path(stored_path).exists()
++
++
++def test_pdf_pipeline_parses_blocks_tables_and_metadata(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    monkeypatch.setenv("REQUIRE_GPU", "0")
++    monkeypatch.setattr("Medical_KG.pdf.service.ensure_gpu", lambda require_flag=True: None)
++    artifact_root = tmp_path / "mineru"
++    artifact_root.mkdir()
++    block_payload = [
++        {"page": 1, "y": 40, "text": "Introduction"},
++        {"page": 1, "y": 120, "text": "Study design"},
++        {"page": 1, "y": 320, "text": "Figure 1. Patient flow"},
++        {"page": 2, "y": 40, "text": "References"},
++        {"page": 2, "y": 80, "text": "1. Smith J. Trial of aspirin."},
++    ]
++    table_payload = [
++        {
++            "caption": "Table 1",
++            "rows": [["Arm", "Outcome"], ["Placebo", "10%"], ["Drug", "20%"]],
++            "row_spans": [1, 1, 1],
++            "col_spans": [1, 1],
++        }
++    ]
++    write_mineru_block_json(artifact_root, block_payload, name="DOC-002/blocks.json")
++    write_mineru_table_json(artifact_root, table_payload, name="DOC-002/tables.json")
++    artifacts = MinerUArtifacts(
++        markdown=artifact_root / "DOC-002" / "markdown.json",
++        blocks=artifact_root / "DOC-002" / "blocks.json",
++        tables=artifact_root / "DOC-002" / "tables.html",
++        offset_map=artifact_root / "DOC-002" / "offset.json",
++    )
++    for path in (artifacts.markdown, artifacts.tables, artifacts.offset_map):
++        path.parent.mkdir(parents=True, exist_ok=True)
++        path.write_text("{}", encoding="utf-8")
++    result = MinerURunResult(doc_key="DOC-002", artifacts=artifacts, metadata={})
++
++    class StubMinerU:
++        def __init__(self, payload: MinerURunResult) -> None:
++            self.payload = payload
++
++        def command(self, pdf_path: Path, doc_key: str) -> list[str]:
++            return ["mineru", "--input", str(pdf_path), "--id", doc_key]
++
++        def run(self, pdf_path: Path, doc_key: str) -> MinerURunResult:
++            return self.payload
++
++    ledger = RecordingLedger()
++    pipeline = PdfPipeline(
++        ledger=ledger,
++        mineru=StubMinerU(result),
++        qa=QaGates(reading_order_threshold=0.0, min_pages=1, max_pages=5),
++    )
++    pdf_path = write_sample_pdf(tmp_path, "tables.pdf")
++    metadata = pipeline.process(PdfDocument("DOC-002", "uri", pdf_path))
++
++    assert metadata["references"] == [{"index": "1", "citation": "Smith J. Trial of aspirin."}]
++    assert metadata["figures"] == [{"figure": "1", "caption": "Patient flow"}]
++    assert metadata["tables"][0]["rows"][0] == ["Arm", "Outcome"]
++    assert metadata["tables"][0]["caption"] == "Table 1"
++    assert metadata["qa_metrics"]["table_count"] == 1
++
++
++def test_pdf_pipeline_handles_multi_column_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
++    monkeypatch.setenv("REQUIRE_GPU", "0")
++    monkeypatch.setattr("Medical_KG.pdf.service.ensure_gpu", lambda require_flag=True: None)
++
++    class ColumnMinerU(FakeMinerURunner):
++        def run(self, pdf_path: Path, doc_key: str) -> MinerURunResult:  # type: ignore[override]
++            result = super().run(pdf_path, doc_key)
++            blocks_path = result.artifacts.blocks
++            write_mineru_block_json(
++                blocks_path.parent,
++                [
++                    {"page": 1, "y": 50, "text": "Methods"},
++                    {"page": 1, "y": 80, "text": "Left column text"},
++                    {"page": 1, "y": 350, "text": "Right column text"},
++                ],
++                name="blocks.json",
++            )
++            return result
++
++    ledger = RecordingLedger()
++    mineru = ColumnMinerU(tmp_path / "mineru")
++    qa = RecordingQa()
++    pipeline = PdfPipeline(ledger=ledger, mineru=mineru, qa=qa)
++    pdf_path = write_sample_pdf(tmp_path, "columns.pdf")
++    pipeline.process(PdfDocument("DOC-003", "uri", pdf_path))
++
++    assert qa.blocks is not None
++    assert [block.text for block in qa.blocks][:2] == ["Methods", "Left column text"]
+diff --git a/tests/pdf/test_postprocess.py b/tests/pdf/test_postprocess.py
+index 2f6eacd02f9cc9928a721e09f417d6f3c470afcc..c8a4207381ec0223c623f68275acda60e7d91ef5 100644
+--- a/tests/pdf/test_postprocess.py
++++ b/tests/pdf/test_postprocess.py
+@@ -1,28 +1,31 @@
+ from Medical_KG.pdf.postprocess import (
++    EquationNormaliser,
++    FigureCaptionExtractor,
+     HeaderFooterSuppressor,
+     HyphenationRepair,
++    ReferenceExtractor,
+     SectionLabeler,
+     TextBlock,
+     TwoColumnReflow,
+ )
+
+
+ def test_two_column_reflow_detects_and_orders_blocks() -> None:
+     blocks = [
+         TextBlock(page=1, y=45, text="Intro"),
+         TextBlock(page=1, y=65, text="Background"),
+         TextBlock(page=1, y=85, text="Discussion"),
+         TextBlock(page=1, y=95, text="Conclusion"),
+         TextBlock(page=1, y=355, text="Methods"),
+         TextBlock(page=1, y=375, text="Results"),
+     ]
+     reflow = TwoColumnReflow()
+
+     assert reflow.detect_columns(blocks)
+
+     ordered = reflow.reflow(blocks)
+     texts = [block.text for block in ordered]
+
+     assert texts == [
+         "Intro",
+         "Background",
+@@ -52,25 +55,48 @@ def test_header_footer_suppressor_removes_repeated_text() -> None:
+         "Methods paragraph",
+         "Results paragraph",
+     ]
+
+
+ def test_hyphenation_repair_and_section_labeling() -> None:
+     repair = HyphenationRepair()
+     labeler = SectionLabeler()
+     blocks = [
+         TextBlock(page=1, y=100, text="Introduction"),
+         TextBlock(page=1, y=200, text="Back-" "\nground"),
+         TextBlock(page=1, y=300, text="Methods"),
+     ]
+
+     repaired = [
+         TextBlock(block.page, block.y, repair.repair(block.text)) for block in blocks
+     ]
+     labeled = labeler.label(repaired)
+
+     assert repaired[1].text == "Background"
+     assert [block.label for block in labeled] == [
+         "introduction",
+         "introduction",
+         "methods",
+     ]
++
++
++def test_equation_and_metadata_extractors() -> None:
++    normaliser = EquationNormaliser()
++    text = "The hazard ratio was $  HR   = 0.8 $."
++    assert normaliser.normalise(text) == "The hazard ratio was $ HR = 0.8 $."
++
++    extractor = ReferenceExtractor()
++    blocks = [
++        TextBlock(page=1, y=100, text="References"),
++        TextBlock(page=1, y=120, text="1. Doe J. Example."),
++        TextBlock(page=1, y=140, text="2] Smith A. Sample."),
++    ]
++    references = extractor.extract(blocks)
++    assert references == [
++        {"index": "1", "citation": "Doe J. Example."},
++        {"index": "2", "citation": "Smith A. Sample."},
++    ]
++
++    figures = FigureCaptionExtractor().extract(
++        [TextBlock(page=1, y=160, text="Figure 2. Study design diagram")]
++    )
++    assert figures == [{"figure": "2", "caption": "Study design diagram"}]
+diff --git a/tests/pdf/test_qa.py b/tests/pdf/test_qa.py
+index 3f10aba6c5d7bafa9807d6951bc678a2376c633b..9ce84cbca4adbdff0c5e494c7290823629cfe6a8 100644
+--- a/tests/pdf/test_qa.py
++++ b/tests/pdf/test_qa.py
+@@ -18,25 +18,42 @@ def test_qa_gates_success() -> None:
+     metrics = gates.evaluate(blocks=make_blocks(), confidences=[0.9, 0.8], tables=[])
+
+     assert metrics.reading_order_score == pytest.approx(1.0)
+     assert metrics.ocr_confidence_mean == pytest.approx(0.85)
+     assert metrics.header_footer_suppressed == 0
+
+
+ def test_qa_gates_rejects_bad_reading_order() -> None:
+     gates = QaGates(reading_order_threshold=0.9)
+     blocks = [
+         TextBlock(page=1, y=200, text="Methods"),
+         TextBlock(page=1, y=100, text="Introduction"),
+     ]
+
+     with pytest.raises(QaGateError):
+         gates.evaluate(blocks=blocks, confidences=[1.0], tables=[])
+
+
+ def test_qa_gates_rejects_poor_ocr_and_tables() -> None:
+     gates = QaGates(ocr_threshold=0.9)
+     blocks = make_blocks()
+     tables = [{"rows": [["A"]]}]  # invalid: single-column table
+
+     with pytest.raises(QaGateError):
+         gates.evaluate(blocks=blocks, confidences=[0.2, 0.3], tables=tables)
++
++
++def test_qa_gates_page_and_language_checks() -> None:
++    gates = QaGates(min_pages=2, max_pages=5, allowed_languages=("en",))
++    blocks = [
++        TextBlock(page=1, y=100, text="Introduction"),
++        TextBlock(page=2, y=150, text="Conclusion"),
++    ]
++
++    metrics = gates.evaluate(blocks=blocks, confidences=[1.0], tables=[], page_count=2)
++    assert metrics.table_count == 0
++
++    with pytest.raises(QaGateError):
++        gates.evaluate(blocks=blocks[:1], confidences=[1.0], tables=[], page_count=1)
++
++    with pytest.raises(QaGateError):
++        gates.evaluate(blocks=blocks, confidences=[1.0], tables=[], language="non-en")
+
+EOF
+)

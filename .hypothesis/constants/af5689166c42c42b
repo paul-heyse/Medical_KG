@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/chunking/opensearch.py
+# hypothesis_version: 6.140.2
+
+[1.0, 1.2, 1.6, 2.0, 4096, '::', 'BM25', 'ChunkSearchIndexer', 'FacetVectorIndexer', 'OpenSearchClient', '_id', '_index', 'analysis', 'analyzer', 'body', 'bool', 'chunk', 'chunk_bm25', 'chunk_id', 'chunks_v1', 'cosine', 'default', 'dense_vector', 'dims', 'doc_id', 'embedding_qwen', 'facet_json', 'facet_type', 'facets_v1', 'fields', 'filter', 'granularity', 'id', 'index', 'integer', 'keyword', 'lowercase', 'mappings', 'match', 'multi_match', 'paragraph', 'properties', 'query', 'rank_features', 'settings', 'should', 'similarity', 'splade_terms', 'standard', 'table_lines', 'text', 'title_path', 'tokenizer', 'tokens', 'type']

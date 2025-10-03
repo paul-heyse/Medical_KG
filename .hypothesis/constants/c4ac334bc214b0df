@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/security/audit.py
+# hypothesis_version: 6.140.2
+
+[b'\n', 500, 1000, 1024, '.gz', 'AuditEvent', 'AuditLogger', 'a', 'actor', 'category', 'csv', 'hash', 'json', 'payload', 'previous_hash', 'r', 'rb', 'resource', 'timestamp', 'utf-8', 'w', 'wt']

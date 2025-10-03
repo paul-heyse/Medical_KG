@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/entity_linking/ner.py
+# hypothesis_version: 6.140.2
+
+['Mention', 'NerPipeline', 'en_core_sci_sm']

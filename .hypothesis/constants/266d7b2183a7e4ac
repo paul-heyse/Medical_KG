@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/ir/builder.py
+# hypothesis_version: 6.140.2
+
+['Abstract', 'Guideline Table', 'Ingredients', 'Primary Outcomes', 'abstract', 'basis', 'bbox', 'blocks', 'body', 'canonical_end', 'canonical_start', 'caption', 'clinicaltrials', 'dailymed', 'description', 'eligibility', 'guideline', 'h1', 'h2', 'h3', 'headers', 'heading', 'html.parser', 'ingredients', 'li', 'list_item', 'loinc', 'loinc_section', 'markdown', 'measure', 'mineru', 'name', 'offset_map', 'outcomes', 'p', 'page', 'paragraph', 'path', 'pmc', 'provenance', 'raw', 'raw_end', 'raw_start', 'rows', 'section', 'sections', 'span_map', 'status', 'strength', 'table', 'tables', 'tag', 'td', 'text', 'th', 'timeFrame', 'time_frame', 'title', 'tr', 'transform', 'type']

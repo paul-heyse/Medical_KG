@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/config/models.py
+# hypothesis_version: 6.140.2
+
+[0.0, 0.01, 0.5, 1.0, '; ', 'AuthConfig', 'AuthSettings', 'Config', 'PdfPipelineSettings', 'PolicyDocument', 'actions', 'admin_scope', 'apis', 'artifact_dir', 'audience', 'auth', 'backoff_seconds', 'bm25', 'burst', 'cache', 'catalog', 'chunking', 'dense', 'embedding_seconds', 'embeddings', 'entity_linking', 'expansion_seconds', 'feature_flags', 'fusion', 'issuer', 'jwt_secret', 'kg', 'kg.neo4j_uri', 'ledger_path', 'level', 'logging', 'max_attempts', 'neo4j_uri', 'observability', 'overlap', 'pdf', 'pipelines', 'profiles', 'query_seconds', 'rate_limit', 'requests_per_minute', 'require_gpu', 'retrieval', 'retrieval.fusion', 'retry', 'sources', 'splade', 'splade_enabled', 'target_tokens', 'validate_constraints', 'values', 'vllm_api_base', 'vocabs', 'weights']

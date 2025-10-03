@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/kg/fhir.py
+# hypothesis_version: 6.140.2
+
+['1', 'Evidence', 'EvidenceVariable', 'Provenance', 'active', 'activity', 'agent', 'author', 'characteristic', 'ci_high', 'ci_low', 'code', 'coding', 'concept', 'confidenceInterval', 'description', 'display', 'g', 'high', 'id', 'kg', 'low', 'mL', 'mg', 'model', 'n_total', 'name', 'note', 'notes', 'prompt_hash', 'recorded', 'reference', 'resourceType', 'sampleSize', 'statistic', 'statisticType', 'status', 'system', 'target', 'timestamp', 'type', 'unit', 'unit_ucum', 'value', 'who']

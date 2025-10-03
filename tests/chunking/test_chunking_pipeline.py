@@ -86,3 +86,24 @@ def test_chunking_pipeline_outputs_embeddings_and_facets() -> None:
 
     assert any("1." in chunk.text and "2." in chunk.text for chunk in result.chunks)
     assert any(chunk.intent == ClinicalIntent.ENDPOINT for chunk in result.chunks)
+
+
+def test_table_extraction_preserves_structure() -> None:
+    html = (
+        "<table>"
+        "<tr><th>Group</th><th>Value</th></tr>"
+        '<tr><td rowspan="2">A</td><td>10%</td></tr>'
+        "<tr><td>12%</td></tr>"
+        "</table>"
+    )
+    document = Document(
+        doc_id="DOC-TABLE",
+        text="Introduction. " + html,
+        tables=[Table(html=html, digest="", start=0, end=len(html))],
+    )
+    chunker = SemanticChunker(profile=get_profile("guideline"))
+    chunks = chunker.chunk(document)
+    assert len(chunks) == 1
+    chunk = chunks[0]
+    assert chunk.table_lines == ["Group | Value", "A | 10%", "12%"]
+    assert "Group Value" in chunk.table_digest

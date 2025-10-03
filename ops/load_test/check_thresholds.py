@@ -15,6 +15,18 @@ from bs4 import BeautifulSoup
 import yaml
 
 
+# NOTE: These dataclasses are also imported by pytest test modules. When tests load this
+# module via importlib, dataclasses complains if __module__ is None (Python 3.12+). To
+# guard against that, ensure we register the module name explicitly before defining the
+# dataclasses during dynamic imports.
+if __name__ == "__main__":
+    MODULE_NAME = __name__
+else:
+    MODULE_NAME = __name__ or "ops.load_test.check_thresholds"
+
+sys.modules.setdefault(MODULE_NAME, sys.modules.get(__name__))
+
+
 @dataclass(frozen=True)
 class MetricSnapshot:
     """Load-test metrics for a single route/aggregate entry."""

@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/ir/normalizer.py
+# hypothesis_version: 6.140.2
+
+['NFC', 'cardiovascular', 'discussion', 'introduction', 'lactate', 'methods', 'monitoring', 'normalize', 'other', 'results', 'sepsis', 'therapy', 'treatment', 'unknown']

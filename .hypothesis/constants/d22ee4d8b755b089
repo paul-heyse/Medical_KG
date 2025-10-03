@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/kg/writer.py
+# hypothesis_version: 6.140.2
+
+[' SET r += $dose', ' SET r += $rel_props', 'AdverseEvent', 'Arm', 'Chunk', 'Concept', 'DERIVES_FROM', 'DESCRIBES', 'Device', 'Document', 'Drug', 'Evidence', 'EvidenceVariable', 'ExtractionActivity', 'HAS_AE', 'HAS_ARM', 'HAS_CHUNK', 'HAS_ELIGIBILITY', 'HAS_IDENTIFIER', 'HAS_OUTCOME', 'IS_A', 'Identifier', 'Intervention', 'MEASURES', 'MENTIONS', 'Outcome', 'REPORTS', 'SAME_AS', 'SIMILAR_TO', 'Study', 'USES_INTERVENTION', 'WAS_GENERATED_BY', 'WAS_GENERATED_BY_VAR', 'activity_id', 'ae_id', 'arm_id', 'chunk_id', 'confidence', 'constraint_id', 'count', 'denominator', 'doc_uri', 'dose', 'end_value', 'ev_id', 'evidence_id', 'grade', 'id', 'intervention_id', 'iri', 'nct_id', 'node_key', 'order', 'outcome_id', 'props', 'rel_props', 'rxcui', 'scheme', 'start_value', 'udi_di', 'uri', 'value', 'variable_id']

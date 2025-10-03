@@ -124,8 +124,8 @@ def test_validate_jwt_scope(config_dir: Path, base_env: None) -> None:
     secret = "jwt-secret"
     auth = manager.config.auth_settings()
     payload = {
-        "iss": auth["issuer"],
-        "aud": auth["audience"],
+        "iss": auth.issuer,
+        "aud": auth.audience,
         "scope": "admin:config other:scope",
     }
     token = _encode_jwt(payload, secret)

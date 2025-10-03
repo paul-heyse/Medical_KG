@@ -45,6 +45,138 @@ if "fastapi" not in sys.modules:
     fastapi_module.APIRouter = _APIRouter
     sys.modules["fastapi"] = fastapi_module
 
+if "httpx" not in sys.modules:
+    try:
+        import httpx as _httpx  # noqa: F401  # pragma: no cover - use real module when available
+    except ImportError:  # pragma: no cover - fallback stub for environments without httpx
+        httpx_module = types.ModuleType("httpx")
+
+        class TimeoutException(Exception):
+            pass
+
+        class HTTPError(Exception):
+            def __init__(self, message: str, response: Any | None = None) -> None:
+                super().__init__(message)
+                self.response = response
+
+        class Request:
+            def __init__(self, method: str, url: str, **kwargs: Any) -> None:
+                self.method = method
+                self.url = url
+                self.kwargs = kwargs
+
+            def __str__(self) -> str:  # pragma: no cover - debug helper
+                return f"{self.method} {self.url}"
+
+        class Response:
+            def __init__(
+                self,
+                *,
+                status_code: int = 200,
+                content: bytes | None = None,
+                text: str | None = None,
+                json: Any | None = None,
+                request: Request | None = None,
+            ) -> None:
+                self.status_code = status_code
+                self._content = content or text.encode("utf-8") if text is not None else b""
+                self._json = json
+                self.text = text or (self._content.decode("utf-8") if self._content else "")
+                self.content = self._content
+                self.request = request
+                self.elapsed = None
+
+            def json(self, **_kwargs: Any) -> Any:
+                if self._json is not None:
+                    return self._json
+                import json as _json  # local import to avoid global dependency
+
+                return _json.loads(self.text or "{}")
+
+            def raise_for_status(self) -> None:
+                if self.status_code >= 400:
+                    raise HTTPError("HTTP error", response=self)
+
+        class MockTransport:
+            def __init__(self, handler: Callable[[Request], Response | Any]) -> None:
+                self._handler = handler
+
+            def handle_request(self, request: Request) -> Any:
+                return self._handler(request)
+
+        class _StreamContext:
+            def __init__(self, transport: MockTransport, method: str, url: str, kwargs: dict[str, Any]) -> None:
+                self._transport = transport
+                self._method = method
+                self._url = url
+                self._kwargs = kwargs
+                self._response: Response | None = None
+
+            async def __aenter__(self) -> Response:
+                request = Request(self._method, self._url, **self._kwargs)
+                result = self._transport.handle_request(request)
+                if asyncio.iscoroutine(result):
+                    result = await result
+                self._response = result
+                return self._response
+
+            async def __aexit__(self, *_exc: Any) -> None:
+                return None
+
+        class AsyncClient:
+            def __init__(self, *, transport: MockTransport | None = None, **_kwargs: Any) -> None:
+                self._transport = transport
+
+            async def request(self, method: str, url: str, **kwargs: Any) -> Response:
+                if self._transport is None:
+                    raise RuntimeError("Mock transport required in tests")
+                request = Request(method, url, **kwargs)
+                response = self._transport.handle_request(request)
+                if asyncio.iscoroutine(response):
+                    response = await response
+                return response
+
+            async def get(
+                self,
+                url: str,
+                *,
+                params: Mapping[str, Any] | None = None,
+                headers: Mapping[str, str] | None = None,
+            ) -> Response:
+                return await self.request("GET", url, params=params, headers=headers)
+
+            async def post(
+                self,
+                url: str,
+                *,
+                json: Any | None = None,
+                headers: Mapping[str, str] | None = None,
+            ) -> Response:
+                return await self.request("POST", url, json=json, headers=headers)
+
+            def stream(self, method: str, url: str, **kwargs: Any) -> _StreamContext:
+                if self._transport is None:
+                    raise RuntimeError("Mock transport required in tests")
+                return _StreamContext(self._transport, method, url, kwargs)
+
+            async def aclose(self) -> None:
+                return None
+
+            async def __aenter__(self) -> "AsyncClient":
+                return self
+
+            async def __aexit__(self, *_exc: Any) -> None:
+                return None
+
+        httpx_module.AsyncClient = AsyncClient
+        httpx_module.MockTransport = MockTransport
+        httpx_module.TimeoutException = TimeoutException
+        httpx_module.HTTPError = HTTPError
+        httpx_module.Response = Response
+        httpx_module.Request = Request
+
+        sys.modules["httpx"] = httpx_module
+
 from trace import Trace
 
 import pytest
@@ -52,7 +184,6 @@ import pytest
 from Medical_KG.ingestion.ledger import LedgerEntry
 from Medical_KG.retrieval.models import RetrievalRequest, RetrievalResponse, RetrievalResult, RetrieverScores
 from Medical_KG.retrieval.types import JSONValue, SearchHit, VectorHit
-from Medical_KG.utils.optional_dependencies import get_httpx_module
 
 
 @pytest.fixture
@@ -81,7 +212,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # p
         return
     results = _TRACE.results()
     executed: dict[Path, set[int]] = defaultdict(set)
-    for (filename, lineno), count in results.counts.items():
+    for (filename, lineno), count in list(results.counts.items()):
         if count <= 0:
             continue
         path = Path(filename)

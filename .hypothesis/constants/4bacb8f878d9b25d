@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/ingestion/adapters/terminology.py
+# hypothesis_version: 6.140.2
+
+['@value', 'Invalid ICD-11 code', 'Invalid LOINC code', 'Invalid UMLS CUI', '^C\\d{7}', '^D\\d{6}', '^[A-Z0-9]{3,4}', '^\\d{1,5}-\\d{1,2}$', '^\\d{6,18}$', 'browserUrl', 'code', 'concept', 'conceptList', 'cui', 'definition', 'descriptor', 'descriptorName', 'descriptorUI', 'descriptor_id', 'designation', 'display', 'icd11', 'loinc', 'mesh', 'method', 'name', 'parameter', 'property', 'resource', 'result', 'snomed', 'string', 'synonyms', 'system', 'term', 'termList', 'terms', 'title', 'ui', 'umls', 'uri', 'v1']

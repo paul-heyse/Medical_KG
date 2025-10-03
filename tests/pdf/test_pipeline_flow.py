@@ -7,8 +7,13 @@ import pytest
 
 from Medical_KG.pdf.mineru import MinerUArtifacts, MinerURunResult
 from Medical_KG.pdf.postprocess import TextBlock
-from Medical_KG.pdf.qa import QaMetrics
+from Medical_KG.pdf.qa import QaGates, QaMetrics
 from Medical_KG.pdf.service import ArtifactStore, PdfDocument, PdfPipeline
+from tests.fixtures.pdf_samples import (
+    write_mineru_block_json,
+    write_mineru_table_json,
+    write_sample_pdf,
+)
 
 
 class RecordingLedger:
@@ -46,6 +51,8 @@ class RecordingQa:
         blocks: list[TextBlock],
         confidences: list[float],
         tables: list[Mapping[str, object]],
+        page_count: int | None = None,
+        language: str | None = None,
     ) -> QaMetrics:
         self.blocks = blocks
         return QaMetrics(
@@ -117,8 +124,7 @@ def pipeline_components(tmp_path: Path) -> dict[str, object]:
 def test_pdf_pipeline_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pipeline_components: dict[str, object]) -> None:
     monkeypatch.setenv("REQUIRE_GPU", "0")
     monkeypatch.setattr("Medical_KG.pdf.service.ensure_gpu", lambda require_flag=True: None)
-    pdf_path = tmp_path / "paper.pdf"
-    pdf_path.write_bytes(b"%PDF-1.4")
+    pdf_path = write_sample_pdf(tmp_path, "paper.pdf")
     document = PdfDocument(doc_key="DOC-001", uri="https://example.org/paper.pdf", local_path=pdf_path)
 
     pipeline = pipeline_components["pipeline"]
@@ -132,6 +138,9 @@ def test_pdf_pipeline_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert metadata["mineru_artifacts"]["markdown_uri"].endswith("markdown.json")
     assert metadata["mineru_cli_args"][0] == "mineru"
     assert metadata["qa_metrics"]["reading_order_score"] == pytest.approx(0.95)
+    assert metadata["references"] == []
+    assert metadata["figures"] == []
+    assert metadata["tables"] == []
 
     assert qa.blocks is not None
     block_texts = [block.text for block in qa.blocks]
@@ -142,3 +151,94 @@ def test_pdf_pipeline_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert artifact_store.persisted[0][0] == "DOC-001"
     for stored_path in artifact_store.persisted[0][1].values():
         assert Path(stored_path).exists()
+
+
+def test_pdf_pipeline_parses_blocks_tables_and_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("REQUIRE_GPU", "0")
+    monkeypatch.setattr("Medical_KG.pdf.service.ensure_gpu", lambda require_flag=True: None)
+    artifact_root = tmp_path / "mineru"
+    artifact_root.mkdir()
+    block_payload = [
+        {"page": 1, "y": 40, "text": "Introduction"},
+        {"page": 1, "y": 120, "text": "Study design"},
+        {"page": 1, "y": 320, "text": "Figure 1. Patient flow"},
+        {"page": 2, "y": 40, "text": "References"},
+        {"page": 2, "y": 80, "text": "1. Smith J. Trial of aspirin."},
+    ]
+    table_payload = [
+        {
+            "caption": "Table 1",
+            "rows": [["Arm", "Outcome"], ["Placebo", "10%"], ["Drug", "20%"]],
+            "row_spans": [1, 1, 1],
+            "col_spans": [1, 1],
+        }
+    ]
+    write_mineru_block_json(artifact_root, block_payload, name="DOC-002/blocks.json")
+    write_mineru_table_json(artifact_root, table_payload, name="DOC-002/tables.json")
+    artifacts = MinerUArtifacts(
+        markdown=artifact_root / "DOC-002" / "markdown.json",
+        blocks=artifact_root / "DOC-002" / "blocks.json",
+        tables=artifact_root / "DOC-002" / "tables.html",
+        offset_map=artifact_root / "DOC-002" / "offset.json",
+    )
+    for path in (artifacts.markdown, artifacts.tables, artifacts.offset_map):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+    result = MinerURunResult(doc_key="DOC-002", artifacts=artifacts, metadata={})
+
+    class StubMinerU:
+        def __init__(self, payload: MinerURunResult) -> None:
+            self.payload = payload
+
+        def command(self, pdf_path: Path, doc_key: str) -> list[str]:
+            return ["mineru", "--input", str(pdf_path), "--id", doc_key]
+
+        def run(self, pdf_path: Path, doc_key: str) -> MinerURunResult:
+            return self.payload
+
+    ledger = RecordingLedger()
+    pipeline = PdfPipeline(
+        ledger=ledger,
+        mineru=StubMinerU(result),
+        qa=QaGates(reading_order_threshold=0.0, min_pages=1, max_pages=5),
+    )
+    pdf_path = write_sample_pdf(tmp_path, "tables.pdf")
+    metadata = pipeline.process(PdfDocument("DOC-002", "uri", pdf_path))
+
+    assert metadata["references"] == [{"index": "1", "citation": "Smith J. Trial of aspirin."}]
+    assert metadata["figures"] == [{"figure": "1", "caption": "Patient flow"}]
+    assert metadata["tables"][0]["rows"][0] == ["Arm", "Outcome"]
+    assert metadata["tables"][0]["caption"] == "Table 1"
+    assert metadata["qa_metrics"]["table_count"] == 1
+
+
+def test_pdf_pipeline_handles_multi_column_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("REQUIRE_GPU", "0")
+    monkeypatch.setattr("Medical_KG.pdf.service.ensure_gpu", lambda require_flag=True: None)
+
+    class ColumnMinerU(FakeMinerURunner):
+        def run(self, pdf_path: Path, doc_key: str) -> MinerURunResult:  # type: ignore[override]
+            result = super().run(pdf_path, doc_key)
+            blocks_path = result.artifacts.blocks
+            write_mineru_block_json(
+                blocks_path.parent,
+                [
+                    {"page": 1, "y": 50, "text": "Methods"},
+                    {"page": 1, "y": 80, "text": "Left column text"},
+                    {"page": 1, "y": 350, "text": "Right column text"},
+                ],
+                name="blocks.json",
+            )
+            return result
+
+    ledger = RecordingLedger()
+    mineru = ColumnMinerU(tmp_path / "mineru")
+    qa = RecordingQa()
+    pipeline = PdfPipeline(ledger=ledger, mineru=mineru, qa=qa)
+    pdf_path = write_sample_pdf(tmp_path, "columns.pdf")
+    pipeline.process(PdfDocument("DOC-003", "uri", pdf_path))
+
+    assert qa.blocks is not None
+    assert [block.text for block in qa.blocks][:2] == ["Methods", "Left column text"]

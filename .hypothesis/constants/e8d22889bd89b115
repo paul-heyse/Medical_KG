@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/briefing/service.py
+# hypothesis_version: 6.140.2
+
+['BriefingService', 'BriefingSettings', 'Dosing', 'Eligibility', 'Endpoints', 'Guidelines', 'PICO', 'Safety', 'adverse_events', 'bibliography', 'citations', 'conflicts', 'content', 'context', 'description', 'details', 'docx', 'effects', 'eligibility', 'evidence_counts', 'format', 'freshness', 'gaps', 'html', 'items', 'json', 'latest_study', 'map', 'md', 'pdf', 'pico', 'priority', 'question', 'questions', 'registry_ids', 'sections', 'studies', 'study_id', 'summary', 'title', 'topic']

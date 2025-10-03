@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/evaluation/harness.py
+# hypothesis_version: 6.140.2
+
+[0.0, 0.05, 0.7, 0.8, 'EvaluationHarness', 'EvaluationSettings', 'citations', 'f1', 'hallucination_rate', 'min', 'mrr', 'nDCG below threshold', 'ndcg_at_10', 'recall_at_10']

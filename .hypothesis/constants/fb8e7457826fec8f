@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/retrieval/ontology.py
+# hypothesis_version: 6.140.2
+
+[0.0, 'ConceptCatalogClient', 'OntologyExpander', 'OntologyTerm', '[^a-z0-9\\s]']

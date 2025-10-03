@@ -3,6 +3,23 @@ from __future__ import annotations
 import sys
 from types import SimpleNamespace
 
+import pytest
+
+
+class _MetricStub:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, str] | float]] = []
+
+    def labels(self, **labels: str) -> "_MetricStub":
+        self.calls.append(("labels", labels))
+        return self
+
+    def inc(self, amount: float = 1.0) -> None:
+        self.calls.append(("inc", amount))
+
+    def observe(self, value: float) -> None:
+        self.calls.append(("observe", value))
+
 
 class _DummyResponse:
     def __init__(self, status_code: int = 200) -> None:
@@ -37,3 +54,17 @@ class _DummyClient:
 
 
 sys.modules.setdefault("httpx", SimpleNamespace(Client=_DummyClient))
+
+
+@pytest.fixture(autouse=True)
+def stub_embedding_metrics(monkeypatch: pytest.MonkeyPatch) -> dict[str, _MetricStub]:
+    requests = _MetricStub()
+    errors = _MetricStub()
+    latency = _MetricStub()
+    monkeypatch.setattr("Medical_KG.embeddings.metrics.EMBEDDING_REQUESTS", requests)
+    monkeypatch.setattr("Medical_KG.embeddings.metrics.EMBEDDING_ERRORS", errors)
+    monkeypatch.setattr("Medical_KG.embeddings.metrics.EMBEDDING_LATENCY", latency)
+    monkeypatch.setattr("Medical_KG.embeddings.service.EMBEDDING_REQUESTS", requests)
+    monkeypatch.setattr("Medical_KG.embeddings.service.EMBEDDING_ERRORS", errors)
+    monkeypatch.setattr("Medical_KG.embeddings.service.EMBEDDING_LATENCY", latency)
+    return {"requests": requests, "errors": errors, "latency": latency}

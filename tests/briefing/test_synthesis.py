@@ -182,4 +182,4 @@ def test_detect_conflicts_and_gaps(sample_bundle: TopicBundle) -> None:
     assert {detail["effect"] for detail in conflicts[0]["details"]} == {0.8, 1.2}
 
     gaps = synthesis.detect_gaps(sample_bundle)
-    assert gaps == ["Relapse-free survival"]
+    assert gaps == ["Overall survival", "Relapse-free survival"]

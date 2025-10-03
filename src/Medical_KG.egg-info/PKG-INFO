@@ -12,6 +12,7 @@ Requires-Dist: typer==0.17.5
 Requires-Dist: rich==14.1.0
 Requires-Dist: tqdm==4.67.1
 Requires-Dist: python-dotenv==1.1.1
+Requires-Dist: pydantic==2.11.9
 Requires-Dist: orjson==3.11.3
 Requires-Dist: jsonlines==4.0.0
 Requires-Dist: pyyaml==6.0.3
@@ -50,6 +51,7 @@ Requires-Dist: python-multipart==0.0.20
 Requires-Dist: pyshacl==0.30.1
 Requires-Dist: prefect==3.4.20
 Requires-Dist: prometheus-client==0.23.1
+Requires-Dist: python-json-logger==3.3.0
 Requires-Dist: opentelemetry-api==1.37.0
 Requires-Dist: opentelemetry-sdk==1.37.0
 Requires-Dist: opentelemetry-instrumentation-fastapi==0.58b0
@@ -91,3 +93,11 @@ Baseline template for Python projects in Cursor on Ubuntu.
 4. Run target tasks: **pytest**, **lint**, **format**.
 
 See `.cursor/rules`, `.vscode/*`, and `environment.yml` for configuration details.
+
+## Testing & Coverage
+
+- Run `pytest -q` to execute the offline suite. A trace-based hook enforces at
+  least **95% statement coverage** for `src/Medical_KG` and writes
+  `coverage_missing.txt` whenever new gaps appear.
+- Review `docs/testing_strategy.md` for guidance on fixtures, async helpers, and
+  coverage expectations.

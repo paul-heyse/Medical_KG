@@ -1,5 +1,6 @@
 Medical_KG
-httpx
 jsonlines
 langdetect
+pydantic
+reportlab
 yaml

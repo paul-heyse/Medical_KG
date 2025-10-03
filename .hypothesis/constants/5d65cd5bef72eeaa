@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/observability/tracing.py
+# hypothesis_version: 6.140.2
+
+[0.0, 1.0, '0.1', 'MEDKG_SERVICE_NAME', 'headers', 'medical-kg-api', 'service.name', 'setup_tracing']

@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/api/models.py
+# hypothesis_version: 6.140.2
+
+['allow', 'end_id', 'extra', 'populate_by_name', 'start_id', 'topK']

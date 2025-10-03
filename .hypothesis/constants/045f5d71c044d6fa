@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/retrieval/clients.py
+# hypothesis_version: 6.140.2
+
+[0.0, 0.1, 0.2, 0.3, 'EmbeddingClient', 'InMemorySearch', 'InMemorySearchHit', 'InMemoryVector', 'OpenSearchClient', 'PassthroughEncoder', 'Reranker', 'SpladeEncoder', 'VectorSearchClient']

@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/security/provenance.py
+# hypothesis_version: 6.140.2
+
+['@context', 'Extraction', 'ExtractionActivity', 'ProvenanceStore', 'activity', 'activity_id', 'entity', 'model', 'prov', 'prov:generatedEntity', 'prov:startedAtTime', 'prov:type', 'prov:usedEntity', 'prov:usedModel', 'prov:wasGeneratedBy', 'version', 'wasDerivedFrom']

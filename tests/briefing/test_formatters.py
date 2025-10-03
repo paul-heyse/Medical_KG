@@ -3,10 +3,12 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from io import BytesIO
 
 import pytest
 
 from Medical_KG.briefing.formatters import BriefingFormatter
+from pdfminer.high_level import extract_text
 
 
 @pytest.fixture
@@ -70,11 +72,11 @@ def test_to_html_allows_custom_stylesheet(payload: dict[str, object]) -> None:
 
 def test_to_pdf_creates_textual_canvas(formatter: BriefingFormatter, payload: dict[str, object]) -> None:
     pdf_bytes = formatter.to_pdf(payload)
-    text = pdf_bytes.decode("utf-8")
 
-    assert "Topic Dossier: Lung Cancer" in text
-    assert "TEXT 90.00" in text  # entries rendered with indentation
-    assert text.count("PAGE") >= 1
+    # Verify key PDF markers rather than raw text contents
+    assert pdf_bytes.startswith(b"%PDF-")
+    extracted = extract_text(BytesIO(pdf_bytes))
+    assert "Topic Dossier: Lung Cancer" in extracted
 
 
 def test_to_docx_converts_markdown(formatter: BriefingFormatter, payload: dict[str, object]) -> None:

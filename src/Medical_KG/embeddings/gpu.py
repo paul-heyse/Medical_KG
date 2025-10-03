@@ -58,6 +58,11 @@ class GPUValidator:
             raise GPURequirementError(
                 "GPU required for embeddings but no devices were reported by nvidia-smi"
             )
+        mem_info = getattr(torch_module.cuda, "mem_get_info", None)
+        if callable(mem_info):
+            free_mem, total_mem = mem_info()
+            if total_mem is None or float(total_mem) <= 0.0:
+                raise GPURequirementError("GPU reported invalid memory capacity")
 
     def validate_vllm(self, endpoint: str) -> None:
         if not self.should_require_gpu():

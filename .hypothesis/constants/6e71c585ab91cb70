@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/catalog/updater.py
+# hypothesis_version: 6.140.2
+
+[182, 'CatalogUpdater', 'GUDID', 'HPO', 'ICD11', 'MONDO', 'RXNORM', 'SNOMED']

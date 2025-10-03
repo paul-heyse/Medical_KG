@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/compat/prometheus.py
+# hypothesis_version: 6.140.2
+
+[1.0, 'Counter', 'CounterLike', 'Gauge', 'GaugeLike', 'Histogram', 'HistogramLike', '_NoopMetric', 'prometheus_client']

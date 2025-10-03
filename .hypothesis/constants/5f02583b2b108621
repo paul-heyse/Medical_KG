@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/catalog/normalization.py
+# hypothesis_version: 6.140.2
+
+['ConceptNormaliser', 'NFC', '\\s+', 'alpha', 'anaemia', 'anemia', 'base', 'beta', 'delta', 'edema', 'epsilon', 'esophagus', 'gamma', 'lambda', 'mu', 'normalize_text', 'oedema', 'oesophagus', 'omega', 'paediatric', 'pediatric', 'pi', 'salt', 'sigma', 'theta', 'tumor', 'tumour', 'α', 'β', 'γ', 'δ', 'ε', 'θ', 'λ', 'μ', 'π', 'σ', 'ω']

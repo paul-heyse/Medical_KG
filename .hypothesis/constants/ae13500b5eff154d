@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/catalog/opensearch.py
+# hypothesis_version: 6.140.2
+
+[4096, ', ', 'ConceptIndexManager', 'OpenSearchClient', '_id', '_index', 'analysis', 'analyzer', 'biomed', 'biomed_synonyms', 'code', 'codes', 'concepts_v1', 'cosine', 'definition', 'definition^0.5', 'dense_vector', 'dims', 'embedding_qwen', 'family', 'fields', 'filter', 'index', 'iri', 'keyword', 'label', 'label^3', 'license_bucket', 'lowercase', 'mappings', 'multi_match', 'nested', 'ontology', 'preferred_term', 'properties', 'query', 'rank_features', 'release', 'settings', 'similarity', 'splade_terms', 'standard', 'synonym_graph', 'synonyms', 'synonyms.value^2', 'synonyms_path', 'system', 'text', 'tokenizer', 'type', 'value']

@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/security/retention.py
+# hypothesis_version: 6.140.2
+
+['PurgePipeline', 'RetentionPolicy', 'RetentionRecord', 'RetentionResult', '[anonymized]', 'document', 'policy', 'retention']

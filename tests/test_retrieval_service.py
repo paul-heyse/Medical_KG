@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import re
 
+from typing import Iterable
+
 from Medical_KG.retrieval import (
     ConceptCatalogClient,
     ConstantEmbeddingClient,
@@ -20,11 +22,11 @@ from Medical_KG.retrieval import (
 
 
 class StubCatalog(ConceptCatalogClient):
-    def synonyms(self, identifier: str):  # pragma: no cover - used in tests
+    def synonyms(self, identifier: str) -> Iterable[OntologyTerm]:  # pragma: no cover - used in tests
         if identifier.lower().startswith("nct"):
             yield OntologyTerm(term=identifier.upper(), weight=1.0)
 
-    def search(self, text: str):  # pragma: no cover - used in tests
+    def search(self, text: str) -> Iterable[OntologyTerm]:  # pragma: no cover - used in tests
         if len(text) > 2:
             yield OntologyTerm(term=f"{text}_syn", weight=0.8)
 

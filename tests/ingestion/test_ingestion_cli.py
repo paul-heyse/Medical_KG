@@ -11,7 +11,22 @@ from typing import Callable
 import pytest
 
 # Provide a minimal typer shim for the CLI module.
-typer_stub = types.ModuleType("typer")
+
+
+class _TyperModule(types.ModuleType):
+    Typer: type["_Typer"]
+    Argument: Callable[..., object]
+    Option: Callable[..., object]
+    BadParameter: type[Exception]
+    echo: Callable[[object], None]
+
+    def __init__(self) -> None:
+        super().__init__("typer")
+        self.Typer = _Typer
+        self.Argument = _argument
+        self.Option = _option
+        self.BadParameter = _BadParameter
+        self.echo = _echo
 
 
 class _BadParameter(Exception):
@@ -43,12 +58,7 @@ class _Typer:
 
 
 if "typer" not in sys.modules:
-    typer_stub.Typer = _Typer
-    typer_stub.Argument = _argument
-    typer_stub.Option = _option
-    typer_stub.BadParameter = _BadParameter
-    typer_stub.echo = _echo
-    sys.modules["typer"] = typer_stub
+    sys.modules["typer"] = _TyperModule()
 
 from Medical_KG.ingestion import cli
 from Medical_KG.ingestion.models import Document, IngestionResult

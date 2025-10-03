@@ -1,29 +1,48 @@
+from __future__ import annotations
+
 import asyncio
-from typing import Any
+from typing import Any, Sequence
 
 import pytest
 
-import httpx
 from Medical_KG.ingestion.http_client import AsyncHttpClient, RateLimit
+from Medical_KG.utils.optional_dependencies import (
+    HttpxAsyncClient,
+    HttpxModule,
+    HttpxRequestProtocol,
+    HttpxResponseProtocol,
+    get_httpx_module,
+)
+
+HTTPX: HttpxModule = get_httpx_module()
 
 
-class TestTransport(httpx.AsyncBaseTransport):
-    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"ok": True})
+class _MockTransport:
+    def __init__(self, responses: Sequence[HttpxResponseProtocol]) -> None:
+        self._responses = list(responses)
+        self.calls: list[str] = []
+
+    async def handle_async_request(self, request: HttpxRequestProtocol) -> HttpxResponseProtocol:
+        self.calls.append(str(request.url))
+        return self._responses.pop(0)
 
 
 def test_retry_on_transient_failure(monkeypatch: Any) -> None:
     responses = [
-        httpx.Response(status_code=502, request=httpx.Request("GET", "https://example.com")),
-        httpx.Response(status_code=200, request=httpx.Request("GET", "https://example.com"), json={"ok": True}),
+        HTTPX.Response(status_code=502, request=HTTPX.Request("GET", "https://example.com")),
+        HTTPX.Response(
+            status_code=200,
+            request=HTTPX.Request("GET", "https://example.com"),
+            json={"ok": True},
+        ),
     ]
     transport = _MockTransport(responses)
 
-    async def _request(self: httpx.AsyncClient, method: str, url: str, **kwargs: Any) -> httpx.Response:
-        return await transport.handle_async_request(httpx.Request(method, url, **kwargs))
+    async def _request(self: HttpxAsyncClient, method: str, url: str, **kwargs: Any) -> HttpxResponseProtocol:
+        return await transport.handle_async_request(HTTPX.Request(method, url, **kwargs))
 
     client = AsyncHttpClient(retries=2, limits={"example.com": RateLimit(rate=5, per=1)})
-    monkeypatch.setattr(client._client, "request", _request.__get__(client._client, httpx.AsyncClient))
+    monkeypatch.setattr(client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient))
 
     payload = asyncio.run(client.get_json("https://example.com"))
     assert payload == {"ok": True}
@@ -33,12 +52,16 @@ def test_retry_on_transient_failure(monkeypatch: Any) -> None:
 def test_rate_limiter_serializes_calls(monkeypatch: Any) -> None:
     calls: list[float] = []
 
-    async def _request(self: httpx.AsyncClient, method: str, url: str, **kwargs: Any) -> httpx.Response:
+    async def _request(self: HttpxAsyncClient, method: str, url: str, **kwargs: Any) -> HttpxResponseProtocol:
         calls.append(asyncio.get_running_loop().time())
-        return httpx.Response(status_code=200, json={"ok": True}, request=httpx.Request(method, url, **kwargs))
+        return HTTPX.Response(
+            status_code=200,
+            json={"ok": True},
+            request=HTTPX.Request(method, url, **kwargs),
+        )
 
     client = AsyncHttpClient(limits={"example.com": RateLimit(rate=1, per=0.5)})
-    monkeypatch.setattr(client._client, "request", _request.__get__(client._client, httpx.AsyncClient))
+    monkeypatch.setattr(client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient))
 
     async def _run() -> None:
         await asyncio.gather(*(client.get_json("https://example.com") for _ in range(3)))
@@ -49,14 +72,14 @@ def test_rate_limiter_serializes_calls(monkeypatch: Any) -> None:
 
 
 def test_timeout_propagates(monkeypatch: Any) -> None:
-    async def _request(self: httpx.AsyncClient, method: str, url: str, **kwargs: Any) -> httpx.Response:
-        raise httpx.TimeoutException("timeout", request=httpx.Request(method, url))
+    async def _request(self: HttpxAsyncClient, method: str, url: str, **kwargs: Any) -> HttpxResponseProtocol:
+        raise HTTPX.TimeoutException("timeout")
 
     client = AsyncHttpClient()
-    monkeypatch.setattr(client._client, "request", _request.__get__(client._client, httpx.AsyncClient))
+    monkeypatch.setattr(client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient))
 
     async def _call() -> None:
         await client.get_json("https://example.com")
 
-    with pytest.raises(httpx.TimeoutException):
+    with pytest.raises(HTTPX.TimeoutException):
         asyncio.run(_call())

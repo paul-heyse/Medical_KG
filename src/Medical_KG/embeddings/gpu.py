@@ -66,13 +66,12 @@ class GPUValidator:
         if status_code != 200:
             raise GPURequirementError(f"vLLM health check at {url} returned status {status_code}")
 
-
-def _get(self, url: str) -> int:
-    if self.http_getter:
-        return self.http_getter(url)
-    with httpx.Client(timeout=2.0) as client:
-        response = client.get(url)
-    return response.status_code
+    def _get(self, url: str) -> int:
+        if self.http_getter:
+            return self.http_getter(url)
+        with httpx.Client(timeout=2.0) as client:
+            response = client.get(url)
+        return response.status_code
 
 
 def enforce_gpu_or_exit(

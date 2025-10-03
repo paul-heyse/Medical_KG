@@ -2,9 +2,9 @@
 
 ## 1. Fixture & Mock Infrastructure
 
-- [ ] 1.1 Create shared factories for documents, chunks, and API responses
-- [ ] 1.2 Provide async transport mocks and service doubles (ingestion, retrieval)
-- [ ] 1.3 Publish utilities under `tests/common` with type annotations
+- [x] 1.1 Create shared factories for documents, chunks, and API responses
+- [x] 1.2 Provide async transport mocks and service doubles (ingestion, retrieval)
+- [x] 1.3 Publish utilities under `tests/common` with type annotations
 
 ## 2. Ingestion & Retrieval Tests
 
@@ -19,9 +19,9 @@
 
 ## 4. Coverage Tooling
 
-- [ ] 4.1 Replace manual tracing with pytest coverage configuration (per-file thresholds, html/xml reports)
-- [ ] 4.2 Integrate coverage enforcement into pre-commit/CI (non-100% but realistic targets)
-- [ ] 4.3 Document how to run coverage locally and interpret reports
+- [x] 4.1 Replace manual tracing with pytest coverage configuration (per-file thresholds, html/xml reports)
+- [x] 4.2 Integrate coverage enforcement into pre-commit/CI (non-100% but realistic targets)
+- [x] 4.3 Document how to run coverage locally and interpret reports
 
 ## 5. Verification
 

@@ -19,30 +19,27 @@ checks.
 ## Running Tests Locally
 
 ```bash
-# run the default pytest suite with the trace-based coverage hook enabled
-pytest -q
+# run the default pytest suite with coverage enforcement enabled
+pytest
 ```
 
-The suite uses a `trace`-backed coverage gate (see `tests/conftest.py`). If you
-need to explore code interactively, set `DISABLE_COVERAGE_TRACE=1` in the
-environment before invoking pytest.
+`pytest-cov` enforces coverage targets using the defaults configured in
+`pyproject.toml`. The command above produces `coverage.xml` and an HTML report in
+`htmlcov/` for local inspection.
 
 ## Coverage Expectations
 
 - Total statement coverage for `src/Medical_KG` must remain at or above 95%.
-- The gate writes `coverage_missing.txt` if new lines are untested—review this
-  file for failing builds and add tests for the reported locations.
+- The HTML report (`htmlcov/index.html`) and terminal summary highlight missing
+  lines—treat any uncovered paths as bugs and add tests accordingly.
 
 ## Fixtures and Helpers
 
-- Sample payloads live under `tests/fixtures`. Create shared factories when
-  multiple tests require the same structures.
-- For async code, prefer `pytest` fixtures that provide fake transports rather
-  than real network clients. The local `httpx` shim and FastAPI stubs are
-  available for offline execution.
-- When a test needs to bypass coverage enforcement (for example, to measure
-  raw coverage via `coverage.py`), set the `DISABLE_COVERAGE_TRACE` environment
-  variable to `1`.
+- Sample payloads live under `tests/fixtures`. Shared typed factories and mocks
+  are published under `tests/common` to standardize ingestion/retrieval
+  scenarios.
+- For async code, prefer the doubles in `tests/common.mocks` instead of real
+  network clients so tests stay offline.
 
 ## Secrets and Environment Variables
 
@@ -53,7 +50,8 @@ new secret, document the fake fallback here and update the env templates.
 ## Maintenance Workflow
 
 1. Add or update tests alongside code changes.
-2. Run `pytest -q`; if coverage fails, inspect `coverage_missing.txt` and update
-   tests until the gap disappears.
+2. Run `pytest`; if coverage fails, inspect the terminal summary or
+   `htmlcov/index.html` to identify gaps, then expand tests until the target is
+   met.
 3. Record notable testing patterns or fixtures in this document to aid future
    contributors.

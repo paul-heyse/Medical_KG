@@ -12,8 +12,8 @@ See `.cursor/rules`, `.vscode/*`, and `environment.yml` for configuration detail
 
 ## Testing & Coverage
 
-- Run `pytest -q` to execute the offline suite. A trace-based hook enforces at
-  least **95% statement coverage** for `src/Medical_KG` and writes
-  `coverage_missing.txt` whenever new gaps appear.
-- Review `docs/testing_strategy.md` for guidance on fixtures, async helpers, and
-  coverage expectations.
+- Run `pytest` to execute the offline suite. Pytest-cov enforces at least
+  **95% statement coverage** for `src/Medical_KG` and automatically produces
+  `coverage.xml` plus an `htmlcov/` report for inspection.
+- Review `docs/testing_strategy.md` for guidance on typed fixtures, async
+  helpers, and coverage expectations.

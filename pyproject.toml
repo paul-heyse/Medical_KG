@@ -19,7 +19,6 @@ dependencies = [
     # Data Models & Validation
     "python-dotenv==1.1.1",
     "pydantic==2.11.9",
-    "pydantic==2.10.6",
 
     # JSON & Serialization
     "orjson==3.11.3",
@@ -158,3 +157,8 @@ exclude = [
     "ops/e2e/",
     "ops/chaos/",
 ]
+
+[tool.pytest.ini_options]
+addopts = "--maxfail=1 --disable-warnings --cov=src/Medical_KG --cov-report=term-missing --cov-report=xml --cov-report=html --cov-fail-under=95"
+asyncio_mode = "auto"
+testpaths = ["tests"]

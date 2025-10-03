@@ -1,3 +1,5 @@
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import json
@@ -126,6 +128,26 @@ def test_load_batch_skips_empty_lines(tmp_path: Path) -> None:
 
     loaded = list(cli._load_batch(batch))
     assert loaded == [{"value": 1}, {"value": 2}]
+
+
+def test_load_batch_rejects_invalid_json(tmp_path: Path) -> None:
+    batch = tmp_path / "batch.ndjson"
+    batch.write_text("{invalid json}")
+
+    with pytest.raises(sys.modules["typer"].BadParameter) as excinfo:
+        list(cli._load_batch(batch))
+
+    assert "Invalid JSON" in str(excinfo.value)
+
+
+def test_load_batch_rejects_non_mapping(tmp_path: Path) -> None:
+    batch = tmp_path / "batch.ndjson"
+    batch.write_text(json.dumps([1, 2, 3]))
+
+    with pytest.raises(sys.modules["typer"].BadParameter) as excinfo:
+        list(cli._load_batch(batch))
+
+    assert "Batch entries must be" in str(excinfo.value)
 
 
 def test_ingest_with_batch_outputs_doc_ids(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, MutableMapping, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Sequence
 
 
 @dataclass(slots=True)
@@ -12,26 +12,82 @@ class Span:
     canonical_start: int
     canonical_end: int
     transform: str
+    page: int | None = None
+    bbox: tuple[float, float, float, float] | None = None
 
 
 @dataclass(slots=True)
 class SpanMap:
     spans: List[Span] = field(default_factory=list)
 
-    def add(self, raw_start: int, raw_end: int, canonical_start: int, canonical_end: int, transform: str) -> None:
-        self.spans.append(Span(raw_start, raw_end, canonical_start, canonical_end, transform))
+    def add(
+        self,
+        raw_start: int,
+        raw_end: int,
+        canonical_start: int,
+        canonical_end: int,
+        transform: str,
+        *,
+        page: int | None = None,
+        bbox: Iterable[float] | None = None,
+    ) -> None:
+        bbox_tuple: tuple[float, float, float, float] | None = None
+        if bbox is not None:
+            values = tuple(float(value) for value in bbox)
+            if len(values) != 4:
+                raise ValueError("bbox must contain four coordinates")
+            bbox_tuple = values  # type: ignore[assignment]
+        self.spans.append(
+            Span(
+                raw_start,
+                raw_end,
+                canonical_start,
+                canonical_end,
+                transform,
+                page=page,
+                bbox=bbox_tuple,
+            )
+        )
 
     def to_list(self) -> List[Dict[str, Any]]:
-        return [
-            {
+        result: List[Dict[str, Any]] = []
+        for span in self.spans:
+            entry: Dict[str, Any] = {
                 "raw_start": span.raw_start,
                 "raw_end": span.raw_end,
                 "canonical_start": span.canonical_start,
                 "canonical_end": span.canonical_end,
                 "transform": span.transform,
             }
-            for span in self.spans
-        ]
+            if span.page is not None:
+                entry["page"] = span.page
+            if span.bbox is not None:
+                entry["bbox"] = list(span.bbox)
+            result.append(entry)
+        return result
+
+    def extend_from_offset_map(
+        self,
+        entries: Iterable[Mapping[str, Any]],
+        *,
+        transform: str = "offset_map",
+    ) -> None:
+        for entry in entries:
+            raw_start = int(entry.get("char_start", entry.get("raw_start", 0)))
+            raw_end = int(entry.get("char_end", entry.get("raw_end", 0)))
+            canonical_start = int(entry.get("canonical_start", raw_start))
+            canonical_end = int(entry.get("canonical_end", raw_end))
+            page = entry.get("page")
+            bbox = entry.get("bbox") or entry.get("bounding_box")
+            self.add(
+                raw_start,
+                raw_end,
+                canonical_start,
+                canonical_end,
+                transform,
+                page=int(page) if page is not None else None,
+                bbox=bbox,
+            )
 
 
 @dataclass(slots=True)

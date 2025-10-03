@@ -1,4 +1,5 @@
 """Facet summary generation for semantic chunks."""
+
 from __future__ import annotations
 
 import json
@@ -15,6 +16,7 @@ _EFFECT_PATTERN = re.compile(
 )
 _DOSE_PATTERN = re.compile(r"(?P<amount>\d+(?:\.\d+)?)\s*(?P<unit>mg|ml|g|mcg)")
 _LAB_PATTERN = re.compile(r"(?P<value>\d+(?:\.\d+)?)\s*(?P<unit>mmol/L|g/dL|IU/L)")
+_NEGATION_TERMS = ("no significant", "did not", "was not", "absence of", "without difference")
 
 
 @dataclass(slots=True)
@@ -52,6 +54,9 @@ class FacetGenerator:
                 }
                 facet_type = "lab_value"
         if facet:
+            lowered = text.lower()
+            if any(term in lowered for term in _NEGATION_TERMS):
+                facet["negated"] = True
             payload = json.dumps(facet)
             if len(payload.split()) > self.max_tokens:
                 return

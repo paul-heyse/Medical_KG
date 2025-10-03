@@ -1,11 +1,15 @@
 """Semantic chunking implementation using coherence and clinical intent."""
+
 from __future__ import annotations
 
 import hashlib
 import math
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import List, Optional, Sequence, Tuple
+
+from Medical_KG.embeddings import QwenEmbeddingClient
 
 from .document import Document, Section
 from .profiles import ChunkingProfile, get_profile
@@ -13,6 +17,10 @@ from .tagger import ClinicalIntent, ClinicalIntentTagger
 
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9])")
 _HEADING_PATTERN = re.compile(r"^#{1,3}\s|^[A-Z][A-Z\s]{4,}$")
+_EFFECT_PAIR_PATTERN = re.compile(r"(hazard ratio|odds ratio|risk ratio|95% CI|p=)", re.IGNORECASE)
+_LIST_ITEM_PATTERN = re.compile(r"^(?:[-*•]|\d+\.)\s")
+_CITATION_TRAIL_PATTERN = re.compile(r"\[[0-9,\s]+\]$")
+_TITRATION_PATTERN = re.compile(r"titr\w+|increase by|decrease by", re.IGNORECASE)
 
 
 @dataclass(slots=True)
@@ -26,6 +34,8 @@ class Chunk:
     intent: ClinicalIntent
     section: Optional[str] = None
     section_loinc: Optional[str] = None
+    title_path: Optional[str] = None
+    table_lines: Optional[List[str]] = None
     overlap_with_prev: Optional[dict[str, object]] = None
     facet_json: Optional[dict[str, object]] = None
     facet_type: Optional[str] = None
@@ -34,6 +44,8 @@ class Chunk:
     table_digest: Optional[str] = None
     embedding_qwen: Optional[List[float]] = None
     splade_terms: Optional[dict[str, float]] = None
+    facet_embedding_qwen: Optional[List[float]] = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_embedding_text(self) -> str:
         return self.text
@@ -67,7 +79,7 @@ def _sentence_split(text: str) -> List[Tuple[str, int, int]]:
     return spans
 
 
-def _coherence(a: str, b: str) -> float:
+def _lexical_coherence(a: str, b: str) -> float:
     def vectorise(sentence: str) -> dict[str, float]:
         counts = {}
         for token in re.findall(r"[A-Za-z0-9]+", sentence.lower()):
@@ -104,6 +116,9 @@ class ChunkIdGenerator:
 class SemanticChunker:
     profile: ChunkingProfile
     tagger: ClinicalIntentTagger = field(default_factory=ClinicalIntentTagger)
+    embedding_client: QwenEmbeddingClient = field(
+        default_factory=lambda: QwenEmbeddingClient(dimension=32, batch_size=64)
+    )
 
     def chunk(self, document: Document) -> List[Chunk]:
         sentences = self._prepare_sentences(document)
@@ -117,15 +132,26 @@ class SemanticChunker:
         previous_chunk: Optional[Chunk] = None
         for sentence in sentences:
             is_heading = bool(_HEADING_PATTERN.match(sentence.text.strip()))
-            coherence = _coherence(previous_sentence.text, sentence.text) if previous_sentence else 1.0
+            coherence = (
+                self._sentence_similarity(previous_sentence.text, sentence.text)
+                if previous_sentence
+                else 1.0
+            )
             hard_boundary = is_heading or self._section_changed(previous_sentence, sentence)
             limit_reached = current_tokens + sentence.tokens > int(self.profile.target_tokens * 1.5)
             coherence_drop = coherence < self.profile.tau_coherence
-            if current_sentences and (hard_boundary or limit_reached or coherence_drop):
-                chunk = self._create_chunk(document, current_sentences, chunk_id_gen, previous_chunk)
+            guardrail = self._should_delay_boundary(previous_sentence, sentence)
+            if (
+                current_sentences
+                and (hard_boundary or limit_reached or coherence_drop)
+                and not guardrail
+            ):
+                chunk = self._create_chunk(
+                    document, current_sentences, chunk_id_gen, previous_chunk
+                )
                 chunks.append(chunk)
                 previous_chunk = chunk
-                current_sentences = self._start_with_overlap(previous_chunk, sentence)
+                current_sentences = self._start_with_overlap(previous_chunk)
                 current_tokens = sum(sent.tokens for sent in current_sentences)
             current_sentences.append(sentence)
             current_tokens += sentence.tokens
@@ -146,7 +172,9 @@ class SemanticChunker:
                 after = raw_sentence[containing.end - start :].strip()
                 if before:
                     section = document.section_for_offset(start)
-                    sentences.append(Sentence(text=before, start=start, end=containing.start, section=section))
+                    sentences.append(
+                        Sentence(text=before, start=start, end=containing.start, section=section)
+                    )
                 if after:
                     section = document.section_for_offset(containing.end)
                     sentences.append(
@@ -158,7 +186,14 @@ class SemanticChunker:
         # add tables as sentences to enforce atomic chunks
         for table in tables:
             table_text = text[table.start : table.end]
-            sentences.append(Sentence(text=table_text, start=table.start, end=table.end, section=document.section_for_offset(table.start)))
+            sentences.append(
+                Sentence(
+                    text=table_text,
+                    start=table.start,
+                    end=table.end,
+                    section=document.section_for_offset(table.start),
+                )
+            )
         sentences.sort(key=lambda s: s.start)
         return sentences
 
@@ -174,26 +209,38 @@ class SemanticChunker:
         start = sentences[0].start
         end = sentences[-1].end
         tokens = sum(sentence.tokens for sentence in sentences)
-        effective_sentences = [sentence for sentence in sentences if not sentence.is_overlap] or list(sentences)
-        sections = [sentence.section.name if sentence.section else None for sentence in effective_sentences]
-        intents = self.tagger.tag_sentences([sentence.text for sentence in effective_sentences], sections=sections)
+        effective_sentences = [
+            sentence for sentence in sentences if not sentence.is_overlap
+        ] or list(sentences)
+        sections = [
+            sentence.section.name if sentence.section else None for sentence in effective_sentences
+        ]
+        intents = self.tagger.tag_sentences(
+            [sentence.text for sentence in effective_sentences], sections=sections
+        )
         dominant_intent = self.tagger.dominant_intent(intents)
         section = sections[-1]
         last_effective = effective_sentences[-1]
         section_loinc = last_effective.section.loinc_code if last_effective.section else None
         overlap_info = None
         if previous_chunk:
-            overlap_tokens = min(self.profile.overlap_tokens, tokens)
-            overlap_info = {
-                "chunk_id": previous_chunk.chunk_id,
-                "token_window": overlap_tokens,
-            }
+            overlap_tokens, _, overlap_start, overlap_end = self._overlap_window(previous_chunk)
+            if overlap_tokens:
+                overlap_info = {
+                    "chunk_id": previous_chunk.chunk_id,
+                    "token_window": overlap_tokens,
+                    "start": overlap_start,
+                    "end": overlap_end,
+                }
         table_html = None
         table_digest = None
+        table_lines: Optional[List[str]] = None
         for table in document.iter_tables():
             if table.start >= start and table.end <= end:
                 table_html = table.html
-                table_digest = table.digest
+                table_digest = self._summarise_table(table.html, fallback=table.digest)
+                table_lines = self._extract_table_lines(table.html)
+        title_path = self._derive_title_path(section)
         return Chunk(
             chunk_id=chunk_id,
             doc_id=document.doc_id,
@@ -204,6 +251,8 @@ class SemanticChunker:
             intent=dominant_intent,
             section=section,
             section_loinc=section_loinc,
+            title_path=title_path,
+            table_lines=table_lines,
             overlap_with_prev=overlap_info,
             coherence_score=self._chunk_coherence(sentences),
             table_html=table_html,
@@ -215,31 +264,112 @@ class SemanticChunker:
             return 1.0
         scores = []
         for left, right in zip(sentences, sentences[1:]):
-            scores.append(_coherence(left.text, right.text))
+            scores.append(self._sentence_similarity(left.text, right.text))
         if not scores:
             return 1.0
         return sum(scores) / len(scores)
 
-    def _section_changed(self, previous_sentence: Optional[Sentence], current_sentence: Sentence) -> bool:
+    def _section_changed(
+        self, previous_sentence: Optional[Sentence], current_sentence: Sentence
+    ) -> bool:
         if not previous_sentence or not previous_sentence.section:
             return False
         return previous_sentence.section != current_sentence.section
 
-    def _start_with_overlap(self, previous_chunk: Optional[Chunk], next_sentence: Sentence) -> List[Sentence]:
+    def _start_with_overlap(self, previous_chunk: Optional[Chunk]) -> List[Sentence]:
         if not previous_chunk:
             return []
-        overlap_tokens = min(self.profile.overlap_tokens, len(previous_chunk.text.split()))
-        if overlap_tokens == 0:
+        overlap_tokens, overlap_text, overlap_start, overlap_end = self._overlap_window(previous_chunk)
+        if overlap_tokens == 0 or not overlap_text:
             return []
-        overlap_text = " ".join(previous_chunk.text.split()[-overlap_tokens:])
         synthetic_sentence = Sentence(
             text=overlap_text,
-            start=max(previous_chunk.end - len(overlap_text), 0),
-            end=previous_chunk.end,
+            start=overlap_start,
+            end=overlap_end,
             section=None,
             is_overlap=True,
         )
         return [synthetic_sentence]
+
+    def _sentence_similarity(self, left: str, right: str) -> float:
+        lexical = _lexical_coherence(left, right)
+        embeddings = self.embedding_client.embed([left, right])
+        dense = self._cosine_dense(embeddings[0], embeddings[1])
+        return (lexical + dense) / 2
+
+    def _cosine_dense(self, a: Sequence[float], b: Sequence[float]) -> float:
+        dot = sum(x * y for x, y in zip(a, b))
+        norm_a = math.sqrt(sum(x * x for x in a)) or 1.0
+        norm_b = math.sqrt(sum(y * y for y in b)) or 1.0
+        return dot / (norm_a * norm_b)
+
+    def _should_delay_boundary(
+        self,
+        previous_sentence: Optional[Sentence],
+        current_sentence: Sentence,
+    ) -> bool:
+        if previous_sentence is None:
+            return False
+        previous_text = previous_sentence.text.strip()
+        current_text = current_sentence.text.strip()
+        if _EFFECT_PAIR_PATTERN.search(previous_text) and _EFFECT_PAIR_PATTERN.search(current_text):
+            return True
+        if _LIST_ITEM_PATTERN.match(previous_text) and _LIST_ITEM_PATTERN.match(current_text):
+            return True
+        if _CITATION_TRAIL_PATTERN.search(previous_text) and current_text.lower().startswith("see"):
+            return True
+        if previous_sentence.section and previous_sentence.section == current_sentence.section:
+            if _TITRATION_PATTERN.search(previous_text) or _TITRATION_PATTERN.search(current_text):
+                return True
+        return False
+
+    def _summarise_table(self, html: str, *, fallback: Optional[str] = None) -> str | None:
+        text = " ".join(re.findall(r">([^<>]+)<", html))
+        text = text.strip()
+        if not text and fallback:
+            text = fallback
+        if not text:
+            return None
+        tokens = text.split()
+        if len(tokens) > 200:
+            tokens = tokens[:200]
+        return " ".join(tokens)
+
+    def _extract_table_lines(self, html: str) -> List[str]:
+        rows = re.findall(r"<tr[^>]*>(.*?)</tr>", html, flags=re.IGNORECASE | re.DOTALL)
+        lines: List[str] = []
+        for row in rows:
+            cells = re.findall(r">([^<>]+)<", row)
+            value = " | ".join(cell.strip() for cell in cells if cell.strip())
+            if value:
+                lines.append(value)
+        return lines
+
+    def _derive_title_path(self, section: Optional[str]) -> Optional[str]:
+        if not section:
+            return None
+        parts = [part.strip() for part in section.replace("_", " ").split("/") if part.strip()]
+        if not parts:
+            return None
+        return " > ".join(part.title() for part in parts)
+
+    def _overlap_window(self, chunk: Chunk) -> tuple[int, str, int, int]:
+        tokens = chunk.text.split()
+        if not tokens:
+            return 0, "", chunk.end, chunk.end
+        overlap_tokens = min(self.profile.overlap_tokens, len(tokens))
+        if overlap_tokens <= 0:
+            return 0, "", chunk.end, chunk.end
+        window_tokens = tokens[-overlap_tokens:]
+        overlap_text = " ".join(window_tokens).strip()
+        if not overlap_text:
+            return 0, "", chunk.end, chunk.end
+        relative_start = chunk.text.rfind(overlap_text)
+        if relative_start < 0:
+            relative_start = max(len(chunk.text) - len(overlap_text), 0)
+        start = chunk.start + relative_start
+        end = start + len(overlap_text)
+        return overlap_tokens, overlap_text, start, end
 
 
 def select_profile(document: Document) -> ChunkingProfile:

@@ -1,4 +1,5 @@
 """SPLADE-style sparse expansion implemented with lightweight heuristics."""
+
 from __future__ import annotations
 
 import math
@@ -16,21 +17,28 @@ class SPLADEExpander:
 
     top_k: int = 400
     min_weight: float = 0.05
+    batch_size: int = 64
 
     def expand(self, texts: Sequence[str]) -> List[Dict[str, float]]:
         expansions: List[Dict[str, float]] = []
-        for text in texts:
-            tokens = [token.lower() for token in _TOKEN_PATTERN.findall(text)]
-            counts = Counter(tokens)
-            if not counts:
-                expansions.append({})
-                continue
-            weighted = {token: 1.0 + math.log(count) for token, count in counts.items()}
-            norm = math.sqrt(sum(value * value for value in weighted.values())) or 1.0
-            scaled = {token: value / norm for token, value in weighted.items()}
-            filtered = {token: value for token, value in scaled.items() if value >= self.min_weight}
-            top_terms = dict(sorted(filtered.items(), key=lambda item: item[1], reverse=True)[: self.top_k])
-            expansions.append(top_terms)
+        for start in range(0, len(texts), self.batch_size):
+            batch = texts[start : start + self.batch_size]
+            for text in batch:
+                tokens = [token.lower() for token in _TOKEN_PATTERN.findall(text)]
+                counts = Counter(tokens)
+                if not counts:
+                    expansions.append({})
+                    continue
+                weighted = {token: 1.0 + math.log(count) for token, count in counts.items()}
+                norm = math.sqrt(sum(value * value for value in weighted.values())) or 1.0
+                scaled = {token: value / norm for token, value in weighted.items()}
+                filtered = {
+                    token: value for token, value in scaled.items() if value >= self.min_weight
+                }
+                top_terms = dict(
+                    sorted(filtered.items(), key=lambda item: item[1], reverse=True)[: self.top_k]
+                )
+                expansions.append(top_terms)
         return expansions
 
 

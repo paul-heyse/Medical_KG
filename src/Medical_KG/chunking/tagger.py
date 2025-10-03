@@ -1,11 +1,14 @@
 """Lightweight clinical intent tagging based on heuristics."""
+
 from __future__ import annotations
 
 import re
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Iterable, List, Sequence
+from typing import Iterable, List, Mapping, Sequence
+
+from Medical_KG.embeddings import QwenEmbeddingClient
 
 
 class ClinicalIntent(str, Enum):
@@ -22,8 +25,40 @@ class ClinicalIntent(str, Enum):
 
 
 @dataclass(slots=True)
+class EmbeddingIntentClassifier:
+    """Lightweight classifier using hashed embeddings and weak supervision weights."""
+
+    client: QwenEmbeddingClient = field(
+        default_factory=lambda: QwenEmbeddingClient(dimension=32, batch_size=32)
+    )
+    weights: Mapping[ClinicalIntent, List[str]] = field(
+        default_factory=lambda: {
+            ClinicalIntent.PICO_OUTCOME: ["outcome", "response", "survival"],
+            ClinicalIntent.ADVERSE_EVENT: ["adverse", "toxicity", "serious"],
+            ClinicalIntent.PICO_INTERVENTION: ["dose", "treated", "administered"],
+            ClinicalIntent.PICO_POPULATION: ["patients", "subjects", "adults"],
+        }
+    )
+
+    def predict(self, sentence: str) -> ClinicalIntent | None:
+        embeddings = self.client.embed([sentence, sentence[::-1]])
+        scores: dict[ClinicalIntent, float] = {}
+        for intent, cues in self.weights.items():
+            score = sum(1.0 for cue in cues if cue in sentence.lower())
+            score += sum(value for value in embeddings[0][:4])
+            score -= sum(value for value in embeddings[1][:4])
+            scores[intent] = score
+        best_intent, best_score = max(scores.items(), key=lambda item: item[1])
+        if best_score > 0.5:
+            return best_intent
+        return None
+
+
+@dataclass(slots=True)
 class ClinicalIntentTagger:
-    """Simple heuristic tagger using keyword cues and section hints."""
+    """Hybrid heuristic and embedding-backed intent tagger."""
+
+    classifier: EmbeddingIntentClassifier = field(default_factory=EmbeddingIntentClassifier)
 
     def tag_sentence(self, sentence: str, *, section: str | None = None) -> ClinicalIntent:
         lowered = sentence.lower()
@@ -53,9 +88,14 @@ class ClinicalIntentTagger:
             return ClinicalIntent.RECOMMENDATION
         if re.search(r"laboratory|lab value|mmol|g/dl", lowered):
             return ClinicalIntent.LAB_VALUE
+        guess = self.classifier.predict(sentence)
+        if guess:
+            return guess
         return ClinicalIntent.GENERAL
 
-    def tag_sentences(self, sentences: Sequence[str], *, sections: Sequence[str] | None = None) -> List[ClinicalIntent]:
+    def tag_sentences(
+        self, sentences: Sequence[str], *, sections: Sequence[str] | None = None
+    ) -> List[ClinicalIntent]:
         intents = []
         sections = sections or [None] * len(sentences)
         for sentence, section in zip(sentences, sections):

@@ -1,4 +1,5 @@
 """Data models for the medical concept catalog."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -76,8 +77,12 @@ class Concept:
         self.iri = self._validate_iri(self.iri)
         self.label = self._require(self.label, "label")
         self.preferred_term = self._require(self.preferred_term, "preferred_term")
-        self.definition = self.definition.strip() if isinstance(self.definition, str) else self.definition
-        self.synonyms = [syn if isinstance(syn, Synonym) else Synonym(**syn) for syn in self.synonyms]
+        self.definition = (
+            self.definition.strip() if isinstance(self.definition, str) else self.definition
+        )
+        self.synonyms = [
+            syn if isinstance(syn, Synonym) else Synonym(**syn) for syn in self.synonyms
+        ]
         self.codes = dict(self.codes)
         self.xrefs = {key: list(values) for key, values in self.xrefs.items()}
         self.parents = list(self.parents)

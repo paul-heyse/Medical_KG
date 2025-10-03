@@ -1,4 +1,5 @@
 """Normalization utilities for concept ingestion."""
+
 from __future__ import annotations
 
 import re
@@ -31,7 +32,10 @@ _US_UK_VARIANTS = {
     "tumour": "tumor",
 }
 
-_SALT_PATTERN = re.compile(r"\b(?P<base>[A-Za-z]+) (?P<salt>hydrochloride|sodium|potassium|sulfate|maleate)\b", re.IGNORECASE)
+_SALT_PATTERN = re.compile(
+    r"\b(?P<base>[A-Za-z]+) (?P<salt>hydrochloride|sodium|potassium|sulfate|maleate)\b",
+    re.IGNORECASE,
+)
 _WHITESPACE_PATTERN = re.compile(r"\s+")
 
 

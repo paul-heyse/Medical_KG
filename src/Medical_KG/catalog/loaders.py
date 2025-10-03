@@ -1,4 +1,5 @@
 """Ontology loaders for the concept catalog (simplified for unit testing)."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -29,12 +30,27 @@ class ConceptLoader(ABC):
     def load(self) -> Iterable[Concept]:
         """Yield normalised concepts."""
 
-    def _build(self, *, iri: str, label: str, preferred_term: str, definition: str | None,
-               synonyms: Sequence[tuple[str, SynonymType]], codes: Mapping[str, str],
-               parents: Sequence[str] | None = None, ancestors: Sequence[str] | None = None,
-               xrefs: Mapping[str, Sequence[str]] | None = None, attributes: Mapping[str, object] | None = None,
-               semantic_types: Sequence[str] | None = None, status: str = "active",
-               provenance: Mapping[str, object] | None = None) -> Concept:
+    @property
+    def release_version(self) -> str:
+        return self._release["version"]
+
+    def _build(
+        self,
+        *,
+        iri: str,
+        label: str,
+        preferred_term: str,
+        definition: str | None,
+        synonyms: Sequence[tuple[str, SynonymType]],
+        codes: Mapping[str, str],
+        parents: Sequence[str] | None = None,
+        ancestors: Sequence[str] | None = None,
+        xrefs: Mapping[str, Sequence[str]] | None = None,
+        attributes: Mapping[str, object] | None = None,
+        semantic_types: Sequence[str] | None = None,
+        status: str = "active",
+        provenance: Mapping[str, object] | None = None,
+    ) -> Concept:
         synonyms_models = [Synonym(value=value, type=s_type) for value, s_type in synonyms if value]
         concept = Concept(
             iri=iri,
@@ -53,7 +69,11 @@ class ConceptLoader(ABC):
             status=status,
             release=self._release,
             license_bucket=self.license_bucket,
-            provenance={"source": self.ontology, "loader_version": self.loader_version, **(provenance or {})},
+            provenance={
+                "source": self.ontology,
+                "loader_version": self.loader_version,
+                **(provenance or {}),
+            },
         )
         return self._normaliser.normalise(concept)
 
@@ -65,7 +85,9 @@ class SnomedCTLoader(ConceptLoader):
     family = ConceptFamily.CONDITION
     license_bucket = "restricted"
 
-    def __init__(self, records: Sequence[Mapping[str, object]], *, release_version: str = "2025-01-31") -> None:
+    def __init__(
+        self, records: Sequence[Mapping[str, object]], *, release_version: str = "2025-01-31"
+    ) -> None:
         super().__init__(release_version=release_version)
         self._records = records
 
@@ -105,7 +127,9 @@ class ICD11Loader(ConceptLoader):
     family = ConceptFamily.CONDITION
     license_bucket = "permissive"
 
-    def __init__(self, entries: Sequence[Mapping[str, object]], *, release_version: str = "2025") -> None:
+    def __init__(
+        self, entries: Sequence[Mapping[str, object]], *, release_version: str = "2025"
+    ) -> None:
         super().__init__(release_version=release_version)
         self._entries = entries
 
@@ -115,7 +139,9 @@ class ICD11Loader(ConceptLoader):
             iri = f"https://id.who.int/icd/release/11/{code}"
             title = str(entry["title"])
             definition = entry.get("definition")
-            parents = [f"https://id.who.int/icd/release/11/{parent}" for parent in entry.get("parents", [])]
+            parents = [
+                f"https://id.who.int/icd/release/11/{parent}" for parent in entry.get("parents", [])
+            ]
             synonyms = [(syn, SynonymType.RELATED) for syn in entry.get("synonyms", [])]
             xrefs = {"snomed": list(map(str, entry.get("snomed", [])))}
             yield self._build(
@@ -140,7 +166,9 @@ class MONDOLoader(ConceptLoader):
     family = ConceptFamily.CONDITION
     license_bucket = "open"
 
-    def __init__(self, nodes: Sequence[Mapping[str, object]], *, release_version: str = "2025-02") -> None:
+    def __init__(
+        self, nodes: Sequence[Mapping[str, object]], *, release_version: str = "2025-02"
+    ) -> None:
         super().__init__(release_version=release_version)
         self._nodes = nodes
 
@@ -172,7 +200,9 @@ class HPOLoader(ConceptLoader):
     family = ConceptFamily.PHENOTYPE
     license_bucket = "open"
 
-    def __init__(self, items: Sequence[Mapping[str, object]], *, release_version: str = "2025-02-01") -> None:
+    def __init__(
+        self, items: Sequence[Mapping[str, object]], *, release_version: str = "2025-02-01"
+    ) -> None:
         super().__init__(release_version=release_version)
         self._items = items
 
@@ -203,7 +233,9 @@ class LOINCLoader(ConceptLoader):
     family = ConceptFamily.LAB
     license_bucket = "permissive"
 
-    def __init__(self, rows: Sequence[Mapping[str, object]], *, release_version: str = "2.77") -> None:
+    def __init__(
+        self, rows: Sequence[Mapping[str, object]], *, release_version: str = "2.77"
+    ) -> None:
         super().__init__(release_version=release_version)
         self._rows = rows
 
@@ -243,7 +275,9 @@ class RxNormLoader(ConceptLoader):
     family = ConceptFamily.DRUG
     license_bucket = "open"
 
-    def __init__(self, concepts: Sequence[Mapping[str, object]], *, release_version: str = "2025-01-01") -> None:
+    def __init__(
+        self, concepts: Sequence[Mapping[str, object]], *, release_version: str = "2025-01-01"
+    ) -> None:
         super().__init__(release_version=release_version)
         self._concepts = concepts
 
@@ -277,7 +311,9 @@ class UNIILoader(ConceptLoader):
     family = ConceptFamily.SUBSTANCE
     license_bucket = "open"
 
-    def __init__(self, entries: Sequence[Mapping[str, object]], *, release_version: str = "2025-01-15") -> None:
+    def __init__(
+        self, entries: Sequence[Mapping[str, object]], *, release_version: str = "2025-01-15"
+    ) -> None:
         super().__init__(release_version=release_version)
         self._entries = entries
 
@@ -306,7 +342,9 @@ class MedDRALoader(ConceptLoader):
     family = ConceptFamily.ADVERSE_EVENT
     license_bucket = "proprietary"
 
-    def __init__(self, rows: Sequence[Mapping[str, object]], *, release_version: str = "27.1") -> None:
+    def __init__(
+        self, rows: Sequence[Mapping[str, object]], *, release_version: str = "27.1"
+    ) -> None:
         super().__init__(release_version=release_version)
         self._rows = rows
 
@@ -339,7 +377,9 @@ class CTCAELoader(ConceptLoader):
     family = ConceptFamily.ADVERSE_EVENT
     license_bucket = "open"
 
-    def __init__(self, grades: Sequence[Mapping[str, object]], *, release_version: str = "5.0") -> None:
+    def __init__(
+        self, grades: Sequence[Mapping[str, object]], *, release_version: str = "5.0"
+    ) -> None:
         super().__init__(release_version=release_version)
         self._grades = grades
 
@@ -375,7 +415,9 @@ class AccessGUDIDLoader(ConceptLoader):
     family = ConceptFamily.DEVICE
     license_bucket = "open"
 
-    def __init__(self, devices: Sequence[Mapping[str, object]], *, release_version: str = "2025-01-01") -> None:
+    def __init__(
+        self, devices: Sequence[Mapping[str, object]], *, release_version: str = "2025-01-01"
+    ) -> None:
         super().__init__(release_version=release_version)
         self._devices = devices
 

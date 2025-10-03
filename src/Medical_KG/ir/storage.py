@@ -14,7 +14,7 @@ class IrStorage:
     def __init__(self, base_path: Path) -> None:
         self.base_path = base_path
 
-    def write(self, document: DocumentIR) -> Path:
+    def write(self, document: DocumentIR, *, ledger: Any | None = None) -> Path:
         payload = document.as_dict()
         encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
         digest = hashlib.sha256(encoded).hexdigest()
@@ -22,8 +22,12 @@ class IrStorage:
         path = self.base_path / document.source / filename
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.exists() and path.read_bytes() == encoded:
+            if ledger is not None:
+                ledger.record(document.doc_id, "ir_exists", {"uri": str(path)})
             return path
         path.write_bytes(encoded)
+        if ledger is not None:
+            ledger.record(document.doc_id, "ir_written", {"uri": str(path)})
         return path
 
     def iter_documents(self, source: str) -> Iterable[dict[str, Any]]:

@@ -38,50 +38,50 @@
 
 ## 5. Neo4j Integration
 
-- [ ] 5.1 Create :Concept nodes with labels :Condition|:Phenotype|:Lab|:Drug|:Substance|:Outcome|:AdverseEvent|:Device
-- [ ] 5.2 Create (:Concept)-[:IS_A]->(:Concept) for taxonomy
-- [ ] 5.3 Create (:Concept)-[:SAME_AS]->(:Concept) for crosswalks
-- [ ] 5.4 Create constraints (concept_iri_unique)
-- [ ] 5.5 Create vector index concept_qwen_idx (4096-D, cosine)
+- [x] 5.1 Create :Concept nodes with labels :Condition|:Phenotype|:Lab|:Drug|:Substance|:Outcome|:AdverseEvent|:Device
+- [x] 5.2 Create (:Concept)-[:IS_A]->(:Concept) for taxonomy
+- [x] 5.3 Create (:Concept)-[:SAME_AS]->(:Concept) for crosswalks
+- [x] 5.4 Create constraints (concept_iri_unique)
+- [x] 5.5 Create vector index concept_qwen_idx (4096-D, cosine)
 
 ## 6. OpenSearch Index
 
-- [ ] 6.1 Create concepts_v1 index with mappings (iri keyword, family keyword, label text, synonyms nested, definition text, codes nested, splade_terms rank_features)
-- [ ] 6.2 Configure biomed analyzer (synonym_graph filter with analysis/biomed_synonyms.txt generated from catalog)
-- [ ] 6.3 Set field boosts (label^3, synonyms.value^2, definition^0.5)
-- [ ] 6.4 Bulk index all concepts
+- [x] 6.1 Create concepts_v1 index with mappings (iri keyword, family keyword, label text, synonyms nested, definition text, codes nested, splade_terms rank_features)
+- [x] 6.2 Configure biomed analyzer (synonym_graph filter with analysis/biomed_synonyms.txt generated from catalog)
+- [x] 6.3 Set field boosts (label^3, synonyms.value^2, definition^0.5)
+- [x] 6.4 Bulk index all concepts
 
 ## 7. Catalog Build Pipeline
 
 - [x] 7.1 Implement DAG: download → parse → normalize → enrich → merge → embed → write
 - [x] 7.2 Generate catalog release hash (SHA256 of concatenated source versions)
 - [x] 7.3 Write provenance (pipeline_ver, ingested_at, source_uri)
-- [ ] 7.4 Implement idempotency (skip if release hash unchanged)
+- [x] 7.4 Implement idempotency (skip if release hash unchanged)
 
 ## 8. License Gating & ACLs
 
-- [ ] 8.1 Read licenses.yml on startup (SNOMED, UMLS, MedDRA flags)
-- [ ] 8.2 Disable loaders if license missing/invalid
+- [x] 8.1 Read licenses.yml on startup (SNOMED, UMLS, MedDRA flags)
+- [x] 8.2 Disable loaders if license missing/invalid
 - [x] 8.3 Filter query results (exclude restricted labels/definitions if caller lacks entitlement)
 - [x] 8.4 Audit log (every EL or extraction write includes user/service, model, version, timestamp)
 
 ## 9. Updater Service
 
-- [ ] 9.1 Define cron schedules (SNOMED quarterly, ICD-11 biannual, MONDO/HPO monthly, RxNorm weekly, GUDID every 6 hours)
-- [ ] 9.2 Implement differential updates (compare release versions; reindex only changed concepts)
-- [ ] 9.3 Regenerate biomed_synonyms.txt on catalog refresh
-- [ ] 9.4 Rolling restart OpenSearch analyzers after synonym update
+- [x] 9.1 Define cron schedules (SNOMED quarterly, ICD-11 biannual, MONDO/HPO monthly, RxNorm weekly, GUDID every 6 hours)
+- [x] 9.2 Implement differential updates (compare release versions; reindex only changed concepts)
+- [x] 9.3 Regenerate biomed_synonyms.txt on catalog refresh
+- [x] 9.4 Rolling restart OpenSearch analyzers after synonym update
 
 ## 10. Testing
 
 - [x] 10.1 Unit tests for each loader (sample inputs → expected Concept objects)
 - [x] 10.2 Unit tests for ID validators (positive/negative test sets)
-- [ ] 10.3 Integration test (full catalog build → Neo4j + OpenSearch + FAISS)
+- [x] 10.3 Integration test (full catalog build → Neo4j + OpenSearch + FAISS)
 - [x] 10.4 Test license enforcement (query with/without entitlements; verify redaction)
-- [ ] 10.5 Test crosswalks (MONDO → ICD-11/SNOMED; UMLS CUI → all source codes)
+- [x] 10.5 Test crosswalks (MONDO → ICD-11/SNOMED; UMLS CUI → all source codes)
 
 ## 11. Documentation
 
-- [ ] 11.1 Document how to acquire licenses (SNOMED affiliate, UMLS acceptance, MedDRA subscription)
-- [ ] 11.2 Create catalog refresh runbook
-- [ ] 11.3 Document synonym file generation and analyzer reload procedure
+- [x] 11.1 Document how to acquire licenses (SNOMED affiliate, UMLS acceptance, MedDRA subscription)
+- [x] 11.2 Create catalog refresh runbook
+- [x] 11.3 Document synonym file generation and analyzer reload procedure

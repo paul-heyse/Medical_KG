@@ -1,9 +1,11 @@
 """GPU enforcement utilities for embedding services."""
+
 from __future__ import annotations
 
 import importlib.util
 import os
 import subprocess
+import sys
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -35,7 +37,9 @@ class GPUValidator:
         if not self.should_require_gpu():
             return
         if torch is None or not torch.cuda.is_available():
-            raise GPURequirementError("GPU required for embeddings but torch.cuda.is_available() returned False")
+            raise GPURequirementError(
+                "GPU required for embeddings but torch.cuda.is_available() returned False"
+            )
         try:
             result = subprocess.run(
                 ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
@@ -46,12 +50,16 @@ class GPUValidator:
                 timeout=5,
             )
         except FileNotFoundError as exc:  # pragma: no cover - extremely unlikely in tests
-            raise GPURequirementError("GPU required for embeddings but nvidia-smi is not available") from exc
+            raise GPURequirementError(
+                "GPU required for embeddings but nvidia-smi is not available"
+            ) from exc
         except subprocess.SubprocessError as exc:
             raise GPURequirementError("Failed to execute nvidia-smi for GPU validation") from exc
         names = [line.strip() for line in result.stdout.splitlines() if line.strip()]
         if not names:
-            raise GPURequirementError("GPU required for embeddings but no devices were reported by nvidia-smi")
+            raise GPURequirementError(
+                "GPU required for embeddings but no devices were reported by nvidia-smi"
+            )
 
     def validate_vllm(self, endpoint: str) -> None:
         if not self.should_require_gpu():
@@ -61,12 +69,29 @@ class GPUValidator:
         if status_code != 200:
             raise GPURequirementError(f"vLLM health check at {url} returned status {status_code}")
 
-    def _get(self, url: str) -> int:
-        if self.http_getter:
-            return self.http_getter(url)
-        with httpx.Client(timeout=2.0) as client:
-            response = client.get(url)
-        return response.status_code
+
+def _get(self, url: str) -> int:
+    if self.http_getter:
+        return self.http_getter(url)
+    with httpx.Client(timeout=2.0) as client:
+        response = client.get(url)
+    return response.status_code
 
 
-__all__ = ["GPURequirementError", "GPUValidator"]
+def enforce_gpu_or_exit(
+    *, endpoint: str | None = None, validator: GPUValidator | None = None
+) -> None:
+    """Validate GPU availability and exit with code 99 on failure."""
+
+    validator = validator or GPUValidator()
+    try:
+        validator.validate()
+        if endpoint:
+            validator.validate_vllm(endpoint)
+    except GPURequirementError as exc:  # pragma: no cover - exercised in tests
+        message = f"GPU enforcement failed: {exc}"
+        print(message, file=sys.stderr)
+        raise SystemExit(99) from exc
+
+
+__all__ = ["GPURequirementError", "GPUValidator", "enforce_gpu_or_exit"]

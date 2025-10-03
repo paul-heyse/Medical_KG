@@ -1,10 +1,12 @@
 """High-level embedding orchestration for dense and sparse representations."""
+
 from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
 from typing import List, Sequence
 
+from .gpu import GPUValidator
 from .qwen import QwenEmbeddingClient
 from .splade import SPLADEExpander
 
@@ -25,8 +27,13 @@ class EmbeddingService:
     qwen: QwenEmbeddingClient
     splade: SPLADEExpander
     metrics: EmbeddingMetrics = field(default_factory=EmbeddingMetrics)
+    gpu_validator: GPUValidator | None = None
 
     def embed_texts(self, texts: Sequence[str]) -> tuple[List[List[float]], List[dict[str, float]]]:
+        if not texts:
+            return [], []
+        if self.gpu_validator:
+            self.gpu_validator.validate()
         dense_start = time.perf_counter()
         dense_vectors = self.qwen.embed(texts)
         dense_duration = max(time.perf_counter() - dense_start, 1e-6)

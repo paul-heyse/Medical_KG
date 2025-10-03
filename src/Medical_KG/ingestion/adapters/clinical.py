@@ -21,6 +21,7 @@ from Medical_KG.ingestion.types import (
     OpenFdaDocumentPayload,
     OpenFdaRecordPayload,
     RxNormDocumentPayload,
+    is_clinical_document_payload,
 )
 from Medical_KG.ingestion.utils import (
     canonical_json,
@@ -226,13 +227,12 @@ class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
 
     def validate(self, document: Document) -> None:
         raw_payload = document.raw
-        if raw_payload is None or not isinstance(raw_payload, dict):
+        if not is_clinical_document_payload(raw_payload):
             raise ValueError("ClinicalTrials document missing typed payload")
-        clinical_payload = cast(ClinicalDocumentPayload, raw_payload)
-        nct_id = clinical_payload.get("nct_id")
+        nct_id = raw_payload.get("nct_id")
         if not isinstance(nct_id, str) or not _CT_NCT_RE.match(nct_id):
             raise ValueError(f"Invalid NCT ID: {nct_id}")
-        outcomes = clinical_payload.get("outcomes", [])
+        outcomes = raw_payload.get("outcomes", [])
         if outcomes and not isinstance(outcomes, list):
             raise ValueError("Outcomes must be a list")
 

@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, MutableSequence, Sequence
 from dataclasses import dataclass
-from typing import Iterable, List, Mapping, MutableSequence, Protocol, Sequence
+from typing import Protocol
 
 from .models import Concept
+from .types import JsonValue
 
 
 class OpenSearchIndices(Protocol):  # pragma: no cover - interface definition
     def exists(self, index: str) -> bool: ...
 
-    def create(self, index: str, body: Mapping[str, object]) -> None: ...
+    def create(self, index: str, body: Mapping[str, JsonValue]) -> None: ...
 
-    def put_settings(self, index: str, body: Mapping[str, object]) -> None: ...
+    def put_settings(self, index: str, body: Mapping[str, JsonValue]) -> None: ...
 
     def reload_search_analyzers(self, index: str) -> None: ...
 
@@ -22,7 +24,7 @@ class OpenSearchClient(Protocol):  # pragma: no cover - interface definition
     @property
     def indices(self) -> OpenSearchIndices: ...
 
-    def bulk(self, operations: Sequence[Mapping[str, object]]) -> Mapping[str, object]: ...
+    def bulk(self, operations: Sequence[Mapping[str, JsonValue]]) -> Mapping[str, JsonValue]: ...
 
 
 @dataclass(slots=True)
@@ -59,14 +61,14 @@ class ConceptIndexManager:
         self.client.indices.reload_search_analyzers(index=self.index_name)
 
     def index_concepts(self, concepts: Sequence[Concept]) -> None:
-        operations: MutableSequence[Mapping[str, object]] = []
+        operations: MutableSequence[Mapping[str, JsonValue]] = []
         for concept in concepts:
             operations.append({"index": {"_index": self.index_name, "_id": concept.iri}})
             operations.append(self._serialise_concept(concept))
         if operations:
             self.client.bulk(operations)
 
-    def build_search_query(self, text: str) -> Mapping[str, object]:
+    def build_search_query(self, text: str) -> Mapping[str, JsonValue]:
         return {
             "query": {
                 "multi_match": {
@@ -76,7 +78,7 @@ class ConceptIndexManager:
             }
         }
 
-    def _index_body(self, synonym_catalog: Mapping[str, Iterable[str]]) -> Mapping[str, object]:
+    def _index_body(self, synonym_catalog: Mapping[str, Iterable[str]]) -> Mapping[str, JsonValue]:
         return {
             "settings": {
                 "analysis": {
@@ -127,7 +129,7 @@ class ConceptIndexManager:
             },
         }
 
-    def _serialise_concept(self, concept: Concept) -> Mapping[str, object]:
+    def _serialise_concept(self, concept: Concept) -> Mapping[str, JsonValue]:
         return {
             "iri": concept.iri,
             "ontology": concept.ontology,
@@ -145,8 +147,8 @@ class ConceptIndexManager:
             "release": concept.release,
         }
 
-    def _format_synonyms(self, synonym_catalog: Mapping[str, Iterable[str]]) -> List[str]:
-        lines: List[str] = []
+    def _format_synonyms(self, synonym_catalog: Mapping[str, Iterable[str]]) -> list[str]:
+        lines: list[str] = []
         for synonyms in synonym_catalog.values():
             unique = sorted({syn.lower() for syn in synonyms if syn})
             if len(unique) < 2:

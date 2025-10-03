@@ -5,8 +5,9 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections import Counter
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Mapping
+from typing import Match
 
 from .models import Concept, Synonym
 
@@ -69,7 +70,7 @@ def normalize_spelling(value: str) -> str:
 def recognise_salts(value: str) -> str:
     """Keep salt names while providing canonical representation for search."""
 
-    def _replace(match: re.Match[str]) -> str:
+    def _replace(match: Match[str]) -> str:
         base = match.group("base")
         salt = match.group("salt")
         return f"{base} ({salt})"
@@ -98,10 +99,10 @@ class ConceptNormaliser:
         concept.synonyms = synonyms
         return concept
 
-    def aggregate_synonyms(self, concepts: Iterable[Concept]) -> Dict[str, List[str]]:
+    def aggregate_synonyms(self, concepts: Iterable[Concept]) -> dict[str, list[str]]:
         """Create mapping of ontology → sorted synonym list for downstream analyzers."""
 
-        synonyms: Dict[str, List[str]] = {}
+        synonyms: dict[str, list[str]] = {}
         for concept in concepts:
             entries = {syn.value for syn in concept.synonyms}
             if entries:
@@ -110,7 +111,7 @@ class ConceptNormaliser:
                 synonyms[concept.ontology] = sorted(current)
         return synonyms
 
-    def compute_synonym_statistics(self, concepts: Iterable[Concept]) -> Dict[str, int]:
+    def compute_synonym_statistics(self, concepts: Iterable[Concept]) -> dict[str, int]:
         """Return counts of synonym frequency for reporting."""
 
         counter: Counter[str] = Counter()
@@ -119,10 +120,10 @@ class ConceptNormaliser:
         return dict(counter)
 
 
-def merge_synonym_catalogs(*catalogs: Mapping[str, Iterable[str]]) -> Dict[str, List[str]]:
+def merge_synonym_catalogs(*catalogs: Mapping[str, Iterable[str]]) -> dict[str, list[str]]:
     """Merge multiple ontology → synonym mappings."""
 
-    merged: Dict[str, List[str]] = {}
+    merged: dict[str, list[str]] = {}
     for catalog in catalogs:
         for ontology, values in catalog.items():
             current = set(merged.get(ontology, []))

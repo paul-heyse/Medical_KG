@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from Medical_KG.retrieval.clients import (
     ConstantEmbeddingClient,
     InMemorySearch,
@@ -7,6 +9,7 @@ from Medical_KG.retrieval.clients import (
     InMemoryVector,
     PassthroughEncoder,
 )
+from Medical_KG.retrieval.ontology import ConceptCatalogClient, OntologyExpander, OntologyTerm
 
 
 def test_inmemory_search_hit_to_result() -> None:
@@ -42,3 +45,18 @@ def test_passthrough_encoder_and_constant_embedding() -> None:
     assert encoder.expand("term") == {"term": 1.5}
     assert encoder.expand("unknown") == {}
     assert list(embedding_client.embed("text")) == [0.4, 0.5, 0.6]
+
+
+class StubCatalog(ConceptCatalogClient):
+    def synonyms(self, identifier: str) -> Iterable[OntologyTerm]:
+        return [OntologyTerm(term=identifier.lower(), weight=1.0)]
+
+    def search(self, text: str) -> Iterable[OntologyTerm]:
+        return [OntologyTerm(term=f"{text}-syn", weight=0.8)]
+
+
+def test_ontology_expander_uses_typed_terms() -> None:
+    expander = OntologyExpander(catalog=StubCatalog())
+    expansions = expander.expand("NCT01234567 term")
+    assert expansions["nct01234567"] == 1.0
+    assert expansions["term-syn"] == 0.8

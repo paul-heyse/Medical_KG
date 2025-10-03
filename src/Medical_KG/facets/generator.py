@@ -1,10 +1,12 @@
-"""Deterministic facet generators used during tests."""
+"""Facet generation helpers with strict typing."""
+
 from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from typing import Literal
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -13,7 +15,6 @@ from Medical_KG.facets.models import (
     DoseFacet,
     EndpointFacet,
     EvidenceSpan,
-    Facet,
     FacetModel,
     FacetType,
     PICOFacet,
@@ -76,7 +77,7 @@ def _generate_endpoint(text: str) -> EndpointFacet | None:
     if not match:
         return None
     value = float(match.group("value"))
-    effect_type = "HR"
+    effect_type: Literal["HR", "RR", "OR", "MD", "SMD"] = "HR"
     name = "hazard ratio"
     evidence = _ensure_spans([_span_for(text, match.group(0))], fallback_text=text)
     return EndpointFacet(
@@ -123,21 +124,21 @@ def _generate_dose(text: str) -> DoseFacet | None:
     )
 
 
-FACET_GENERATORS: dict[FacetType, callable[[str], Facet | None]] = {
+FACET_GENERATORS: dict[FacetType, Callable[[str], FacetModel | None]] = {
     FacetType.PICO: _generate_pico,
     FacetType.ENDPOINT: _generate_endpoint,
     FacetType.ADVERSE_EVENT: _generate_ae,
     FacetType.DOSE: _generate_dose,
 }
 
-_facet_adapter = TypeAdapter(FacetModel)
+_facet_adapter: TypeAdapter[FacetModel] = TypeAdapter(FacetModel)
 
 
 class FacetGenerationError(RuntimeError):
     """Raised when generation fails validation."""
 
 
-def generate_facet(text: str, facet_type: FacetType) -> Facet | None:
+def generate_facet(text: str, facet_type: FacetType) -> FacetModel | None:
     generator = FACET_GENERATORS.get(facet_type)
     if generator is None:
         return None
@@ -147,7 +148,7 @@ def generate_facet(text: str, facet_type: FacetType) -> Facet | None:
     return facet
 
 
-def validate_budget(facet: Facet, *, max_tokens: int = 120) -> Facet:
+def validate_budget(facet: FacetModel, *, max_tokens: int = 120) -> FacetModel:
     json_payload = facet.model_dump_json()
     tokens = count_tokens(json_payload)
     if tokens <= max_tokens:
@@ -176,22 +177,24 @@ def validate_budget(facet: Facet, *, max_tokens: int = 120) -> Facet:
     return facet
 
 
-def generate_facets(request: GenerationRequest, facet_types: Iterable[FacetType]) -> list[Facet]:
-    facets: list[Facet] = []
+def generate_facets(
+    request: GenerationRequest, facet_types: Iterable[FacetType]
+) -> list[FacetModel]:
+    facets: list[FacetModel] = []
     for facet_type in facet_types:
         if facet_type in {FacetType.GENERAL, FacetType.ELIGIBILITY}:
             continue
         facet = generate_facet(request.text, facet_type)
         if facet is None:
             continue
-        facet = validate_budget(facet)
-        facets.append(facet)
+        validated = validate_budget(facet)
+        facets.append(validated)
     normalized = normalize_facets(facets, text=request.text)
     cleaned = drop_low_confidence_codes(normalized)
     return cleaned
 
 
-def serialize_facets(facets: Sequence[Facet]) -> list[str]:
+def serialize_facets(facets: Sequence[FacetModel]) -> list[str]:
     serialized: list[str] = []
     for facet in facets:
         serialized.append(facet.model_dump_json(by_alias=True))
@@ -210,3 +213,14 @@ def load_facets(payloads: Iterable[str]) -> list[FacetModel]:
         except ValidationError as exc:
             raise FacetGenerationError(str(exc)) from exc
     return models
+
+
+__all__ = [
+    "FacetGenerationError",
+    "GenerationRequest",
+    "generate_facets",
+    "generate_facet",
+    "load_facets",
+    "serialize_facets",
+    "validate_budget",
+]

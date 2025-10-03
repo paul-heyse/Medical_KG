@@ -1,5 +1,5 @@
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Mapping, Sequence
 
 import pytest
 
@@ -18,6 +18,7 @@ from Medical_KG.catalog import (
     SnomedCTLoader,
     load_license_policy,
 )
+from Medical_KG.catalog.types import JsonValue
 from Medical_KG.embeddings import EmbeddingService, QwenEmbeddingClient, SPLADEExpander
 
 
@@ -107,10 +108,14 @@ def test_builder_deduplicates_and_creates_crosswalks(
     assert any("mondo" in iri.lower() for iri in diabetes.same_as)
     assert diabetes.embedding_qwen is not None
     assert diabetes.splade_terms is not None
+    assert all(isinstance(entry, list) for entry in result.synonym_catalog.values())
     assert result.synonym_catalog["SNOMED"]
     assert len(result.release_hash) == 64
     assert not result.skipped
     assert result.changed_ontologies
+    payloads = result.audit_log.as_payloads()
+    assert payloads
+    assert all(isinstance(entry["resource"], str) for entry in payloads)
 
 
 def test_license_policy_skips_restricted_loader(
@@ -124,10 +129,9 @@ def test_license_policy_skips_restricted_loader(
     result = builder.build()
     assert all(concept.ontology != "SNOMED" for concept in result.concepts)
     assert result.audit_log.entries
-    skipped = next(
-        entry for entry in result.audit_log.entries if entry["action"] == "loader.skipped"
-    )
-    assert skipped["resource"] == "SNOMED"
+    skipped = next(entry for entry in result.audit_log.entries if entry.action == "loader.skipped")
+    assert skipped.resource == "SNOMED"
+    assert skipped.metadata == {"reason": "license", "license_bucket": "restricted"}
 
 
 def test_license_policy_from_file(tmp_path: Path) -> None:
@@ -180,28 +184,35 @@ def test_catalog_state_store_idempotency(
 
 class FakeSession:
     def __init__(self) -> None:
-        self.queries: list[tuple[str, Mapping[str, object] | None]] = []
+        self.queries: list[tuple[str, dict[str, JsonValue]]] = []
 
-    def run(self, query: str, parameters: Mapping[str, object] | None = None) -> None:
-        self.queries.append((query, dict(parameters or {})))
+    def run(self, query: str, parameters: Mapping[str, JsonValue] | None = None) -> None:
+        payload = dict(parameters or {})
+        if "props" in payload:
+            props = payload["props"]
+            assert isinstance(props, dict)
+            assert all(isinstance(key, str) for key in props)
+        self.queries.append((query, payload))
 
 
 class FakeIndices:
     def __init__(self) -> None:
-        self.created: list[dict[str, object]] = []
-        self.updated: list[dict[str, object]] = []
+        self.created: list[dict[str, JsonValue]] = []
+        self.updated: list[dict[str, JsonValue]] = []
         self.reloads: int = 0
         self._exists = False
 
     def exists(self, index: str) -> bool:
         return self._exists
 
-    def create(self, index: str, body: Mapping[str, object]) -> None:
+    def create(self, index: str, body: Mapping[str, JsonValue]) -> None:
         self._exists = True
-        self.created.append({"index": index, "body": body})
+        assert isinstance(index, str)
+        self.created.append({"index": index, "body": dict(body)})
 
-    def put_settings(self, index: str, body: Mapping[str, object]) -> None:
-        self.updated.append({"index": index, "body": body})
+    def put_settings(self, index: str, body: Mapping[str, JsonValue]) -> None:
+        assert "analysis" in body
+        self.updated.append({"index": index, "body": dict(body)})
 
     def reload_search_analyzers(self, index: str) -> None:
         self.reloads += 1
@@ -210,10 +221,14 @@ class FakeIndices:
 class FakeOpenSearchClient:
     def __init__(self) -> None:
         self.indices = FakeIndices()
-        self.bulk_operations: list[Sequence[Mapping[str, object]]] = []
+        self.bulk_operations: list[list[Mapping[str, JsonValue]]] = []
 
-    def bulk(self, operations: Sequence[Mapping[str, object]]) -> Mapping[str, object]:
-        self.bulk_operations.append(list(operations))
+    def bulk(self, operations: Sequence[Mapping[str, JsonValue]]) -> Mapping[str, JsonValue]:
+        formatted = list(operations)
+        assert formatted, "bulk operations must not be empty"
+        for op in formatted:
+            assert all(isinstance(key, str) for key in op)
+        self.bulk_operations.append(formatted)
         return {"errors": False}
 
 
@@ -250,6 +265,11 @@ def test_concept_index_manager_indexes_documents(
     assert client.indices.created
     assert client.bulk_operations
     assert "multi_match" in query["query"]
+    operations = client.bulk_operations[0]
+    assert isinstance(operations[0], dict)
+    document = operations[1]
+    assert isinstance(document["synonyms"], list)
+    assert all("value" in entry for entry in document["synonyms"])
 
 
 def test_catalog_updater_refreshes_changed_ontologies(

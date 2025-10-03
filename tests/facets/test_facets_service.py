@@ -31,6 +31,10 @@ def test_index_payload_returns_codes() -> None:
 
     assert record is not None
     assert record.chunk_id == "chunk-2"
+    assert isinstance(record.facets, list)
+    assert all(facet.type for facet in record.facets)
+    metadata = service.metadata("chunk-2")
+    assert metadata["hash"]
 
 
 def test_document_facets_deduplicate_by_doc() -> None:

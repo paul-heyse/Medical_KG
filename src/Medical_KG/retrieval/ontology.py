@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Mapping, MutableMapping
 from dataclasses import dataclass
-from typing import Iterable, Mapping, MutableMapping
 
 
 @dataclass(frozen=True)

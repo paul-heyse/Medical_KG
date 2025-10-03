@@ -2,6 +2,7 @@
 
 from .schema import CDKOSchema
 from .writer import KnowledgeGraphWriter
+from .query import KgQueryApi, Query
 from .validators import KgValidator, KgValidationError
 from .fhir import EvidenceExporter
 
@@ -11,4 +12,6 @@ __all__ = [
     "KgValidator",
     "KgValidationError",
     "EvidenceExporter",
+    "KgQueryApi",
+    "Query",
 ]

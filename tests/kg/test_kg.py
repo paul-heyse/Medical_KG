@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from Medical_KG.kg.fhir import ConceptLexicon, EvidenceExporter
+from Medical_KG.kg.query import KgQueryApi
 from Medical_KG.kg.schema import CDKOSchema
 from Medical_KG.kg.validators import DeadLetterQueue, KgValidationError, KgValidator
 from Medical_KG.kg.writer import KnowledgeGraphWriter
@@ -75,3 +76,36 @@ def test_fhir_exporter_validates_codes() -> None:
                 ],
             }
         )
+
+
+def test_query_api_related_evidence() -> None:
+    api = KgQueryApi()
+    query = api.related_evidence(drug_label="Warfarin", condition_label="Atrial fibrillation", limit=15)
+    assert "MATCH (drug:Concept {label: $drug_label})" in query.cypher
+    assert "HAS_CHUNK" in query.cypher
+    assert query.parameters["limit"] == 15
+    assert query.parameters["drug_label"] == "Warfarin"
+
+
+def test_query_api_subsumption_uses_is_a_star() -> None:
+    api = KgQueryApi()
+    query = api.subsumption_evidence(condition_label="Diabetes", max_depth=4)
+    assert "IS_A*0..4" in query.cypher
+    assert query.parameters["condition_label"] == "Diabetes"
+
+
+def test_query_api_provenance_trace() -> None:
+    api = KgQueryApi()
+    query = api.provenance_trace(evidence_id="e-1")
+    assert "WAS_GENERATED_BY" in query.cypher
+    assert "WAS_GENERATED_BY_VAR" in query.cypher
+    assert query.parameters == {"evidence_id": "e-1"}
+
+
+def test_query_api_vector_search_returns_params() -> None:
+    api = KgQueryApi()
+    query = api.vector_search(index_name="chunk_qwen_idx", query_vector=[0.1, 0.2], top_k=5)
+    assert "db.index.vector.queryNodes" in query.cypher
+    assert query.parameters["index_name"] == "chunk_qwen_idx"
+    assert query.parameters["top_k"] == 5
+    assert query.parameters["query_vector"] == [0.1, 0.2]

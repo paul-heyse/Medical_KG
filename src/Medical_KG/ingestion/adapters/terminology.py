@@ -8,6 +8,16 @@ before constructing the typed payload that mypy can validate.  When a JSON value
 already satisfies the schema we rely on ``narrow_to_mapping`` or
 ``narrow_to_sequence`` to avoid ad-hoc casts.  See ``Medical_KG.ingestion.types``
 for the TypedDict definitions referenced in the inline comments below.
+
+Optional fields:
+
+* MeSH and UMLS payloads often include identifiers but definitions can vanish,
+  so the adapters normalise blank strings to ``None`` before emitting metadata.
+* LOINC entries typically provide ``display`` text while the top-level ``code``
+  key may be missing from subset queries.
+* ICD-11 and SNOMED data frequently omit descriptive text (``title``/``display``)
+  when upstream APIs stream code-only lookups; tests ensure both presence and
+  absence paths produce stable documents.
 """
 
 from __future__ import annotations

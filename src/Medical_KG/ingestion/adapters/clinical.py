@@ -4,6 +4,17 @@ The fetch methods document the expected API response shapes while the parse
 methods rely on the TypedDict payload contracts introduced in the typed payload
 refactor. Redundant calls to ``ensure_json_*`` inside parse flows have been
 removed so we only coerce external JSON at the network boundary.
+
+Optional field guidance:
+
+* ClinicalTrials.gov records commonly include ``status``, ``lead_sponsor`` and
+  ``start_date`` metadata, while ``completion_date`` and detailed ``outcomes``
+  entries are frequently absent in bootstrap fixtures.
+* AccessGUDID payloads usually provide ``brand`` and ``description`` but rarely
+  populate ``model`` and ``company`` fields.
+* RxNorm lookups reliably supply ``name``/``tty`` values, whereas ``synonym``
+  and ``ndc`` keys appear sporadically. Tests cover both the present and absent
+  cases so adapters never assume their availability.
 """
 
 from __future__ import annotations

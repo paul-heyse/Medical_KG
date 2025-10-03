@@ -1,0 +1,293 @@
+# Prometheus Alerting Rules for Medical KG
+
+groups:
+  - name: api_latency
+    interval: 30s
+    rules:
+      - alert: HighRetrievalLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{route="/retrieve"}[5m])) > 0.9
+        for: 5m
+        labels:
+          severity: critical
+          component: retrieval
+        annotations:
+          summary: "High P95 retrieval latency"
+          description: "P95 latency for /retrieve is {{ $value }}s (> 900ms) for 5 minutes"
+          runbook: "https://docs.medkg.example.com/runbooks/scale-retrieval"
+
+      - alert: HighExtractionLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{route=~"/extract.*"}[5m])) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+          component: extraction
+        annotations:
+          summary: "High P95 extraction latency"
+          description: "P95 latency for extraction is {{ $value }}s (> 2s) for 5 minutes"
+
+  - name: entity_linking
+    interval: 1h
+    rules:
+      - alert: LowEntityLinkingAcceptance
+        expr: rate(entity_linking_accepted_total[1h]) / rate(entity_linking_total[1h]) < 0.6
+        for: 1h
+        labels:
+          severity: warning
+          component: entity_linking
+        annotations:
+          summary: "Entity linking acceptance rate below threshold"
+          description: "EL acceptance rate is {{ $value | humanizePercentage }} (< 60%) over 1 hour"
+          runbook: "https://docs.medkg.example.com/runbooks/entity-linking-quality"
+
+  - name: opensearch
+    interval: 30s
+    rules:
+      - alert: OpenSearchUnassignedShards
+        expr: opensearch_cluster_unassigned_shards > 0
+        for: 5m
+        labels:
+          severity: critical
+          component: opensearch
+        annotations:
+          summary: "OpenSearch has unassigned shards"
+          description: "OpenSearch cluster has {{ $value }} unassigned shards"
+          runbook: "https://docs.medkg.example.com/runbooks/opensearch-shard-unassigned"
+
+      - alert: OpenSearchDiskSpaceHigh
+        expr: (opensearch_disk_used_bytes / opensearch_disk_total_bytes) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          component: opensearch
+        annotations:
+          summary: "OpenSearch disk space high"
+          description: "OpenSearch disk usage is {{ $value | humanizePercentage }} (> 85%)"
+
+      - alert: OpenSearchHighQueryLatency
+        expr: histogram_quantile(0.95, rate(opensearch_query_latency_ms_bucket[5m])) > 500
+        for: 5m
+        labels:
+          severity: warning
+          component: opensearch
+        annotations:
+          summary: "OpenSearch query latency high"
+          description: "P95 OpenSearch query latency is {{ $value }}ms (> 500ms)"
+
+  - name: neo4j
+    interval: 30s
+    rules:
+      - alert: Neo4jCoreDown
+        expr: neo4j_core_available < 3
+        for: 2m
+        labels:
+          severity: critical
+          component: neo4j
+        annotations:
+          summary: "Neo4j core nodes down"
+          description: "Only {{ $value }} Neo4j core nodes available (< 3)"
+          runbook: "https://docs.medkg.example.com/runbooks/neo4j-failover"
+
+      - alert: Neo4jHighVectorSearchLatency
+        expr: histogram_quantile(0.95, rate(neo4j_vector_latency_ms_bucket[5m])) > 300
+        for: 5m
+        labels:
+          severity: warning
+          component: neo4j
+        annotations:
+          summary: "Neo4j vector search latency high"
+          description: "P95 Neo4j vector search latency is {{ $value }}ms (> 300ms)"
+
+      - alert: Neo4jDiskSpaceHigh
+        expr: (neo4j_disk_used_bytes / neo4j_disk_total_bytes) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          component: neo4j
+        annotations:
+          summary: "Neo4j disk space high"
+          description: "Neo4j disk usage is {{ $value | humanizePercentage }} (> 85%)"
+
+  - name: gpu
+    interval: 30s
+    rules:
+      - alert: GPUNodeDown
+        expr: kube_node_status_condition{node=~".*gpu.*", condition="Ready", status="false"} == 1
+        for: 5m
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "GPU node not ready"
+          description: "GPU node {{ $labels.node }} is NotReady"
+          runbook: "https://docs.medkg.example.com/runbooks/gpu-node-failure"
+
+      - alert: VLLMDown
+        expr: up{job="vllm"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: vllm
+        annotations:
+          summary: "vLLM service is down"
+          description: "vLLM service has been down for 2 minutes"
+          runbook: "https://docs.medkg.example.com/runbooks/gpu-node-failure"
+
+      - alert: GPUNotVisible
+        expr: gpu_count == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: gpu
+        annotations:
+          summary: "No GPUs visible"
+          description: "No GPUs visible to monitoring system"
+          runbook: "https://docs.medkg.example.com/runbooks/gpu-node-failure"
+
+      - alert: GPUUtilizationLow
+        expr: avg(gpu_utilization_percent) < 20
+        for: 30m
+        labels:
+          severity: info
+          component: gpu
+        annotations:
+          summary: "GPU utilization low"
+          description: "Average GPU utilization is {{ $value }}% (< 20%) for 30 minutes - consider scaling down"
+
+  - name: evaluation
+    interval: 24h
+    rules:
+      - alert: RetrievalQualityRegression
+        expr: retrieval_ndcg_at_10 < (retrieval_ndcg_at_10 offset 7d - 0.03)
+        for: 1h
+        labels:
+          severity: warning
+          component: evaluation
+        annotations:
+          summary: "Retrieval quality regression detected"
+          description: "nDCG@10 dropped by >3 points: current={{ $value }}, 7d ago={{ $value offset 7d }}"
+          runbook: "https://docs.medkg.example.com/runbooks/quality-regression"
+
+      - alert: ExtractionF1Low
+        expr: extraction_effects_f1_score < 0.75
+        for: 1h
+        labels:
+          severity: warning
+          component: extraction
+        annotations:
+          summary: "Extraction F1 score below threshold"
+          description: "Effects extraction F1 is {{ $value }} (< 0.75)"
+
+  - name: api_health
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{code=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "High API error rate"
+          description: "Error rate is {{ $value | humanizePercentage }} (> 5%) for 5 minutes"
+          runbook: "https://docs.medkg.example.com/runbooks/incident-response"
+
+      - alert: APIDown
+        expr: up{job="api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "API is down"
+          description: "API service has been down for 1 minute"
+          runbook: "https://docs.medkg.example.com/runbooks/incident-response"
+
+      - alert: HighRequestRate
+        expr: rate(http_requests_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: info
+          component: api
+        annotations:
+          summary: "High request rate"
+          description: "Request rate is {{ $value }}/s (> 100/s) - may need scaling"
+
+  - name: pipeline
+    interval: 5m
+    rules:
+      - alert: IngestionFailureRate
+        expr: rate(ingestion_failures_total[1h]) / rate(ingestion_attempts_total[1h]) > 0.1
+        for: 1h
+        labels:
+          severity: warning
+          component: ingestion
+        annotations:
+          summary: "High ingestion failure rate"
+          description: "Ingestion failure rate is {{ $value | humanizePercentage }} (> 10%) over 1 hour"
+
+      - alert: ChunkingFailureRate
+        expr: rate(chunking_failures_total[1h]) / rate(chunking_attempts_total[1h]) > 0.05
+        for: 1h
+        labels:
+          severity: warning
+          component: chunking
+        annotations:
+          summary: "High chunking failure rate"
+          description: "Chunking failure rate is {{ $value | humanizePercentage }} (> 5%) over 1 hour"
+
+      - alert: EmbeddingFailureRate
+        expr: rate(embedding_failures_total[1h]) / rate(embedding_attempts_total[1h]) > 0.05
+        for: 1h
+        labels:
+          severity: warning
+          component: embedding
+        annotations:
+          summary: "High embedding failure rate"
+          description: "Embedding failure rate is {{ $value | humanizePercentage }} (> 5%) over 1 hour"
+
+  - name: resources
+    interval: 30s
+    rules:
+      - alert: PodCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: kubernetes
+        annotations:
+          summary: "Pod crash looping"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is crash looping"
+
+      - alert: PodOOMKilled
+        expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+        for: 1m
+        labels:
+          severity: critical
+          component: kubernetes
+        annotations:
+          summary: "Pod OOMKilled"
+          description: "Pod {{ $labels.pod }} was OOMKilled - increase memory limits"
+
+      - alert: HighMemoryUsage
+        expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: kubernetes
+        annotations:
+          summary: "High memory usage"
+          description: "Container {{ $labels.container }} is using {{ $value | humanizePercentage }} of memory limit"
+
+  - name: configuration
+    interval: 5m
+    rules:
+      - alert: ConfigVersionMismatch
+        expr: count(config_version) > 1
+        for: 10m
+        labels:
+          severity: warning
+          component: config
+        annotations:
+          summary: "Multiple config versions detected"
+          description: "{{ $value }} different config versions running - hot reload may have failed on some instances"
+          runbook: "https://docs.medkg.example.com/runbooks/hot-config-change"

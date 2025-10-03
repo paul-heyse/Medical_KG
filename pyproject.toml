@@ -150,3 +150,8 @@ extend-select = ["I"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
+exclude = [
+    "ops/load_test/",
+    "ops/e2e/",
+    "ops/chaos/",
+]

@@ -8,14 +8,8 @@ imports and graceful fallbacks when packages are not installed.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol, Sequence, cast
-
-
-if TYPE_CHECKING:  # pragma: no cover - import-time typing help only
-    import prometheus_client
-    import spacy
-    import tiktoken
-    import torch
+import importlib
+from typing import Protocol, Sequence, cast
 
 
 class TokenEncoder(Protocol):
@@ -63,7 +57,7 @@ class TorchModule(Protocol):
 class GaugeProtocol(Protocol):
     """Superset of Prometheus ``Gauge`` interactions the codebase performs."""
 
-    def labels(self, **label_values: Any) -> "GaugeProtocol":  # pragma: no cover - delegated
+    def labels(self, **label_values: str) -> "GaugeProtocol":  # pragma: no cover - delegated
         """Return a child gauge with bound labels."""
 
     def set(self, value: float) -> None:  # pragma: no cover - delegated
@@ -76,7 +70,7 @@ class GaugeProtocol(Protocol):
 class _NoopGauge:
     """Fallback gauge that satisfies :class:`GaugeProtocol`."""
 
-    def labels(self, **label_values: Any) -> "_NoopGauge":
+    def labels(self, **label_values: str) -> "_NoopGauge":
         return self
 
     def set(self, value: float) -> None:
@@ -90,11 +84,11 @@ def get_tiktoken_encoding(name: str = "cl100k_base") -> TokenEncoder | None:
     """Return the requested tiktoken encoding if the package is installed."""
 
     try:
-        import tiktoken  # type: ignore[import-not-found]
+        module = importlib.import_module("tiktoken")
     except ModuleNotFoundError:  # pragma: no cover - optional dependency
         return None
 
-    encoding: "tiktoken.Encoding" = tiktoken.get_encoding(name)
+    encoding = module.get_encoding(name)
     return cast(TokenEncoder, encoding)
 
 
@@ -102,12 +96,12 @@ def load_spacy_pipeline(model: str) -> NLPPipeline | None:
     """Load a spaCy pipeline, returning ``None`` when unavailable."""
 
     try:
-        import spacy  # type: ignore[import-not-found]
+        spacy_module = importlib.import_module("spacy")
     except ModuleNotFoundError:  # pragma: no cover - optional dependency
         return None
 
     try:
-        pipeline: "spacy.language.Language" = spacy.load(model)
+        pipeline = spacy_module.load(model)
     except OSError:  # pragma: no cover - model missing in runtime environment
         return None
     return cast(NLPPipeline, pipeline)
@@ -117,20 +111,20 @@ def get_torch_module() -> TorchModule | None:
     """Return the ``torch`` module if installed."""
 
     try:
-        import torch  # type: ignore[import-not-found]
+        torch_module = importlib.import_module("torch")
     except ModuleNotFoundError:  # pragma: no cover - optional dependency
         return None
-    return cast(TorchModule, torch)
+    return cast(TorchModule, torch_module)
 
 
 def build_gauge(name: str, documentation: str, labelnames: Sequence[str]) -> GaugeProtocol:
     """Construct a Prometheus gauge or a typed no-op substitute."""
 
     try:
-        from prometheus_client import Gauge as PromGauge  # type: ignore[import-not-found]
+        prom_module = importlib.import_module("prometheus_client")
     except ModuleNotFoundError:  # pragma: no cover - optional dependency
         return _NoopGauge()
-    gauge: "prometheus_client.Gauge" = PromGauge(name, documentation, labelnames)
+    gauge = prom_module.Gauge(name, documentation, labelnames)
     return cast(GaugeProtocol, gauge)
 
 

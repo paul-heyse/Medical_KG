@@ -57,3 +57,16 @@ new secret, document the fake fallback here and update the env templates.
    tests until the gap disappears.
 3. Record notable testing patterns or fixtures in this document to aid future
    contributors.
+
+## Extraction & Entity Linking Patterns
+
+- Reuse `tests/extraction/conftest.py` fixtures for canonical clinical snippets,
+  evidence spans, and extraction envelopes when authoring new tests. The
+  fixtures cover PICO, effect, adverse event, dose, and eligibility scenarios.
+- Mock external dependencies—LLM clients, spaCy pipelines, and terminology
+  services—using lightweight dataclasses so tests remain deterministic and
+  offline. See `tests/entity_linking/` for examples that stub dictionary,
+  sparse, and dense retrieval clients alongside NER pipelines.
+- Prefer exercising real normalization and validation flows (e.g.,
+  `normalise_extractions`, `ExtractionValidator.validate`) rather than mocking
+  internals to maintain coverage on critical heuristics.

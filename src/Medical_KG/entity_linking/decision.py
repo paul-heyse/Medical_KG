@@ -41,6 +41,10 @@ class DecisionEngine:
                 metadata={},
             )
             return LinkingDecision(True, chosen, reason="deterministic")
+        if candidates:
+            top = max(candidates, key=lambda item: item.score)
+            if top.score >= self._threshold:
+                return LinkingDecision(True, top, reason="score-threshold")
         return LinkingDecision(False, None, reason="low-confidence")
 
 

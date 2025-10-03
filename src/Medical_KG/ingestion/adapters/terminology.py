@@ -16,6 +16,7 @@ from Medical_KG.ingestion.types import (
     MeshDocumentPayload,
     SnomedDocumentPayload,
     UmlsDocumentPayload,
+    is_snomed_payload,
 )
 from Medical_KG.ingestion.utils import (
     canonical_json,
@@ -403,5 +404,5 @@ class SnomedAdapter(HttpAdapter[JSONMapping]):
         if not isinstance(code, str) or not _SNOMED_RE.match(code):
             raise ValueError("Invalid SNOMED CT code")
         raw_payload = document.raw
-        if not isinstance(raw_payload, dict) or not raw_payload.get("designation"):
+        if not is_snomed_payload(raw_payload) or not raw_payload["designation"]:
             raise ValueError("SNOMED record missing designation list")

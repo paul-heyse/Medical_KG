@@ -138,6 +138,25 @@ def test_pubmed_rate_limit_adjusts_for_api_key(fake_ledger: Any) -> None:
     _run(client_with_key.aclose())
 
 
+def test_pubmed_validate_rejects_non_pubmed_payload(fake_ledger: Any) -> None:
+    client = AsyncHttpClient()
+    adapter = PubMedAdapter(AdapterContext(fake_ledger), client)
+    document = Document(
+        doc_id="doc-1",
+        source="pubmed",
+        content="",
+        metadata={},
+        raw={
+            "code": "123456",
+            "display": "Hypertension",
+            "designation": [{"value": "Hypertension"}],
+        },
+    )
+    with pytest.raises(ValueError):
+        adapter.validate(document)
+    _run(client.aclose())
+
+
 def test_clinical_trials_parses_metadata(fake_ledger: Any) -> None:
     async def _test() -> None:
         client = AsyncHttpClient()

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
-from collections.abc import AsyncIterator, Iterable, Mapping as MappingABC, Sequence as SequenceABC
-from typing import Any, Iterator, Mapping
+from collections.abc import AsyncIterator
+from typing import Any, Iterable
 from urllib.parse import urlparse
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
@@ -20,6 +20,9 @@ from Medical_KG.ingestion.types import (
     PmcReferencePayload,
     PmcSectionPayload,
     PubMedDocumentPayload,
+    is_medrxiv_payload,
+    is_pmc_payload,
+    is_pubmed_payload,
 )
 from Medical_KG.ingestion.utils import (
     canonical_json,
@@ -171,74 +174,12 @@ class PubMedAdapter(HttpAdapter[JSONMapping]):
         return Document(doc_id=doc_id, source=self.source, content=abstract or title, metadata=metadata, raw=payload)
 
     def validate(self, document: Document) -> None:
-        raw_value = document.raw
-        if raw_value is None:
+        raw = document.raw
+        if not is_pubmed_payload(raw):
             raise ValueError("PubMedAdapter document missing typed payload")
-        raw_mapping = ensure_json_mapping(
-            ensure_json_value(raw_value, context="pubmed document raw"),
-            context="pubmed document raw mapping",
-        )
-        pmid = self._as_str(raw_mapping.get("pmid"))
-        if pmid is None or not PMID_RE.match(pmid):
-            raise ValueError(f"Invalid PMID: {pmid!r}")
-
-    def _extract_summary(self, summary_value: JSONValue) -> tuple[list[str], dict[str, JSONMapping]]:
-        summary_map = ensure_json_mapping(summary_value, context="pubmed summary response")
-        result_value = summary_map.get("result")
-        if not isinstance(result_value, MappingABC):
-            return [], {}
-        result_map = ensure_json_mapping(result_value, context="pubmed summary result")
-        records: dict[str, JSONMapping] = {}
-        for key, value in result_map.items():
-            if key == "uids":
-                continue
-            if isinstance(value, MappingABC):
-                records[key] = ensure_json_mapping(
-                    ensure_json_value(value, context="pubmed summary entry"),
-                    context="pubmed summary entry mapping",
-                )
-        uids = [
-            uid
-            for uid in (self._as_str(item) for item in self._iter_sequence(result_map.get("uids")))
-            if uid
-        ]
-        if not uids:
-            uids = list(records.keys())
-        return uids, records
-
-    def _merge_records(
-        self,
-        uid: str,
-        details: Mapping[str, JSONMapping],
-        summary_records: Mapping[str, JSONMapping],
-    ) -> JSONMapping | None:
-        combined: MutableJSONMapping = {}
-        detail = details.get(uid)
-        if detail:
-            combined.update(detail)
-        summary = summary_records.get(uid)
-        if summary:
-            combined.update(summary)
-        if not combined:
-            return None
-        return ensure_json_mapping(
-            ensure_json_value(combined, context=f"pubmed combined record {uid}"),
-            context="pubmed combined record mapping",
-        )
-
-    @staticmethod
-    def _iter_sequence(value: JSONValue | None) -> Iterator[JSONValue]:
-        if isinstance(value, SequenceABC) and not isinstance(value, (str, bytes, bytearray)):
-            return iter(value)
-        return iter(())
-
-    @classmethod
-    def _iter_strings(cls, value: JSONValue | None) -> Iterator[str]:
-        for item in cls._iter_sequence(value):
-            if isinstance(item, str):
-                yield item
-            elif isinstance(item, (int, float)) and not isinstance(item, bool):
-                yield str(item)
+        pmid = raw["pmid"]
+        if not PMID_RE.match(str(pmid)):
+            raise ValueError(f"Invalid PMID: {pmid}")
 
     @staticmethod
     def _as_str(value: JSONValue | None) -> str | None:
@@ -411,16 +352,12 @@ class PmcAdapter(HttpAdapter[ET.Element]):
         return Document(doc_id=doc_id, source=self.source, content=document_content, metadata=meta, raw=payload)
 
     def validate(self, document: Document) -> None:
-        raw_value = document.raw
-        if raw_value is None:
+        raw = document.raw
+        if not is_pmc_payload(raw):
             raise ValueError("PMC document missing typed payload")
-        raw_mapping = ensure_json_mapping(
-            ensure_json_value(raw_value, context="pmc document raw"),
-            context="pmc document raw mapping",
-        )
-        pmcid_value = raw_mapping.get("pmcid")
-        if not isinstance(pmcid_value, str) or not PMCID_RE.match(pmcid_value):
-            raise ValueError(f"Invalid PMCID: {pmcid_value!r}")
+        pmcid = raw["pmcid"]
+        if not PMCID_RE.match(str(pmcid)):
+            raise ValueError(f"Invalid PMCID: {pmcid}")
 
     @staticmethod
     def _strip(tag: str) -> str:
@@ -559,15 +496,11 @@ class MedRxivAdapter(HttpAdapter[JSONMapping]):
         return Document(doc_id=doc_id, source=self.source, content=abstract or title, metadata=metadata, raw=payload)
 
     def validate(self, document: Document) -> None:
-        raw_value = document.raw
-        if raw_value is None:
+        raw = document.raw
+        if not is_medrxiv_payload(raw):
             raise ValueError("MedRxiv document missing typed payload")
-        raw_mapping = ensure_json_mapping(
-            ensure_json_value(raw_value, context="medrxiv document raw"),
-            context="medrxiv document raw mapping",
-        )
-        doi_value = raw_mapping.get("doi")
-        if not isinstance(doi_value, str) or "/" not in doi_value:
+        doi = raw["doi"]
+        if not isinstance(doi, str) or "/" not in doi:
             raise ValueError("Invalid DOI")
 
     @staticmethod

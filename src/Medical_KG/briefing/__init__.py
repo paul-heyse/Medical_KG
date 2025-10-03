@@ -13,6 +13,7 @@ from .models import (
     TopicBundle,
 )
 from .service import BriefingService, BriefingSettings
+from .repository import InMemoryBriefingRepository
 
 __all__ = [
     "router",
@@ -28,4 +29,5 @@ __all__ = [
     "Study",
     "Topic",
     "TopicBundle",
+    "InMemoryBriefingRepository",
 ]

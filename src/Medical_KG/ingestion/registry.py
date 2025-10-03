@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Type
+from typing import Callable, Dict, Type
 
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
 from Medical_KG.ingestion.adapters.clinical import (
@@ -36,7 +36,7 @@ AdapterFactory = Callable[[AdapterContext, AsyncHttpClient], BaseAdapter]
 
 def _register() -> Dict[str, AdapterFactory]:
     def factory(cls: Type[BaseAdapter]) -> AdapterFactory:
-        def _builder(context: AdapterContext, client: AsyncHttpClient, **kwargs: Any) -> BaseAdapter:
+        def _builder(context: AdapterContext, client: AsyncHttpClient, **kwargs: object) -> BaseAdapter:
             return cls(context, client, **kwargs)
 
         return _builder

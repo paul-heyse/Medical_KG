@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Any, Dict, Iterable, Mapping
+from typing import Iterable, Mapping
 
 import jsonlines
 
@@ -14,7 +14,7 @@ class LedgerEntry:
     doc_id: str
     state: str
     timestamp: datetime
-    metadata: Mapping[str, Any]
+    metadata: Mapping[str, object]
 
 
 class IngestionLedger:
@@ -23,7 +23,7 @@ class IngestionLedger:
     def __init__(self, path: Path) -> None:
         self._path = path
         self._lock = Lock()
-        self._latest: Dict[str, LedgerEntry] = {}
+        self._latest: dict[str, LedgerEntry] = {}
         if path.exists():
             with jsonlines.open(path, mode="r") as reader:
                 for row in reader:
@@ -35,7 +35,7 @@ class IngestionLedger:
                     )
                     self._latest[entry.doc_id] = entry
 
-    def record(self, doc_id: str, state: str, metadata: Mapping[str, Any] | None = None) -> LedgerEntry:
+    def record(self, doc_id: str, state: str, metadata: Mapping[str, object] | None = None) -> LedgerEntry:
         entry = LedgerEntry(
             doc_id=doc_id,
             state=state,

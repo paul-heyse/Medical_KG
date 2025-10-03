@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
-from collections.abc import AsyncIterator
-from typing import Any, Iterable, TypedDict
+from collections.abc import AsyncIterator, Iterable, Sequence
+from typing import Mapping, cast
 from urllib.parse import urlparse
-from typing import Mapping
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
 from Medical_KG.ingestion.http_client import AsyncHttpClient, RateLimit
 from Medical_KG.ingestion.models import Document
+from Medical_KG.ingestion.payloads import MedRxivPayload, PmcDocumentPayload, PubMedPayload
 from Medical_KG.ingestion.utils import canonical_json, normalize_text
 
 PUBMED_SEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
@@ -23,7 +23,7 @@ PMID_RE = re.compile(r"^\d{4,}")
 PMCID_RE = re.compile(r"^PMC\d+")
 
 
-class PubMedAdapter(HttpAdapter):
+class PubMedAdapter(HttpAdapter[PubMedPayload]):
     source = "pubmed"
 
     def __init__(self, context: AdapterContext, client: AsyncHttpClient, *, api_key: str | None = None) -> None:
@@ -33,9 +33,9 @@ class PubMedAdapter(HttpAdapter):
         rate = RateLimit(rate=10 if api_key else 3, per=1.0)
         self.client.set_rate_limit(host, rate)
 
-    async def fetch(self, term: str, retmax: int = 1000) -> AsyncIterator[Any]:
+    async def fetch(self, term: str, retmax: int = 1000) -> AsyncIterator[PubMedPayload]:
         retmax = min(retmax, 10000)
-        params = {
+        params: dict[str, object] = {
             "db": "pubmed",
             "retmode": "json",
             "retmax": retmax,
@@ -45,27 +45,31 @@ class PubMedAdapter(HttpAdapter):
         if self.api_key:
             params["api_key"] = self.api_key
         search = await self.fetch_json(PUBMED_SEARCH_URL, params=params)
-        search_result = search.get("esearchresult", {})
+        search_data = cast(Mapping[str, object], search if isinstance(search, Mapping) else {})
+        search_result = cast(Mapping[str, object], search_data.get("esearchresult", {}))
         webenv = search_result.get("webenv")
         query_key = search_result.get("querykey")
-        count = int(search_result.get("count", len(search_result.get("idlist", [])) or 0))
+        count = int(search_result.get("count", 0)) if search_result.get("count") else 0
         if not (webenv and query_key and count):
-            id_list = search_result.get("idlist", [])
+            id_list = cast(Sequence[str], search_result.get("idlist", []))
             if not id_list:
                 return
-            summary_params = {"db": "pubmed", "retmode": "json", "id": ",".join(id_list)}
+            summary_params: dict[str, object] = {"db": "pubmed", "retmode": "json", "id": ",".join(id_list)}
             if self.api_key:
                 summary_params["api_key"] = self.api_key
             summary = await self.fetch_json(PUBMED_SUMMARY_URL, params=summary_params)
-            fetch_params = {"db": "pubmed", "retmode": "xml", "id": ",".join(id_list), "rettype": "abstract"}
+            summary_data = cast(Mapping[str, object], summary if isinstance(summary, Mapping) else {})
+            fetch_params: dict[str, object] = {"db": "pubmed", "retmode": "xml", "id": ",".join(id_list), "rettype": "abstract"}
             if self.api_key:
                 fetch_params["api_key"] = self.api_key
             fetch_xml = await self.fetch_text(PUBMED_FETCH_URL, params=fetch_params)
             details = self._parse_fetch_xml(fetch_xml)
-            summary_result = summary.get("result", {})
-            for uid in summary_result.get("uids", []):
-                combined = dict(details.get(uid, {}))
-                combined.update(summary_result.get(uid, {}))
+            summary_result = cast(Mapping[str, object], summary_data.get("result", {}))
+            for uid in cast(Sequence[str], summary_result.get("uids", [])):
+                combined: PubMedPayload = {
+                    **cast(PubMedPayload, details.get(uid, {})),
+                    **cast(PubMedPayload, summary_result.get(uid, {})),
+                }
                 if combined:
                     yield combined
             return
@@ -82,8 +86,9 @@ class PubMedAdapter(HttpAdapter):
             if self.api_key:
                 summary_params["api_key"] = self.api_key
             summary = await self.fetch_json(PUBMED_SUMMARY_URL, params=summary_params)
-            summary_result = summary.get("result", {})
-            uids: Iterable[str] = summary_result.get("uids", [])
+            summary_data = cast(Mapping[str, object], summary if isinstance(summary, Mapping) else {})
+            summary_result = cast(Mapping[str, object], summary_data.get("result", {}))
+            uids = cast(Sequence[str], summary_result.get("uids", []))
             fetch_params = {
                 "db": "pubmed",
                 "retmode": "xml",
@@ -98,14 +103,16 @@ class PubMedAdapter(HttpAdapter):
             fetch_xml = await self.fetch_text(PUBMED_FETCH_URL, params=fetch_params)
             details = self._parse_fetch_xml(fetch_xml)
             for uid in uids:
-                combined = dict(details.get(uid, {}))
-                combined.update(summary_result.get(uid, {}))
+                combined: PubMedPayload = {
+                    **cast(PubMedPayload, details.get(uid, {})),
+                    **cast(PubMedPayload, summary_result.get(uid, {})),
+                }
                 if combined:
                     yield combined
             retstart += retmax
 
-    def parse(self, raw: Any) -> Document:
-        uid = str(raw.get("pmid") or raw.get("uid"))
+    def parse(self, raw: PubMedPayload) -> Document:
+        uid = str(raw.get("pmid") or raw.get("uid") or "")
         title = normalize_text(raw.get("title", ""))
         abstract = normalize_text(raw.get("abstract", ""))
         payload: PubMedPayload = {
@@ -122,8 +129,8 @@ class PubMedAdapter(HttpAdapter):
             "pubdate": raw.get("pubdate"),
         }
         content = canonical_json(payload)
-        doc_id = self.build_doc_id(identifier=uid, version=raw.get("sortpubdate", "unknown"), content=content)
-        metadata = {
+        doc_id = self.build_doc_id(identifier=uid, version=str(raw.get("sortpubdate", "unknown")), content=content)
+        metadata: dict[str, object] = {
             "title": title,
             "pub_date": raw.get("pubdate"),
             "journal": raw.get("fulljournalname"),
@@ -132,13 +139,13 @@ class PubMedAdapter(HttpAdapter):
         return Document(doc_id=doc_id, source=self.source, content=abstract or title, metadata=metadata, raw=payload)
 
     def validate(self, document: Document) -> None:
-        raw = document.raw
-        pmid = raw["pmid"] if isinstance(raw, Mapping) else None
+        raw = document.raw if isinstance(document.raw, Mapping) else {}
+        pmid = raw.get("pmid")
         if not isinstance(pmid, (str, int)) or not PMID_RE.match(str(pmid)):
             raise ValueError(f"Invalid PMID: {pmid}")
 
     @staticmethod
-    def _fetch_author_list(raw_authors: Iterable[dict[str, Any]]) -> list[str]:
+    def _fetch_author_list(raw_authors: Iterable[Mapping[str, object]]) -> list[str]:
         authors: list[str] = []
         for author in raw_authors:
             if collective := author.get("CollectiveName"):
@@ -152,8 +159,8 @@ class PubMedAdapter(HttpAdapter):
         return authors
 
     @staticmethod
-    def _parse_fetch_xml(xml: str) -> dict[str, dict[str, Any]]:
-        details: dict[str, dict[str, Any]] = {}
+    def _parse_fetch_xml(xml: str) -> dict[str, PubMedPayload]:
+        details: dict[str, PubMedPayload] = {}
         root = ET.fromstring(xml)
 
         def strip(tag: str) -> str:
@@ -169,7 +176,7 @@ class PubMedAdapter(HttpAdapter):
             article_data = medline.find("Article")
             journal = None
             pub_year = None
-            abstract_text = []
+            abstract_text: list[str] = []
             authors: list[str] = []
             pub_types: list[str] = []
             if article_data is not None:
@@ -183,17 +190,20 @@ class PubMedAdapter(HttpAdapter):
                 if author_list is not None:
                     authors = PubMedAdapter._fetch_author_list(
                         [
-                            {
-                                strip(child.tag): normalize_text("".join(child.itertext()))
-                                for child in author
-                            }
+                            {strip(child.tag): normalize_text("".join(child.itertext())) for child in author}
                             for author in author_list.findall("Author")
                         ]
                     )
                 journal = article_data.findtext("Journal/Title")
                 pub_year = article_data.findtext("Journal/JournalIssue/PubDate/Year")
-                pub_types = [normalize_text(pt.text or "") for pt in article_data.findall("PublicationTypeList/PublicationType")]
-            mesh_terms = [normalize_text(node.text or "") for node in medline.findall("MeshHeadingList/MeshHeading/DescriptorName")]
+                pub_types = [
+                    normalize_text(pt.text or "")
+                    for pt in article_data.findall("PublicationTypeList/PublicationType")
+                ]
+            mesh_terms = [
+                normalize_text(node.text or "")
+                for node in medline.findall("MeshHeadingList/MeshHeading/DescriptorName")
+            ]
             article_ids = article.findall("PubmedData/ArticleIdList/ArticleId")
             pmcid = None
             doi = None
@@ -219,7 +229,7 @@ class PubMedAdapter(HttpAdapter):
         return details
 
 
-class PmcAdapter(HttpAdapter):
+class PmcAdapter(HttpAdapter[ET.Element]):
     source = "pmc"
 
     def __init__(self, context: AdapterContext, client: AsyncHttpClient) -> None:
@@ -234,8 +244,8 @@ class PmcAdapter(HttpAdapter):
         metadata_prefix: str = "pmc",
         from_date: str | None = None,
         until_date: str | None = None,
-    ) -> AsyncIterator[Any]:
-        params: dict[str, Any] = {"verb": "ListRecords", "set": set_spec, "metadataPrefix": metadata_prefix}
+    ) -> AsyncIterator[ET.Element]:
+        params: dict[str, object] = {"verb": "ListRecords", "set": set_spec, "metadataPrefix": metadata_prefix}
         if from_date:
             params["from"] = from_date
         if until_date:
@@ -252,7 +262,7 @@ class PmcAdapter(HttpAdapter):
                 break
             params = {"verb": "ListRecords", "resumptionToken": token}
 
-    def parse(self, raw: Any) -> Document:
+    def parse(self, raw: ET.Element) -> Document:
         header = self._find(raw, "header")
         identifier_text = self._findtext(header, "identifier") or ""
         pmcid = identifier_text.split(":")[-1] if identifier_text else "unknown"
@@ -266,7 +276,7 @@ class PmcAdapter(HttpAdapter):
         tables = self._collect_table_like(article, "table-wrap")
         figures = self._collect_table_like(article, "fig")
         references = self._collect_references(article)
-        payload = {
+        payload: PmcDocumentPayload = {
             "pmcid": pmcid,
             "title": title,
             "abstract": abstract,
@@ -278,7 +288,7 @@ class PmcAdapter(HttpAdapter):
         content = canonical_json(payload)
         datestamp = self._findtext(header, "datestamp") or "unknown"
         doc_id = self.build_doc_id(identifier=pmcid, version=datestamp, content=content)
-        meta = {"title": title, "datestamp": datestamp, "pmcid": pmcid}
+        meta: dict[str, object] = {"title": title, "datestamp": datestamp, "pmcid": pmcid}
         body_text = "\n\n".join(section["text"] for section in sections if section["text"])
         document_content = abstract or body_text or title
         return Document(doc_id=doc_id, source=self.source, content=document_content, metadata=meta, raw=payload)
@@ -363,7 +373,7 @@ class PmcAdapter(HttpAdapter):
         return refs
 
 
-class MedRxivAdapter(HttpAdapter):
+class MedRxivAdapter(HttpAdapter[MedRxivPayload]):
     source = "medrxiv"
 
     def __init__(
@@ -371,7 +381,7 @@ class MedRxivAdapter(HttpAdapter):
         context: AdapterContext,
         client: AsyncHttpClient,
         *,
-        bootstrap_records: Iterable[dict[str, Any]] | None = None,
+        bootstrap_records: Iterable[MedRxivPayload] | None = None,
     ) -> None:
         super().__init__(context, client)
         self._bootstrap = list(bootstrap_records or [])
@@ -382,12 +392,12 @@ class MedRxivAdapter(HttpAdapter):
         search: str | None = None,
         cursor: str | None = None,
         page_size: int = 100,
-    ) -> AsyncIterator[Any]:
+    ) -> AsyncIterator[MedRxivPayload]:
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record
             return
-        params: dict[str, Any] = {"page_size": page_size}
+        params: dict[str, object] = {"page_size": page_size}
         if search:
             params["search"] = search
         next_cursor = cursor
@@ -395,25 +405,28 @@ class MedRxivAdapter(HttpAdapter):
             if next_cursor:
                 params["cursor"] = next_cursor
             payload = await self.fetch_json(MEDRXIV_URL, params=params)
-            for record in payload.get("results", []):
+            data = cast(Mapping[str, object], payload if isinstance(payload, Mapping) else {})
+            for record in cast(Sequence[MedRxivPayload], data.get("results", [])):
                 yield record
-            next_cursor = payload.get("next_cursor")
+            next_cursor = cast(str | None, data.get("next_cursor"))
             if not next_cursor:
                 break
 
-    def parse(self, raw: Any) -> Document:
+    def parse(self, raw: MedRxivPayload) -> Document:
         identifier = raw["doi"]
         title = normalize_text(raw.get("title", ""))
         abstract = normalize_text(raw.get("abstract", ""))
-        payload = {
+        payload: MedRxivPayload = {
             "doi": identifier,
             "title": title,
             "abstract": abstract,
             "date": raw.get("date"),
+            "version": raw.get("version"),
+            "authors": raw.get("authors", []),
         }
         content = canonical_json(payload)
-        doc_id = self.build_doc_id(identifier=identifier, version=raw.get("version", "1"), content=content)
-        metadata = {"title": title, "authors": raw.get("authors", [])}
+        doc_id = self.build_doc_id(identifier=identifier, version=str(raw.get("version", "1")), content=content)
+        metadata: dict[str, object] = {"title": title, "authors": raw.get("authors", [])}
         return Document(doc_id=doc_id, source=self.source, content=abstract or title, metadata=metadata, raw=payload)
 
     def validate(self, document: Document) -> None:

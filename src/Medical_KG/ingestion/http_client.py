@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 import importlib.util
 from dataclasses import dataclass
 from time import time
-from typing import Any, AsyncIterator, Dict, Mapping, MutableMapping
+from typing import Any, AsyncIterator, Dict, Mapping, MutableMapping, Sequence
 from urllib.parse import urlparse
 
 from Medical_KG.compat.httpx import (
@@ -27,6 +27,9 @@ from Medical_KG.utils.optional_dependencies import (
 )
 
 HTTPX: HttpxModule = get_httpx_module()
+
+JsonPrimitive = str | int | float | bool | None
+JsonValue = JsonPrimitive | Mapping[str, "JsonValue"] | Sequence["JsonValue"]
 
 HTTP_REQUESTS: CounterProtocol = build_counter(
     "ingest_http_requests_total",
@@ -172,7 +175,7 @@ class AsyncHttpClient:
         *,
         params: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
-    ) -> Any:
+    ) -> JsonValue:
         response = await self.get(url, params=params, headers=headers)
         return response.json()
 

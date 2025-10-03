@@ -2,19 +2,24 @@ from __future__ import annotations
 
 import asyncio
 import json
+from __future__ import annotations
+
+import asyncio
+import json
 from pathlib import Path
-from typing import Any, Iterable
+from types import ModuleType
+from typing import Iterable, Mapping
 
 import typer
 
-from Medical_KG.ingestion.adapters.base import AdapterContext
+from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 from Medical_KG.ingestion.ledger import IngestionLedger
 
 app = typer.Typer(help="Medical KG ingestion CLI")
 
 
-def _resolve_registry():  # pragma: no cover - simple import indirection
+def _resolve_registry() -> ModuleType:  # pragma: no cover - simple import indirection
     from Medical_KG.ingestion import registry
 
     return registry
@@ -24,11 +29,11 @@ def _available_sources() -> list[str]:
     return _resolve_registry().available_sources()
 
 
-def _get_adapter(source: str, context: AdapterContext, client: AsyncHttpClient):
+def _get_adapter(source: str, context: AdapterContext, client: AsyncHttpClient) -> BaseAdapter:
     return _resolve_registry().get_adapter(source, context, client)
 
 
-def _load_batch(path: Path) -> Iterable[dict[str, Any]]:
+def _load_batch(path: Path) -> Iterable[Mapping[str, object]]:
     for line in path.read_text().splitlines():
         if not line.strip():
             continue

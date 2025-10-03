@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import random
 from collections import deque
 from contextlib import asynccontextmanager
-import importlib.util
 from dataclasses import dataclass
 from time import time
 from typing import AsyncIterator, Generic, Mapping, MutableMapping, TypeVar, cast
@@ -16,7 +16,7 @@ from Medical_KG.compat.httpx import (
     ResponseProtocol,
     create_async_client,
 )
-from Medical_KG.compat.prometheus import Counter, Histogram
+from Medical_KG.ingestion.types import JSONValue
 from Medical_KG.utils.optional_dependencies import (
     CounterProtocol,
     HistogramProtocol,
@@ -25,7 +25,6 @@ from Medical_KG.utils.optional_dependencies import (
     build_histogram,
     get_httpx_module,
 )
-from Medical_KG.ingestion.types import JSONValue
 
 HTTPX: HttpxModule = get_httpx_module()
 
@@ -199,6 +198,7 @@ class AsyncHttpClient:
         headers: Mapping[str, str] | None = None,
     ) -> JsonResponse[JSONValue]:
         response = await self.get(url, params=params, headers=headers)
+        # ``httpx.Response.json`` returns ``Any``; narrow to ``JSONValue`` for callers.
         payload = cast(JSONValue, response.json())
         return JsonResponse(url=url, status_code=response.status_code, data=payload)
 

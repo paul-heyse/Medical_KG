@@ -4,7 +4,7 @@ import json
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import AsyncIterator, Iterable
-from typing import Mapping, MutableMapping, Sequence
+from typing import Mapping, Sequence
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
@@ -21,6 +21,7 @@ from Medical_KG.ingestion.types import (
     OpenFdaDocumentPayload,
     RxNormDocumentPayload,
     is_clinical_document_payload,
+    narrow_to_mapping,
 )
 from Medical_KG.ingestion.utils import (
     canonical_json,
@@ -114,11 +115,14 @@ class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
         summary = normalize_text(str(summary_value)) if isinstance(summary_value, str) else ""
 
         derived_section_value = raw.get("derivedSection")
-        derived_section = (
-            ensure_json_mapping(derived_section_value, context="clinicaltrials derived section")
-            if isinstance(derived_section_value, Mapping)
-            else {}
-        )
+        derived_section: dict[str, JSONValue] = {}
+        if derived_section_value is not None:
+            derived_section = dict(
+                narrow_to_mapping(
+                    derived_section_value,
+                    context="clinicaltrials derived section",
+                )
+            )
         misc_info = ensure_json_mapping(
             derived_section.get("miscInfoModule", {}),
             context="clinicaltrials misc info",

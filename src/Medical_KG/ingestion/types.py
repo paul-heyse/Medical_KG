@@ -1,14 +1,52 @@
-"""Shared typing utilities for ingestion adapters."""
+"""Typed payload definitions and helper utilities for ingestion adapters.
+
+This module exposes :class:`TypedDict` payloads for every ingestion adapter as
+well as lightweight helpers that keep JSON-typed values narrow without relying
+on ``typing.cast``.  Adapters should prefer the ``narrow_to_*`` helpers when an
+API field is already typed as :class:`JSONValue` but needs to be confirmed as a
+mapping or sequence.  Use the ``ensure_json_*`` functions in
+``Medical_KG.ingestion.utils`` when coercion to a JSON-compatible structure is
+required.
+"""
+
 from __future__ import annotations
 
-from typing import Any, Mapping, MutableMapping, NotRequired, Sequence, TypeGuard, TypedDict, Union
-
+from collections.abc import Mapping as MappingABC
+from collections.abc import Sequence as SequenceABC
+from typing import Any, Mapping, MutableMapping, NotRequired, Sequence, TypedDict, TypeGuard, Union
 
 JSONPrimitive = Union[str, int, float, bool, None]
 JSONValue = Union[JSONPrimitive, Mapping[str, "JSONValue"], Sequence["JSONValue"]]
 JSONMapping = Mapping[str, JSONValue]
 JSONSequence = Sequence[JSONValue]
 MutableJSONMapping = MutableMapping[str, JSONValue]
+
+
+def narrow_to_mapping(value: JSONValue, *, context: str) -> JSONMapping:
+    """Return ``value`` when it is a mapping, otherwise raise ``TypeError``.
+
+    ``JSONValue`` unions can represent either a mapping or sequence.  Adapters
+    that receive pre-coerced JSON values can call this helper to obtain a
+    ``JSONMapping`` without introducing casts.  The ``context`` string is
+    included in the error message to aid debugging.
+    """
+
+    if isinstance(value, MappingABC):
+        return value
+    raise TypeError(f"{context} expected a mapping, received {type(value).__name__}")
+
+
+def narrow_to_sequence(value: JSONValue, *, context: str) -> JSONSequence:
+    """Return ``value`` when it is a sequence, otherwise raise ``TypeError``.
+
+    Strings are excluded because they technically implement
+    :class:`collections.abc.Sequence` but are not valid JSON container values in
+    this context.
+    """
+
+    if isinstance(value, SequenceABC) and not isinstance(value, (str, bytes, bytearray)):
+        return value
+    raise TypeError(f"{context} expected a sequence, received {type(value).__name__}")
 
 
 # Common mixins -----------------------------------------------------------

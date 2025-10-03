@@ -11,35 +11,18 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Mapping, MutableMapping, Optional
-from typing import TYPE_CHECKING
 
 import yaml
 
+from Medical_KG.utils.optional_dependencies import GaugeProtocol, build_gauge
+
 from .models import Config, PolicyDocument, validate_constraints
 
-if TYPE_CHECKING:
-    from prometheus_client import Gauge
-else:  # pragma: no cover - optional dependency
-    try:
-        from prometheus_client import Gauge
-    except ModuleNotFoundError:
 
-        class Gauge:
-            def __init__(self, *_: Any, **__: Any) -> None:
-                pass
-
-            def labels(self, **_: Any) -> "Gauge":
-                return self
-
-            def set(self, *_: Any, **__: Any) -> None:
-                return None
-
-            def clear(self) -> None:
-                return None
-
-
-CONFIG_INFO = Gauge("config_info", "Current configuration metadata", ["version", "hash"])
-FEATURE_FLAG = Gauge("feature_flag", "Feature flag states", ["name"])
+CONFIG_INFO: GaugeProtocol = build_gauge(
+    "config_info", "Current configuration metadata", ["version", "hash"]
+)
+FEATURE_FLAG: GaugeProtocol = build_gauge("feature_flag", "Feature flag states", ["name"])
 
 ENV_SIMPLE_PATHS: Mapping[str, str] = {
     "VLLM_API_BASE": "embeddings.vllm_api_base",

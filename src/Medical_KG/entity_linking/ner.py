@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence
+from typing import Sequence
+
+from Medical_KG.utils.optional_dependencies import NLPPipeline, load_spacy_pipeline
 
 
 @dataclass(slots=True)
@@ -14,11 +16,10 @@ class Mention:
 
 
 class NerPipeline:
+    """Thin wrapper around spaCy pipelines with typed fallbacks."""
+
     def __init__(self, model: str = "en_core_sci_sm") -> None:
-        try:  # pragma: no cover - optional heavy dependency
-            import spacy
-        except ModuleNotFoundError:  # pragma: no cover - tests may run without spaCy
-            spacy = None
+        self._nlp: NLPPipeline | None = load_spacy_pipeline(model)
 
     def __call__(self, text: str) -> Sequence[Mention]:
         if self._nlp is None:

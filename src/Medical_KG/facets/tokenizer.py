@@ -1,25 +1,15 @@
 """Token counting utilities using tiktoken with graceful fallback."""
 from __future__ import annotations
 
-import importlib
 from functools import lru_cache
 from typing import Optional
 
-tiktoken_spec = importlib.util.find_spec("tiktoken")
-if tiktoken_spec is not None:
-    tiktoken = importlib.import_module("tiktoken")
-else:  # pragma: no cover - optional dependency
-    tiktoken = None
+from Medical_KG.utils.optional_dependencies import TokenEncoder, get_tiktoken_encoding
 
 
 @lru_cache(maxsize=1)
-def _encoding() -> Optional["tiktoken.Encoding"]:
-    if tiktoken is None:
-        return None
-    try:
-        return tiktoken.get_encoding("cl100k_base")
-    except Exception:  # pragma: no cover - fallback path
-        return None
+def _encoding() -> Optional[TokenEncoder]:
+    return get_tiktoken_encoding()
 
 
 def count_tokens(text: str) -> int:

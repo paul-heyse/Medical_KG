@@ -10,6 +10,7 @@ from typing import (
     Callable,
     Dict,
     Iterable,
+    Iterator,
     Literal,
     Mapping,
     MutableMapping,
@@ -257,18 +258,37 @@ class BaseModel(metaclass=_ModelMeta):
             if result not in (None, self):
                 raise ValidationError("Model validators must return self or None")
 
-    def model_dump(self, *, by_alias: bool = False) -> dict[str, Any]:
+    def model_dump(
+        self,
+        *,
+        by_alias: bool = False,
+        exclude_none: bool = False,
+        mode: Literal["python", "json"] = "python",
+    ) -> dict[str, Any]:
+        if mode not in {"python", "json"}:  # pragma: no cover - defensive
+            raise ValueError("mode must be 'python' or 'json'")
         output: dict[str, Any] = {}
         for name, definition in self.__class__.__field_definitions__.items():
             info = definition.field_info
             key = name
             if by_alias:
                 key = info.serialization_alias or info.alias or name
-            output[key] = _to_python(getattr(self, name), by_alias=by_alias)
+            value = _to_python(getattr(self, name), by_alias=by_alias)
+            if exclude_none and value is None:
+                continue
+            output[key] = value
         return output
 
-    def model_dump_json(self, *, by_alias: bool = False) -> str:
-        return json.dumps(self.model_dump(by_alias=by_alias), default=_json_default)
+    def model_dump_json(
+        self,
+        *,
+        by_alias: bool = False,
+        exclude_none: bool = False,
+    ) -> str:
+        return json.dumps(
+            self.model_dump(by_alias=by_alias, exclude_none=exclude_none, mode="json"),
+            default=_json_default,
+        )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging helper
         params = ", ".join(f"{name}={getattr(self, name)!r}" for name in self.__class__.__field_definitions__)
@@ -342,7 +362,14 @@ def _enforce_constraints(name: str, value: Any, info: FieldInfo) -> None:
             raise ValidationError(f"Field '{name}' must be < {info.lt}")
         if info.le is not None and value > info.le:
             raise ValidationError(f"Field '{name}' must be <= {info.le}")
-    if info.min_length is not None and isinstance(value, Sized):
+    if info.min_length is not None:
+        if not isinstance(value, Sized):
+            candidate = _iterable(value)
+            if candidate is None:
+                raise ValidationError(
+                    f"Field '{name}' must be sized to enforce min_length"
+                )
+            value = tuple(candidate)
         if len(value) < info.min_length:
             raise ValidationError(f"Field '{name}' must have length >= {info.min_length}")
 
@@ -390,7 +417,10 @@ def _coerce_value(annotation: Any, value: Any) -> Any:
     if origin in (list, Sequence, Iterable):
         args = get_args(annotation)
         item_type = args[0] if args else Any
-        return [_coerce_value(item_type, item) for item in value]
+        iterator = _iterable(value)
+        if iterator is None:
+            raise ValidationError("Value is not iterable")
+        return [_coerce_value(item_type, item) for item in iterator]
     if origin is Literal:
         choices = get_args(annotation)
         if not choices:

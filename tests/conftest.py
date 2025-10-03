@@ -432,7 +432,7 @@ def fake_registry() -> FakeRegistry:
 
 @pytest.fixture
 def sample_document_factory() -> (
-    Callable[[str, str, str, MutableMapping[str, Any] | None, Any], Document]
+    Callable[[str, str, str, MutableMapping[str, Any] | None, Any], "Document"]
 ):
     def _factory(
         doc_id: str = "doc-1",
@@ -440,7 +440,9 @@ def sample_document_factory() -> (
         content: str = "text",
         metadata: MutableMapping[str, Any] | None = None,
         raw: Any | None = None,
-    ) -> Document:
+    ) -> "Document":
+        from Medical_KG.ingestion.models import Document
+
         return Document(
             doc_id=doc_id, source=source, content=content, metadata=metadata or {}, raw=raw
         )
@@ -451,6 +453,7 @@ def sample_document_factory() -> (
 @pytest.fixture
 def httpx_mock_transport(monkeypatch: pytest.MonkeyPatch) -> Callable[[Callable[[Any], Any]], Any]:
     """Patch httpx AsyncClient creation to use a MockTransport."""
+
 
     HTTPX = get_httpx_module()
     clients: list[Any] = []

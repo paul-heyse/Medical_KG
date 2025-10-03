@@ -25,15 +25,19 @@ def test_available_sources_sorted() -> None:
 
 def test_get_adapter_returns_instance(tmp_path: Path) -> None:
     ledger = IngestionLedger(_ledger_path(tmp_path))
-    client = AsyncHttpClient()
-    adapter = registry.get_adapter("pubmed", AdapterContext(ledger=ledger), client)
-    assert adapter.source == "pubmed"
-    asyncio.run(client.aclose())
+    async def _build() -> str:
+        async with AsyncHttpClient() as client:
+            adapter = registry.get_adapter("pubmed", AdapterContext(ledger=ledger), client)
+            return adapter.source
+
+    assert asyncio.run(_build()) == "pubmed"
 
 
 def test_get_adapter_unknown_source(tmp_path: Path) -> None:
     ledger = IngestionLedger(_ledger_path(tmp_path))
-    client = AsyncHttpClient()
+    async def _call() -> None:
+        async with AsyncHttpClient() as client:
+            registry.get_adapter("unknown", AdapterContext(ledger=ledger), client)
+
     with pytest.raises(ValueError):
-        registry.get_adapter("unknown", AdapterContext(ledger=ledger), client)
-    asyncio.run(client.aclose())
+        asyncio.run(_call())

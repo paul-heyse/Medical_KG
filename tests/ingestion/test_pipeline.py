@@ -61,6 +61,17 @@ class _Registry:
 
 
 class _NoopClient:
+    async def __aenter__(self) -> "_NoopClient":
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: BaseException | None,
+    ) -> None:
+        await self.aclose()
+
     async def aclose(self) -> None:  # pragma: no cover - interface completeness
         return None
 
@@ -123,3 +134,67 @@ def test_pipeline_run_async_supports_event_loops(tmp_path: Path) -> None:
         loop.close()
 
     assert results == [PipelineResult(source="stub", doc_ids=["doc-async"])]
+
+
+def test_pipeline_iter_results_streams_documents(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "ledger.jsonl"
+    ledger = IngestionLedger(ledger_path)
+    records = [
+        {"id": "doc-1", "content": "ok"},
+        {"id": "doc-2", "content": "ok"},
+    ]
+    adapter = _StubAdapter(AdapterContext(ledger), records=records)
+    pipeline = IngestionPipeline(
+        ledger,
+        registry=_Registry(adapter),
+        client_factory=lambda: _NoopClient(),
+    )
+
+    async def _collect() -> list[str]:
+        stream = pipeline.iter_results("stub")
+        return [document.doc_id async for document in stream]
+
+    doc_ids = asyncio.run(_collect())
+    assert doc_ids == ["doc-1", "doc-2"]
+
+
+def test_pipeline_iter_results_closes_client_on_cancel(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "ledger.jsonl"
+    ledger = IngestionLedger(ledger_path)
+    records = [{"id": "doc-1", "content": "ok"}]
+    adapter = _StubAdapter(AdapterContext(ledger), records=records)
+
+    class _Client:
+        def __init__(self) -> None:
+            self.closed = False
+
+        async def __aenter__(self) -> "_Client":
+            return self
+
+        async def __aexit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc: BaseException | None,
+            tb: BaseException | None,
+        ) -> None:
+            await self.aclose()
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    client = _Client()
+    pipeline = IngestionPipeline(
+        ledger,
+        registry=_Registry(adapter),
+        client_factory=lambda: client,
+    )
+
+    async def _consume_one() -> bool:
+        stream = pipeline.iter_results("stub")
+        agen = stream.__aiter__()
+        await agen.__anext__()
+        await agen.aclose()
+        return client.closed
+
+    closed = asyncio.run(_consume_one())
+    assert closed is True

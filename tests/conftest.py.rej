@@ -1,0 +1,203 @@
+diff a/tests/conftest.py b/tests/conftest.py	(rejected hunks)
+@@ -1,48 +1,50 @@
+ from __future__ import annotations
+
+ import ast
+ import asyncio
+ import os
+ import shutil
+ import sys
+ import threading
+ import types
+ from collections import defaultdict
+ from dataclasses import dataclass, field
+ from datetime import datetime, timezone
+ from pathlib import Path
++from trace import Trace
+ from typing import Any, Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence, cast
+
+ ROOT = Path(__file__).resolve().parents[1]
+ SRC = ROOT / "src"
+ PACKAGE_ROOT = SRC / "Medical_KG"
+ TARGET_COVERAGE = float(os.environ.get("COVERAGE_TARGET", "0.95"))
+
+ if str(SRC) not in sys.path:
+     sys.path.insert(0, str(SRC))
+
++
+ try:  # prefer real FastAPI when available
+     import fastapi  # noqa: F401  # pragma: no cover - import only
+ except ImportError:  # pragma: no cover - fallback for environments without fastapi
+     fastapi_module = types.ModuleType("fastapi")
+
+     class _FastAPI:
+         def __init__(self, *args: Any, **kwargs: Any) -> None:
+             self.args = args
+             self.kwargs = kwargs
+
+     class _APIRouter:
+         def __init__(self, *args: Any, **kwargs: Any) -> None:
+             self.args = args
+             self.kwargs = kwargs
+             self.routes: list[tuple[str, Callable[..., Any]]] = []
+
+         def post(
+             self, path: str, **_options: Any
+         ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+             def _decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+                 self.routes.append((path, func))
+                 return func
+
+             return _decorator
+
+@@ -187,62 +189,63 @@ if "httpx" not in sys.modules:
+                 return await self.request("POST", url, json=json, headers=headers)
+
+             def stream(self, method: str, url: str, **kwargs: Any) -> _StreamContext:
+                 if self._transport is None:
+                     raise RuntimeError("Mock transport required in tests")
+                 return _StreamContext(self._transport, method, url, kwargs)
+
+             async def aclose(self) -> None:
+                 return None
+
+             async def __aenter__(self) -> "AsyncClient":
+                 return self
+
+             async def __aexit__(self, *_exc: Any) -> None:
+                 return None
+
+         httpx_module.AsyncClient = AsyncClient
+         httpx_module.MockTransport = MockTransport
+         httpx_module.TimeoutException = TimeoutException
+         httpx_module.HTTPError = HTTPError
+         httpx_module.Response = Response
+         httpx_module.Request = Request
+
+         sys.modules["httpx"] = httpx_module
+
+-from trace import Trace
+
+-import pytest
++import pytest  # noqa: E402
+
+-from Medical_KG.ingestion.ledger import LedgerEntry
+-from Medical_KG.retrieval.models import (
++from Medical_KG.ingestion.ledger import LedgerEntry  # noqa: E402
++from Medical_KG.ingestion.models import Document  # noqa: E402
++from Medical_KG.retrieval.models import (  # noqa: E402
+     RetrievalRequest,
+     RetrievalResponse,
+     RetrievalResult,
+     RetrieverScores,
+ )
+-from Medical_KG.retrieval.types import JSONValue, SearchHit, VectorHit
++from Medical_KG.retrieval.types import JSONValue, SearchHit, VectorHit  # noqa: E402
++from Medical_KG.utils.optional_dependencies import get_httpx_module  # noqa: E402
+
+
+ @pytest.fixture
+ def monkeypatch_fixture(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
+     return monkeypatch
+
+
+ _TRACE = Trace(count=True, trace=False)
+
+
+ def _activate_tracing() -> None:  # pragma: no cover - instrumentation only
+     trace_func = cast(Any, _TRACE.globaltrace)
+     if trace_func is None:
+         return
+     sys.settrace(trace_func)
+     threading.settrace(trace_func)
+
+
+ if os.environ.get("DISABLE_COVERAGE_TRACE") != "1":
+     _activate_tracing()
+
+
+ @pytest.fixture(scope="session", autouse=True)
+ def cleanup_test_artifacts() -> Iterator[None]:
+     """Remove coverage and hypothesis artifacts after the test session."""
+@@ -289,52 +292,50 @@ def pytest_sessionfinish(
+
+     missing: dict[Path, set[int]] = {}
+     per_file_coverage: list[tuple[Path, float]] = []
+     total_statements = 0
+     total_covered = 0
+
+     for py_file in PACKAGE_ROOT.rglob("*.py"):
+         statements = _statement_lines(py_file)
+         if not statements:
+             continue
+         executed_lines = executed.get(py_file.resolve(), set())
+         covered = statements & executed_lines
+         uncovered = statements - covered
+         rel_path = py_file.relative_to(ROOT)
+         per_file_coverage.append(
+             (
+                 rel_path,
+                 len(covered) / len(statements) if statements else 1.0,
+             )
+         )
+         total_statements += len(statements)
+         total_covered += len(covered)
+         if uncovered:
+             missing[rel_path] = uncovered
+
+-    overall = total_covered / total_statements if total_statements else 1.0
+-
+     report_items = {path: lines for path, lines in missing.items() if "ingestion" in str(path)}
+
+     if report_items:
+         details = "; ".join(
+             f"{path}:{','.join(str(line) for line in sorted(lines))}"
+             for path, lines in sorted(report_items.items())
+         )
+         (ROOT / "coverage_missing.txt").write_text(details, encoding="utf-8")
+     else:
+         coverage_file = ROOT / "coverage_missing.txt"
+         if coverage_file.exists():
+             coverage_file.unlink()
+
+     ingestion_root = (SRC / "Medical_KG" / "ingestion").resolve()
+     adapter_root = ingestion_root / "adapters"
+     ingestion_missing = {
+         path: lines
+         for path, lines in missing.items()
+         if adapter_root in (path.resolve().parents) and path.resolve() in executed
+     }
+     if os.environ.get("SKIP_INGESTION_COVERAGE") == "1":
+         ingestion_missing = {}
+
+     enforce_coverage = os.environ.get("ENFORCE_INGESTION_COVERAGE") == "1"
+
+@@ -695,28 +696,25 @@ def retrieval_request() -> RetrievalRequest:
+     return RetrievalRequest(query="pembrolizumab", top_k=3)
+
+
+ @pytest.fixture
+ def expected_retrieval_response() -> RetrievalResponse:
+     result = RetrievalResult(
+         chunk_id="chunk-bm25-1",
+         doc_id="doc-1",
+         text="What is pembrolizumab",
+         title_path=None,
+         section=None,
+         score=2.4,
+         scores=RetrieverScores(bm25=2.4),
+         metadata={"granularity": "chunk"},
+     )
+     return RetrievalResponse(
+         results=[result],
+         timings=[],
+         expanded_terms={"pembrolizumab": 1.0},
+         intent="general",
+         latency_ms=1.0,
+         from_=0,
+         size=1,
+         metadata={"feature_flags": {"rerank_enabled": False}},
+     )
+-
+-
+-from Medical_KG.utils.optional_dependencies import get_httpx_module

@@ -105,30 +105,29 @@ def _stub_http_client() -> AsyncHttpClient:
 
 def test_pubmed_adapter_parses_fixture(fake_ledger: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     async def _test() -> None:
-        client = AsyncHttpClient()
-        adapter = PubMedAdapter(AdapterContext(fake_ledger), client)
+        async with AsyncHttpClient() as client:
+            adapter = PubMedAdapter(AdapterContext(fake_ledger), client)
 
-        search_payload = pubmed_search_payload()
-        summary_payload = pubmed_summary_payload()
-        fetch_payload = pubmed_fetch_xml()
+            search_payload = pubmed_search_payload()
+            summary_payload = pubmed_summary_payload()
+            fetch_payload = pubmed_fetch_xml()
 
-        async def fake_fetch_json(url: str, **_: Any) -> dict[str, Any]:
-            return search_payload if "esearch" in url else summary_payload
+            async def fake_fetch_json(url: str, **_: Any) -> dict[str, Any]:
+                return search_payload if "esearch" in url else summary_payload
 
-        async def fake_fetch_text(url: str, **_: Any) -> str:
-            assert "efetch" in url
-            return fetch_payload
+            async def fake_fetch_text(url: str, **_: Any) -> str:
+                assert "efetch" in url
+                return fetch_payload
 
-        monkeypatch.setattr(adapter, "fetch_json", fake_fetch_json)
-        monkeypatch.setattr(adapter, "fetch_text", fake_fetch_text)
+            monkeypatch.setattr(adapter, "fetch_json", fake_fetch_json)
+            monkeypatch.setattr(adapter, "fetch_text", fake_fetch_text)
 
-        results = await adapter.run(term="sepsis", retmax=10)
-        assert len(results) == 1
-        document = results[0].document
-        assert document.metadata["pmid"] == "12345678"
-        assert isinstance(document.raw, dict)
-        assert "mesh_terms" in document.raw
-        await client.aclose()
+            results = await adapter.run(term="sepsis", retmax=10)
+            assert len(results) == 1
+            document = results[0].document
+            assert document.metadata["pmid"] == "12345678"
+            assert isinstance(document.raw, dict)
+            assert "mesh_terms" in document.raw
 
     _run(_test())
 
@@ -137,136 +136,146 @@ def test_pubmed_adapter_handles_missing_history(
     fake_ledger: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async def _test() -> None:
-        client = AsyncHttpClient()
-        adapter = PubMedAdapter(AdapterContext(fake_ledger), client)
+        async with AsyncHttpClient() as client:
+            adapter = PubMedAdapter(AdapterContext(fake_ledger), client)
 
-        search_payload = pubmed_search_without_history()
-        summary_payload = pubmed_summary_payload()
-        fetch_payload = pubmed_fetch_xml()
+            search_payload = pubmed_search_without_history()
+            summary_payload = pubmed_summary_payload()
+            fetch_payload = pubmed_fetch_xml()
 
-        async def fake_fetch_json(url: str, **_: Any) -> dict[str, Any]:
-            return search_payload if "esearch" in url else summary_payload
+            async def fake_fetch_json(url: str, **_: Any) -> dict[str, Any]:
+                return search_payload if "esearch" in url else summary_payload
 
-        async def fake_fetch_text(url: str, **_: Any) -> str:
-            return fetch_payload
+            async def fake_fetch_text(url: str, **_: Any) -> str:
+                return fetch_payload
 
-        monkeypatch.setattr(adapter, "fetch_json", fake_fetch_json)
-        monkeypatch.setattr(adapter, "fetch_text", fake_fetch_text)
+            monkeypatch.setattr(adapter, "fetch_json", fake_fetch_json)
+            monkeypatch.setattr(adapter, "fetch_text", fake_fetch_text)
 
-        results = await adapter.run(term="oncology")
-        assert results
-        await client.aclose()
+            results = await adapter.run(term="oncology")
+            assert results
 
     _run(_test())
 
 
 def test_pubmed_rate_limit_adjusts_for_api_key(fake_ledger: Any) -> None:
-    client_without_key = AsyncHttpClient()
-    adapter_without_key = PubMedAdapter(AdapterContext(fake_ledger), client_without_key)
-    client_with_key = AsyncHttpClient()
-    adapter_with_key = PubMedAdapter(AdapterContext(fake_ledger), client_with_key, api_key="token")
-    host = "eutils.ncbi.nlm.nih.gov"
-    assert adapter_without_key.client._limits[host].rate == 3
-    assert adapter_with_key.client._limits[host].rate == 10
-    _run(client_without_key.aclose())
-    _run(client_with_key.aclose())
+    async def _inspect() -> tuple[int, int]:
+        host = "eutils.ncbi.nlm.nih.gov"
+        async with AsyncHttpClient() as client_without_key:
+            adapter_without_key = PubMedAdapter(AdapterContext(fake_ledger), client_without_key)
+            without_rate = adapter_without_key.client._limits[host].rate
+        async with AsyncHttpClient() as client_with_key:
+            adapter_with_key = PubMedAdapter(
+                AdapterContext(fake_ledger), client_with_key, api_key="token"
+            )
+            with_rate = adapter_with_key.client._limits[host].rate
+        return without_rate, with_rate
+
+    without_rate, with_rate = _run(_inspect())
+    assert without_rate == 3
+    assert with_rate == 10
 
 
 def test_pubmed_validate_rejects_non_pubmed_payload(fake_ledger: Any) -> None:
-    client = AsyncHttpClient()
-    adapter = PubMedAdapter(AdapterContext(fake_ledger), client)
-    document = Document(
-        doc_id="doc-1",
-        source="pubmed",
-        content="",
-        metadata={},
-        raw={
-            "code": "123456",
-            "display": "Hypertension",
-            "designation": [{"value": "Hypertension"}],
-        },
-    )
-    with pytest.raises(ValueError):
-        adapter.validate(document)
-    _run(client.aclose())
+    async def _test() -> None:
+        async with AsyncHttpClient() as client:
+            adapter = PubMedAdapter(AdapterContext(fake_ledger), client)
+            document = Document(
+                doc_id="doc-1",
+                source="pubmed",
+                content="",
+                metadata={},
+                raw={
+                    "code": "123456",
+                    "display": "Hypertension",
+                    "designation": [{"value": "Hypertension"}],
+                },
+            )
+            with pytest.raises(ValueError):
+                adapter.validate(document)
+
+    _run(_test())
 
 
 def test_clinical_trials_parses_metadata(fake_ledger: Any) -> None:
     async def _test() -> None:
-        client = AsyncHttpClient()
-        adapter = ClinicalTrialsGovAdapter(
-            AdapterContext(fake_ledger), client, bootstrap_records=[clinical_study()]
-        )
-        results = await adapter.run()
-        document = results[0].document
-        assert document.metadata["record_version"] == "2024-01-01"
-        assert document.raw["phase"]
-        assert isinstance(document.raw, dict)
-        assert isinstance(document.raw["arms"], list)
-        assert isinstance(document.raw.get("outcomes"), list)
-        assert isinstance(document.raw["eligibility"], str)
-        await client.aclose()
+        async with AsyncHttpClient() as client:
+            adapter = ClinicalTrialsGovAdapter(
+                AdapterContext(fake_ledger), client, bootstrap_records=[clinical_study()]
+            )
+            results = await adapter.run()
+            document = results[0].document
+            assert document.metadata["record_version"] == "2024-01-01"
+            assert document.raw["phase"]
+            assert isinstance(document.raw, dict)
+            assert isinstance(document.raw["arms"], list)
+            assert isinstance(document.raw.get("outcomes"), list)
+            assert isinstance(document.raw["eligibility"], str)
 
     _run(_test())
 
 
 def test_clinical_trials_handles_partial_payload(fake_ledger: Any) -> None:
     async def _test() -> None:
-        client = AsyncHttpClient()
-        adapter = ClinicalTrialsGovAdapter(
-            AdapterContext(fake_ledger),
-            client,
-            bootstrap_records=[clinical_study_without_outcomes()],
-        )
-        results = await adapter.run()
-        payload = results[0].document.raw
-        assert isinstance(payload, dict)
-        assert payload.get("outcomes") is None
-        assert isinstance(payload["arms"], list)
-        await client.aclose()
+        async with AsyncHttpClient() as client:
+            adapter = ClinicalTrialsGovAdapter(
+                AdapterContext(fake_ledger),
+                client,
+                bootstrap_records=[clinical_study_without_outcomes()],
+            )
+            results = await adapter.run()
+            payload = results[0].document.raw
+            assert isinstance(payload, dict)
+            assert payload.get("outcomes") is None
+            assert isinstance(payload["arms"], list)
 
     _run(_test())
 
 
 def test_clinical_trials_validate_rejects_invalid(fake_ledger: Any) -> None:
-    client = AsyncHttpClient()
-    adapter = ClinicalTrialsGovAdapter(AdapterContext(fake_ledger), client)
-    document = adapter.parse(clinical_study())
-    document.raw["nct_id"] = "BAD"
-    with pytest.raises(ValueError):
-        adapter.validate(document)
-    _run(client.aclose())
+    async def _test() -> None:
+        async with AsyncHttpClient() as client:
+            adapter = ClinicalTrialsGovAdapter(AdapterContext(fake_ledger), client)
+            document = adapter.parse(clinical_study())
+            document.raw["nct_id"] = "BAD"
+            with pytest.raises(ValueError):
+                adapter.validate(document)
+
+    _run(_test())
 
 
 def test_clinical_trials_paginates(fake_ledger: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     async def _test() -> None:
-        client = AsyncHttpClient()
-        adapter = ClinicalTrialsGovAdapter(AdapterContext(fake_ledger), client)
-        calls: list[MutableMapping[str, Any]] = []
+        async with AsyncHttpClient() as client:
+            adapter = ClinicalTrialsGovAdapter(AdapterContext(fake_ledger), client)
+            calls: list[MutableMapping[str, Any]] = []
 
-        async def fake_fetch_json(
-            url: str, *, params: MutableMapping[str, Any] | None = None, **_: Any
-        ) -> dict[str, Any]:
-            assert params is not None
-            calls.append(dict(params))
-            if "pageToken" in params:
+            async def fake_fetch_json(
+                url: str, *, params: MutableMapping[str, Any] | None = None, **_: Any
+            ) -> dict[str, Any]:
+                assert params is not None
+                calls.append(dict(params))
+                if "pageToken" in params:
+                    return {
+                        "studies": [
+                            {"protocolSection": {"identificationModule": {"nctId": "NCT2"}}}
+                        ]
+                    }
                 return {
-                    "studies": [{"protocolSection": {"identificationModule": {"nctId": "NCT2"}}}]
+                    "studies": [
+                        {"protocolSection": {"identificationModule": {"nctId": "NCT1"}}}
+                    ],
+                    "nextPageToken": "token",
                 }
-            return {
-                "studies": [{"protocolSection": {"identificationModule": {"nctId": "NCT1"}}}],
-                "nextPageToken": "token",
-            }
 
-        monkeypatch.setattr(adapter, "fetch_json", fake_fetch_json)
-        collected: list[str] = []
-        async for record in adapter.fetch():
-            nct = record["protocolSection"]["identificationModule"]["nctId"]
-            collected.append(nct)
+            monkeypatch.setattr(adapter, "fetch_json", fake_fetch_json)
+            collected: list[str] = []
+            async for record in adapter.fetch():
+                nct = record["protocolSection"]["identificationModule"]["nctId"]
+                collected.append(nct)
 
-        assert collected == ["NCT1", "NCT2"]
-        assert len(calls) == 2
-        await client.aclose()
+            assert collected == ["NCT1", "NCT2"]
+            assert len(calls) == 2
 
     _run(_test())
 
@@ -282,11 +291,13 @@ def test_clinical_trials_propagates_http_errors(
         return response
 
     httpx_mock_transport(handler)
-    client = AsyncHttpClient()
-    adapter = ClinicalTrialsGovAdapter(AdapterContext(fake_ledger), client)
-    with pytest.raises(HTTPX.HTTPStatusError):
-        _run(adapter.run())
-    _run(client.aclose())
+    async def _test() -> None:
+        async with AsyncHttpClient() as client:
+            adapter = ClinicalTrialsGovAdapter(AdapterContext(fake_ledger), client)
+            with pytest.raises(HTTPX.HTTPStatusError):
+                await adapter.run()
+
+    _run(_test())
 
 
 def test_clinical_trials_retries_on_rate_limit(
@@ -315,12 +326,14 @@ def test_clinical_trials_retries_on_rate_limit(
 
     monkeypatch.setattr("Medical_KG.ingestion.http_client.asyncio.sleep", _sleep)
 
-    client = AsyncHttpClient()
-    adapter = ClinicalTrialsGovAdapter(AdapterContext(fake_ledger), client)
-    results = _run(adapter.run())
-    assert len(results) == 1
-    assert len(calls) == 2
-    _run(client.aclose())
+    async def _test() -> None:
+        async with AsyncHttpClient() as client:
+            adapter = ClinicalTrialsGovAdapter(AdapterContext(fake_ledger), client)
+            results = await adapter.run()
+            assert len(results) == 1
+            assert len(calls) == 2
+
+    _run(_test())
 
 
 def test_clinical_trials_metadata_enrichment(fake_ledger: Any) -> None:
@@ -334,58 +347,57 @@ def test_clinical_trials_metadata_enrichment(fake_ledger: Any) -> None:
     status_module["startDateStruct"] = {"date": "2024-05-01"}
     status_module["completionDateStruct"] = {"date": "2025-10-31"}
 
-    client = AsyncHttpClient()
-    adapter = ClinicalTrialsGovAdapter(
-        AdapterContext(fake_ledger), client, bootstrap_records=[record]
-    )
-    results = _run(adapter.run())
-    metadata = results[0].document.metadata
-    assert metadata["sponsor"] == "Example Sponsor"
-    assert metadata["enrollment"] == 256
-    assert metadata["start_date"] == "2024-05-01"
-    assert metadata["completion_date"] == "2025-10-31"
-    _run(client.aclose())
+    async def _test() -> None:
+        async with AsyncHttpClient() as client:
+            adapter = ClinicalTrialsGovAdapter(
+                AdapterContext(fake_ledger), client, bootstrap_records=[record]
+            )
+            results = await adapter.run()
+            metadata = results[0].document.metadata
+            assert metadata["sponsor"] == "Example Sponsor"
+            assert metadata["enrollment"] == 256
+            assert metadata["start_date"] == "2024-05-01"
+            assert metadata["completion_date"] == "2025-10-31"
+
+    _run(_test())
 
 
 def test_openfda_requires_identifier(fake_ledger: Any) -> None:
     async def _test() -> None:
-        client = AsyncHttpClient()
-        adapter = OpenFdaAdapter(
-            AdapterContext(fake_ledger), client, bootstrap_records=[{"foo": "bar"}]
-        )
-        with pytest.raises(ValueError):
-            await adapter.run(resource="drug/event")
-        await client.aclose()
+        async with AsyncHttpClient() as client:
+            adapter = OpenFdaAdapter(
+                AdapterContext(fake_ledger), client, bootstrap_records=[{"foo": "bar"}]
+            )
+            with pytest.raises(ValueError):
+                await adapter.run(resource="drug/event")
 
     _run(_test())
 
 
 def test_openfda_parses_identifier(fake_ledger: Any) -> None:
     async def _test() -> None:
-        client = AsyncHttpClient()
-        adapter = OpenFdaAdapter(
-            AdapterContext(fake_ledger), client, bootstrap_records=[openfda_faers_record()]
-        )
-        results = await adapter.run(resource="drug/event")
-        assert results[0].document.metadata["identifier"]
-        assert isinstance(results[0].document.raw["record"], dict)
-        await client.aclose()
+        async with AsyncHttpClient() as client:
+            adapter = OpenFdaAdapter(
+                AdapterContext(fake_ledger), client, bootstrap_records=[openfda_faers_record()]
+            )
+            results = await adapter.run(resource="drug/event")
+            assert results[0].document.metadata["identifier"]
+            assert isinstance(results[0].document.raw["record"], dict)
 
     _run(_test())
 
 
 def test_openfda_udi_enriches_metadata(fake_ledger: Any) -> None:
     async def _test() -> None:
-        client = AsyncHttpClient()
-        adapter = OpenFdaUdiAdapter(
-            AdapterContext(fake_ledger), client, bootstrap_records=[openfda_udi_record()]
-        )
-        results = await adapter.run(resource="device/udi")
-        metadata = results[0].document.metadata
-        assert metadata["identifier"]
-        assert metadata["udi_di"].isdigit()
-        assert isinstance(results[0].document.raw["record"], dict)
-        await client.aclose()
+        async with AsyncHttpClient() as client:
+            adapter = OpenFdaUdiAdapter(
+                AdapterContext(fake_ledger), client, bootstrap_records=[openfda_udi_record()]
+            )
+            results = await adapter.run(resource="device/udi")
+            metadata = results[0].document.metadata
+            assert metadata["identifier"]
+            assert metadata["udi_di"].isdigit()
+            assert isinstance(results[0].document.raw["record"], dict)
 
     _run(_test())
 
@@ -393,13 +405,12 @@ def test_openfda_udi_enriches_metadata(fake_ledger: Any) -> None:
 def test_accessgudid_validation(fake_ledger: Any) -> None:
     async def _test() -> None:
         payload = accessgudid_record()
-        client = AsyncHttpClient()
-        adapter = AccessGudidAdapter(
-            AdapterContext(fake_ledger), client, bootstrap_records=[payload]
-        )
-        results = await adapter.run(udi_di="00380740000011")
-        assert results[0].document.metadata["udi_di"] == "00380740000011"
-        await client.aclose()
+        async with AsyncHttpClient() as client:
+            adapter = AccessGudidAdapter(
+                AdapterContext(fake_ledger), client, bootstrap_records=[payload]
+            )
+            results = await adapter.run(udi_di="00380740000011")
+            assert results[0].document.metadata["udi_di"] == "00380740000011"
 
     _run(_test())
 
@@ -408,47 +419,44 @@ def test_accessgudid_rejects_bad_udi(fake_ledger: Any) -> None:
     async def _test() -> None:
         payload = accessgudid_record()
         payload["udi"]["deviceIdentifier"] = "1234"
-        client = AsyncHttpClient()
-        adapter = AccessGudidAdapter(
-            AdapterContext(fake_ledger), client, bootstrap_records=[payload]
-        )
-        with pytest.raises(ValueError):
-            await adapter.run(udi_di="1234")
-        await client.aclose()
+        async with AsyncHttpClient() as client:
+            adapter = AccessGudidAdapter(
+                AdapterContext(fake_ledger), client, bootstrap_records=[payload]
+            )
+            with pytest.raises(ValueError):
+                await adapter.run(udi_di="1234")
 
     _run(_test())
 
 
 def test_dailymed_parses_sections(fake_ledger: Any) -> None:
     async def _test() -> None:
-        client = AsyncHttpClient()
-        adapter = DailyMedAdapter(
-            AdapterContext(fake_ledger), client, bootstrap_records=[dailymed_xml()]
-        )
-        results = await adapter.run(setid="setid")
-        sections = results[0].document.raw["sections"]
-        assert sections and sections[0]["text"]
-        await client.aclose()
+        async with AsyncHttpClient() as client:
+            adapter = DailyMedAdapter(
+                AdapterContext(fake_ledger), client, bootstrap_records=[dailymed_xml()]
+            )
+            results = await adapter.run(setid="setid")
+            sections = results[0].document.raw["sections"]
+            assert sections and sections[0]["text"]
 
     _run(_test())
 
 
 def test_pmc_adapter_collects_tables(fake_ledger: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     async def _test() -> None:
-        client = AsyncHttpClient()
-        adapter = PmcAdapter(AdapterContext(fake_ledger), client)
+        async with AsyncHttpClient() as client:
+            adapter = PmcAdapter(AdapterContext(fake_ledger), client)
 
-        async def fake_fetch_text(*_: Any, **__: Any) -> str:
-            return f"<OAI>{pmc_record_xml()}</OAI>"
+            async def fake_fetch_text(*_: Any, **__: Any) -> str:
+                return f"<OAI>{pmc_record_xml()}</OAI>"
 
-        monkeypatch.setattr(adapter, "fetch_text", fake_fetch_text)
-        results = await adapter.run(set_spec="pmc")
-        document = results[0].document
-        assert document.metadata["pmcid"] == "PMC1234567"
-        assert document.metadata["datestamp"] == "2024-01-15"
-        assert "Sepsis" in document.content
-        assert isinstance(document.raw, dict)
-        await client.aclose()
+            monkeypatch.setattr(adapter, "fetch_text", fake_fetch_text)
+            results = await adapter.run(set_spec="pmc")
+            document = results[0].document
+            assert document.metadata["pmcid"] == "PMC1234567"
+            assert document.metadata["datestamp"] == "2024-01-15"
+            assert "Sepsis" in document.content
+            assert isinstance(document.raw, dict)
 
     _run(_test())
 
@@ -457,8 +465,8 @@ def test_pmc_adapter_extracts_sections_and_references(
     fake_ledger: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async def _test() -> None:
-        client = AsyncHttpClient()
-        adapter = PmcAdapter(AdapterContext(fake_ledger), client)
+        async with AsyncHttpClient() as client:
+            adapter = PmcAdapter(AdapterContext(fake_ledger), client)
         xml_payload = """
         <record>
           <header>
@@ -496,128 +504,127 @@ def test_pmc_adapter_extracts_sections_and_references(
         async def fake_fetch_text(*_: object, **__: object) -> str:
             return f"<OAI>{xml_payload}</OAI>"
 
-        monkeypatch.setattr(adapter, "fetch_text", fake_fetch_text)
-        results = await adapter.run(set_spec="pmc")
-        payload = results[0].document.raw
-        assert isinstance(payload, dict)
-        assert payload["sections"]
-        assert payload["references"]
-        assert payload["tables"]
-        await client.aclose()
+            monkeypatch.setattr(adapter, "fetch_text", fake_fetch_text)
+            results = await adapter.run(set_spec="pmc")
+            payload = results[0].document.raw
+            assert isinstance(payload, dict)
+            assert payload["sections"]
+            assert payload["references"]
+            assert payload["tables"]
 
     _run(_test())
 
 
 def test_medrxiv_paginates(fake_ledger: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     async def _test() -> None:
-        client = AsyncHttpClient()
-        adapter = MedRxivAdapter(AdapterContext(fake_ledger), client)
+        async with AsyncHttpClient() as client:
+            adapter = MedRxivAdapter(AdapterContext(fake_ledger), client)
 
-        async def fake_fetch_json(*_: Any, **__: Any) -> dict[str, Any]:
-            if not getattr(fake_fetch_json, "called", False):
-                fake_fetch_json.called = True  # type: ignore[attr-defined]
-                return {"results": [medrxiv_record()], "next_cursor": "next"}
-            return {"results": [medrxiv_record()], "next_cursor": None}
+            async def fake_fetch_json(*_: Any, **__: Any) -> dict[str, Any]:
+                if not getattr(fake_fetch_json, "called", False):
+                    fake_fetch_json.called = True  # type: ignore[attr-defined]
+                    return {"results": [medrxiv_record()], "next_cursor": "next"}
+                return {"results": [medrxiv_record()], "next_cursor": None}
 
-        fake_fetch_json.called = False  # type: ignore[attr-defined]
-        monkeypatch.setattr(adapter, "fetch_json", fake_fetch_json)
+            fake_fetch_json.called = False  # type: ignore[attr-defined]
+            monkeypatch.setattr(adapter, "fetch_json", fake_fetch_json)
 
-        results = await adapter.run()
-        assert len(results) == 2
-        await client.aclose()
+            results = await adapter.run()
+            assert len(results) == 2
 
     _run(_test())
 
 
 def test_guideline_adapters(fake_ledger: Any) -> None:
     async def _test() -> None:
-        client = AsyncHttpClient()
-        nice = NiceGuidelineAdapter(
-            AdapterContext(fake_ledger), client, bootstrap_records=[nice_guideline()]
-        )
-        cdc = CdcSocrataAdapter(
-            AdapterContext(fake_ledger), client, bootstrap_records=cdc_socrata_record()
-        )
-        nic_results = await nice.run()
-        cdc_results = await cdc.run(dataset="abc")
-        assert nic_results[0].document.metadata["uid"].startswith("CG")
-        assert isinstance(nic_results[0].document.raw, dict)
-        assert isinstance(nic_results[0].document.raw["summary"], str)
-        assert nic_results[0].document.raw["url"] is None or isinstance(
-            nic_results[0].document.raw["url"], str
-        )
-        assert cdc_results[0].document.metadata["identifier"].startswith("CA-")
-        assert isinstance(cdc_results[0].document.raw["record"], dict)
-        await client.aclose()
+        async with AsyncHttpClient() as client:
+            nice = NiceGuidelineAdapter(
+                AdapterContext(fake_ledger), client, bootstrap_records=[nice_guideline()]
+            )
+            cdc = CdcSocrataAdapter(
+                AdapterContext(fake_ledger), client, bootstrap_records=cdc_socrata_record()
+            )
+            nic_results = await nice.run()
+            cdc_results = await cdc.run(dataset="abc")
+            assert nic_results[0].document.metadata["uid"].startswith("CG")
+            assert isinstance(nic_results[0].document.raw, dict)
+            assert isinstance(nic_results[0].document.raw["summary"], str)
+            assert nic_results[0].document.raw["url"] is None or isinstance(
+                nic_results[0].document.raw["url"], str
+            )
+            assert cdc_results[0].document.metadata["identifier"].startswith("CA-")
+            assert isinstance(cdc_results[0].document.raw["record"], dict)
 
     _run(_test())
 
 
 def test_terminology_adapters_parse(fake_ledger: Any) -> None:
     async def _test() -> None:
-        client = AsyncHttpClient()
-        context = AdapterContext(fake_ledger)
-        mesh = MeSHAdapter(context, client, bootstrap_records=[mesh_descriptor()])
-        umls = UMLSAdapter(context, client, bootstrap_records=[umls_record()])
-        loinc = LoincAdapter(context, client, bootstrap_records=[loinc_record()])
-        icd = Icd11Adapter(context, client, bootstrap_records=[icd11_record()])
-        snomed = SnomedAdapter(context, client, bootstrap_records=[snomed_record()])
-        rxnorm = RxNormAdapter(context, client, bootstrap_records=[rxnav_properties()])
+        async with AsyncHttpClient() as client:
+            context = AdapterContext(fake_ledger)
+            mesh = MeSHAdapter(context, client, bootstrap_records=[mesh_descriptor()])
+            umls = UMLSAdapter(context, client, bootstrap_records=[umls_record()])
+            loinc = LoincAdapter(context, client, bootstrap_records=[loinc_record()])
+            icd = Icd11Adapter(context, client, bootstrap_records=[icd11_record()])
+            snomed = SnomedAdapter(context, client, bootstrap_records=[snomed_record()])
+            rxnorm = RxNormAdapter(context, client, bootstrap_records=[rxnav_properties()])
 
-        results = await asyncio.gather(
-            mesh.run(descriptor_id="D012345"),
-            umls.run(cui="C1234567"),
-            loinc.run(code="4548-4"),
-            icd.run(code="1A00"),
-            snomed.run(code="44054006"),
-            rxnorm.run(rxcui="12345"),
-        )
+            results = await asyncio.gather(
+                mesh.run(descriptor_id="D012345"),
+                umls.run(cui="C1234567"),
+                loinc.run(code="4548-4"),
+                icd.run(code="1A00"),
+                snomed.run(code="44054006"),
+                rxnorm.run(rxcui="12345"),
+            )
 
-        assert results[0][0].document.metadata["descriptor_id"].startswith("D")
-        assert isinstance(results[0][0].document.raw, dict)
-        assert results[1][0].document.metadata["cui"].startswith("C")
-        assert isinstance(results[1][0].document.raw, dict)
-        assert results[2][0].document.metadata["code"].endswith("-4")
-        assert isinstance(results[2][0].document.raw, dict)
-        assert results[5][0].document.metadata["rxcui"].isdigit()
-        assert isinstance(results[3][0].document.raw["title"], str)
-        assert isinstance(results[4][0].document.raw["designation"], list)
-        await client.aclose()
+            assert results[0][0].document.metadata["descriptor_id"].startswith("D")
+            assert isinstance(results[0][0].document.raw, dict)
+            assert results[1][0].document.metadata["cui"].startswith("C")
+            assert isinstance(results[1][0].document.raw, dict)
+            assert results[2][0].document.metadata["code"].endswith("-4")
+            assert isinstance(results[2][0].document.raw, dict)
+            assert results[5][0].document.metadata["rxcui"].isdigit()
+            assert isinstance(results[3][0].document.raw["title"], str)
+            assert isinstance(results[4][0].document.raw["designation"], list)
 
     _run(_test())
 
 
 def test_terminology_validations(fake_ledger: Any) -> None:
-    client = AsyncHttpClient()
-    context = AdapterContext(fake_ledger)
-    document = Document("doc", "mesh", "")
+    async def _test() -> None:
+        async with AsyncHttpClient() as client:
+            context = AdapterContext(fake_ledger)
+            document = Document("doc", "mesh", "")
 
-    mesh = MeSHAdapter(context, client, bootstrap_records=[mesh_descriptor()])
-    document.metadata = {"descriptor_id": "BAD"}
-    with pytest.raises(ValueError):
-        mesh.validate(document)
+            mesh = MeSHAdapter(context, client, bootstrap_records=[mesh_descriptor()])
+            document.metadata = {"descriptor_id": "BAD"}
+            with pytest.raises(ValueError):
+                mesh.validate(document)
 
-    umls = UMLSAdapter(context, client, bootstrap_records=[umls_record()])
-    document.metadata = {"cui": "BAD"}
-    with pytest.raises(ValueError):
-        umls.validate(document)
+            umls = UMLSAdapter(context, client, bootstrap_records=[umls_record()])
+            document.metadata = {"cui": "BAD"}
+            with pytest.raises(ValueError):
+                umls.validate(document)
 
-    loinc = LoincAdapter(context, client, bootstrap_records=[loinc_record()])
-    document.metadata = {"code": "BAD"}
-    with pytest.raises(ValueError):
-        loinc.validate(document)
+            loinc = LoincAdapter(context, client, bootstrap_records=[loinc_record()])
+            document.metadata = {"code": "BAD"}
+            with pytest.raises(ValueError):
+                loinc.validate(document)
 
-    icd = Icd11Adapter(context, client, bootstrap_records=[icd11_record()])
-    with pytest.raises(ValueError):
-        icd.validate(Document("doc", "icd", "", metadata={"code": "X"}, raw={}))
+            icd = Icd11Adapter(context, client, bootstrap_records=[icd11_record()])
+            with pytest.raises(ValueError):
+                icd.validate(Document("doc", "icd", "", metadata={"code": "X"}, raw={}))
 
-    snomed = SnomedAdapter(context, client, bootstrap_records=[snomed_record()])
-    with pytest.raises(ValueError):
-        snomed.validate(
-            Document("doc", "snomed", "", metadata={"code": "12"}, raw={"designation": []})
-        )
+            snomed = SnomedAdapter(context, client, bootstrap_records=[snomed_record()])
+            with pytest.raises(ValueError):
+                snomed.validate(
+                    Document(
+                        "doc", "snomed", "", metadata={"code": "12"}, raw={"designation": []}
+                    )
+                )
 
-    _run(client.aclose())
+    _run(_test())
 
 
 def test_literature_optional_field_variants(fake_ledger: Any) -> None:
@@ -812,20 +819,19 @@ def test_terminology_adapters_cache_responses(
     fake_ledger: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async def _test() -> None:
-        client = AsyncHttpClient()
-        adapter = MeSHAdapter(AdapterContext(fake_ledger), client)
-        calls = 0
+        async with AsyncHttpClient() as client:
+            adapter = MeSHAdapter(AdapterContext(fake_ledger), client)
+            calls = 0
 
-        async def fake_fetch_json(*_: Any, **__: Any) -> dict[str, Any]:
-            nonlocal calls
-            calls += 1
-            return mesh_descriptor()
+            async def fake_fetch_json(*_: Any, **__: Any) -> dict[str, Any]:
+                nonlocal calls
+                calls += 1
+                return mesh_descriptor()
 
-        monkeypatch.setattr(adapter, "fetch_json", fake_fetch_json)
-        await adapter.run(descriptor_id="D012345")
-        await adapter.run(descriptor_id="D012345")
-        assert calls == 1
-        await client.aclose()
+            monkeypatch.setattr(adapter, "fetch_json", fake_fetch_json)
+            await adapter.run(descriptor_id="D012345")
+            await adapter.run(descriptor_id="D012345")
+            assert calls == 1
 
     _run(_test())
 

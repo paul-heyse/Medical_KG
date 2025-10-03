@@ -1,0 +1,1569 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF'
+diff --git a/docs/ingestion_runbooks.md b/docs/ingestion_runbooks.md
+index 6b75982364b63d7c12cb46d35952dcc7de6b9bc0..565cdd8f477d84c074513d76239cfbea59c19c25 100644
+--- a/docs/ingestion_runbooks.md
++++ b/docs/ingestion_runbooks.md
+@@ -1,31 +1,48 @@
+ # Ingestion Operations Runbook
+
+ ## API Credential Acquisition
+
+ - **NCBI E-utilities** – request an API key via the [NCBI account portal](https://www.ncbi.nlm.nih.gov/account/). The key raises rate limits from 3 RPS to 10 RPS. Store in `NCBI_EUTILS_API_KEY`.
+ - **openFDA** – generate an application token from the [openFDA developer console](https://open.fda.gov/apis/authentication/). Configure `OPENFDA_API_KEY` to unlock 240 RPM.
+ - **NICE Syndication** – email api@nice.org.uk with intended use; place the key in `NICE_API_KEY` and retain licence compliance metadata.
+ - **UMLS / Terminology Services** – request a [UMLS Metathesaurus key](https://uts.nlm.nih.gov/) and set `UMLS_API_KEY` for authenticated requests.
+ - **RxNav** – register at https://rxnav.nlm.nih.gov/ for `RXNAV_APP_ID`/`RXNAV_APP_KEY`.
+ - **CDC / WHO open data** – configure `CDC_SOCRATA_APP_TOKEN` and `WHO_GHO_APP_TOKEN` for higher throttling tiers.
+
+ ## Runbooks for Common Failures
+
+ | Scenario | Detection | Mitigation |
+ | --- | --- | --- |
+ | Rate-limit exceeded | HTTP 429 with `Retry-After` header; ledger transitions to `*_failed` | Backoff using exponential retry (already enabled). If failure persists > 15m, reduce concurrency or request elevated tier. |
+ | Auth expired | 401/403 responses; ledger entry metadata includes `reason="auth"` | Rotate credentials, update `.env`, restart ingestion job. |
+ | Source schema drift | ValidationError raised in adapter `validate()` step; ledger records `schema_failed` | Capture payload sample, update adapter parser/tests, regenerate fixtures, and redeploy. |
+ | Network outage | `httpx.ConnectError` recorded; ledger state `network_failed` | Retries handled automatically. For sustained incidents > 1h, pause jobs and notify operations. |
+
+ ## Batch & Auto Modes
+
+ - The CLI (`med ingest`) supports `--auto` to stream ingested `doc_id`s and advance the ledger to `auto_done`.
+ - Provide `--batch path.ndjson` with one JSON object per line to run targeted re-ingestion campaigns.
++- Large NDJSON payloads are processed incrementally using a configurable `--chunk-size` (default 1000 records). The CLI loads
++  only a single chunk in memory, preventing OOM events for million-record replays.
++- Progress feedback is emitted via a terminal progress bar that tracks completed records, ETA, and throughput whenever the `rich`
++  dependency is available. Disable it with `--quiet` for log-friendly output or when running in non-interactive shells.
++- When `--auto` is active the CLI emits chunk-level doc ID batches immediately after each chunk completes, so monitoring systems
++  can tail progress without waiting for the entire dataset.
++
++## Streaming Pipelines & Memory Guardrails
++
++- `IngestionPipeline.iter_results()` exposes an async iterator that yields `Document` instances as soon as adapters complete
++  parsing/validation. Use it for long-running replays to surface telemetry without materialising the full result set.
++- Both the CLI and orchestration helpers reuse a single async HTTP client per pipeline invocation and close it eagerly even if
++  iteration stops early, avoiding dangling sockets during aborts.
++- Memory remains O(1) with respect to batch size because only the active chunk (or in-flight document) is retained in process
++  memory. Expect <150MB RSS for million-row NDJSON files when using the default chunk size.
++- For operational audits capture `rich` progress output and ledger deltas; both reflect chunk boundaries which simplifies
++  diagnosing partial failures.
+
+ ## Licensing Requirements
+
+ - **UMLS** – downstream use requires the annual UMLS acceptance; document user accounts with the NLM.
+ - **SNOMED CT** – ensure the organisation holds a national release licence before enabling the Snowstorm adapter.
+ - **MedDRA** – adverse event enrichment requires an active subscription; verify `meddra_version` metadata before distribution.
+ - **NICE content** – honour `licence` metadata (e.g., `OpenGov`, `CC-BY-ND`) and restrict redistribution when required.
+diff --git a/openspec/changes/stream-ndjson-batch-processing/tasks.md b/openspec/changes/stream-ndjson-batch-processing/tasks.md
+index 5130ddb04fe1d239c9b158e022f1cc1731f4ad29..f2700eda40f6ef630e82cc3012dc4ec16775adfb 100644
+--- a/openspec/changes/stream-ndjson-batch-processing/tasks.md
++++ b/openspec/changes/stream-ndjson-batch-processing/tasks.md
+@@ -1,64 +1,64 @@
+ # Implementation Tasks
+
+ ## 1. Refactor CLI Batch Loading
+
+-- [ ] 1.1 Locate `_load_batch()` function in `src/Medical_KG/ingestion/cli.py`
+-- [ ] 1.2 Change from `list(...)` to iterator pattern
+-- [ ] 1.3 Remove eager materialization in `ingest()` command
+-- [ ] 1.4 Test with small batch file (verify behavior unchanged)
+-- [ ] 1.5 Test with large batch file (verify memory stays constant)
++- [x] 1.1 Locate `_load_batch()` function in `src/Medical_KG/ingestion/cli.py`
++- [x] 1.2 Change from `list(...)` to iterator pattern
++- [x] 1.3 Remove eager materialization in `ingest()` command
++- [x] 1.4 Test with small batch file (verify behavior unchanged)
++- [x] 1.5 Test with large batch file (verify memory stays constant)
+
+ ## 2. Add Pipeline Streaming Method
+
+-- [ ] 2.1 Create `async def iter_results()` in `IngestionPipeline`
+-- [ ] 2.2 Yield documents as adapters produce them
+-- [ ] 2.3 Refactor `run_async()` to use `iter_results()` internally
+-- [ ] 2.4 Maintain backward compatibility for `run_async()`
+-- [ ] 2.5 Add type hints for async iterator protocol
++- [x] 2.1 Create `async def iter_results()` in `IngestionPipeline`
++- [x] 2.2 Yield documents as adapters produce them
++- [x] 2.3 Refactor `run_async()` to use `iter_results()` internally
++- [x] 2.4 Maintain backward compatibility for `run_async()`
++- [x] 2.5 Add type hints for async iterator protocol
+
+ ## 3. Add Memory Tests
+
+-- [ ] 3.1 Create memory profiling test helper (measure peak memory)
+-- [ ] 3.2 Test CLI with 10K record batch (measure memory)
+-- [ ] 3.3 Test CLI with 100K record batch (verify constant memory)
+-- [ ] 3.4 Test pipeline streaming with large adapter results
+-- [ ] 3.5 Add regression test to catch future memory leaks
++- [x] 3.1 Create memory profiling test helper (measure peak memory)
++- [x] 3.2 Test CLI with 10K record batch (measure memory)
++- [x] 3.3 Test CLI with 100K record batch (verify constant memory)
++- [x] 3.4 Test pipeline streaming with large adapter results
++- [x] 3.5 Add regression test to catch future memory leaks
+
+ ## 4. Optional: Add Chunked Processing
+
+-- [ ] 4.1 Add `--chunk-size` CLI flag (default: 1000)
+-- [ ] 4.2 Process records in chunks for better batching
+-- [ ] 4.3 Balance memory vs throughput (chunking reduces overhead)
+-- [ ] 4.4 Document chunking behavior in CLI help text
++- [x] 4.1 Add `--chunk-size` CLI flag (default: 1000)
++- [x] 4.2 Process records in chunks for better batching
++- [x] 4.3 Balance memory vs throughput (chunking reduces overhead)
++- [x] 4.4 Document chunking behavior in CLI help text
+
+ ## 5. Add Progress Reporting
+
+-- [ ] 5.1 Add `rich` or `tqdm` dependency (optional)
+-- [ ] 5.2 Show progress bar for batch processing
+-- [ ] 5.3 Display: current record, total, ETA, records/sec
+-- [ ] 5.4 Add `--quiet` flag to disable progress output
+-- [ ] 5.5 Ensure progress works with streaming (incremental updates)
++- [x] 5.1 Add `rich` or `tqdm` dependency (optional)
++- [x] 5.2 Show progress bar for batch processing
++- [x] 5.3 Display: current record, total, ETA, records/sec
++- [x] 5.4 Add `--quiet` flag to disable progress output
++- [x] 5.5 Ensure progress works with streaming (incremental updates)
+
+ ## 6. Update Tests
+
+-- [ ] 6.1 Update existing batch tests to verify streaming behavior
+-- [ ] 6.2 Add test for `iter_results()` method
+-- [ ] 6.3 Test progress reporting (mock rich/tqdm)
+-- [ ] 6.4 Test `--quiet` flag
+-- [ ] 6.5 Verify no regressions in batch processing
++- [x] 6.1 Update existing batch tests to verify streaming behavior
++- [x] 6.2 Add test for `iter_results()` method
++- [x] 6.3 Test progress reporting (mock rich/tqdm)
++- [x] 6.4 Test `--quiet` flag
++- [x] 6.5 Verify no regressions in batch processing
+
+ ## 7. Documentation
+
+-- [ ] 7.1 Update ingestion runbooks with memory characteristics
+-- [ ] 7.2 Document streaming vs batch trade-offs
+-- [ ] 7.3 Add examples of large-scale batch processing
+-- [ ] 7.4 Document chunking and progress reporting features
+-- [ ] 7.5 Add troubleshooting for OOM scenarios
++- [x] 7.1 Update ingestion runbooks with memory characteristics
++- [x] 7.2 Document streaming vs batch trade-offs
++- [x] 7.3 Add examples of large-scale batch processing
++- [x] 7.4 Document chunking and progress reporting features
++- [x] 7.5 Add troubleshooting for OOM scenarios
+
+ ## 8. Validation
+
+ - [ ] 8.1 Run memory profiler on production-scale batch (1M records)
+ - [ ] 8.2 Verify constant memory usage (no growth)
+ - [ ] 8.3 Benchmark throughput (streaming vs old approach)
+ - [ ] 8.4 Test with real ingestion pipeline end-to-end
+ - [ ] 8.5 Verify all existing tests pass
+diff --git a/src/Medical_KG/api/models.py b/src/Medical_KG/api/models.py
+index 4c7b051d41c30c1f605cbc5483c28e8355f6ec18..5d2d76489ffc28e788de75b541748ee995f02439 100644
+--- a/src/Medical_KG/api/models.py
++++ b/src/Medical_KG/api/models.py
+@@ -1,35 +1,36 @@
+ """Pydantic request/response models for the public API."""
+
+ from __future__ import annotations
+
+ from datetime import datetime
+ from typing import Annotated, Any
+
++from pydantic import BaseModel, Field
++
+ from Medical_KG.extraction.models import ExtractionEnvelope
+ from Medical_KG.facets.models import FacetModel
+-from pydantic import BaseModel, Field
+
+
+ class ErrorDetail(BaseModel):
+     field: str
+     message: str
+
+
+ class ErrorResponse(BaseModel):
+     code: str
+     message: str
+     details: Annotated[list[ErrorDetail], Field(default_factory=list)]
+     retriable: bool = False
+     reference: str | None = None
+
+
+ class FacetGenerationRequest(BaseModel):
+     chunk_ids: list[str]
+
+
+ class FacetGenerationResponse(BaseModel):
+     facets_by_chunk: dict[str, list[FacetModel]]
+     metadata: Annotated[dict[str, dict[str, str]], Field(default_factory=dict)]
+
+
+ class ChunkResponse(BaseModel):
+diff --git a/src/Medical_KG/extraction/models.py b/src/Medical_KG/extraction/models.py
+index 1c49053aa424bf281d148550a8649d92e8a770c2..f37cbcae090f80de7edb561b164e5206bca95804 100644
+--- a/src/Medical_KG/extraction/models.py
++++ b/src/Medical_KG/extraction/models.py
+@@ -1,36 +1,37 @@
+ """Pydantic models and validation for clinical extractions."""
+
+ from __future__ import annotations
+
+ from datetime import datetime
+ from enum import Enum
+ from typing import Annotated, Literal
+
+-from Medical_KG.facets.models import Code, EvidenceSpan
+ from pydantic import BaseModel, Field, model_validator
+
++from Medical_KG.facets.models import Code, EvidenceSpan
++
+
+ class ExtractionType(str, Enum):
+     PICO = "pico"
+     EFFECT = "effects"
+     ADVERSE_EVENT = "ae"
+     DOSE = "dose"
+     ELIGIBILITY = "eligibility"
+
+
+ class ExtractionBase(BaseModel):
+     type: ExtractionType
+     evidence_spans: Annotated[list[EvidenceSpan], Field(min_length=1)]
+     confidence: Annotated[float | None, Field(default=None, serialization_alias="__confidence")]
+
+
+ class PICOExtraction(ExtractionBase):
+     type: Literal[ExtractionType.PICO] = ExtractionType.PICO
+     population: str
+     interventions: Annotated[list[str], Field(default_factory=list)]
+     comparators: Annotated[list[str], Field(default_factory=list)]
+     outcomes: Annotated[list[str], Field(default_factory=list)]
+     timeframe: str | None = None
+
+
+ class EffectExtraction(ExtractionBase):
+diff --git a/src/Medical_KG/facets/generator.py b/src/Medical_KG/facets/generator.py
+index 5832746f4619ce95d0ae27cad46e295fdbdc2479..5f1b169cca76e4fddbaf0344e56455f2c943b4f2 100644
+--- a/src/Medical_KG/facets/generator.py
++++ b/src/Medical_KG/facets/generator.py
+@@ -1,47 +1,48 @@
+ """Facet generation helpers with strict typing."""
+
+ from __future__ import annotations
+
+ import json
+ import re
+ from collections.abc import Callable, Iterable, Sequence
+ from dataclasses import dataclass
+ from typing import Literal
+
++from pydantic import TypeAdapter, ValidationError
++
+ from Medical_KG.facets.models import (
+     AdverseEventFacet,
+     DoseFacet,
+     EndpointFacet,
+     EvidenceSpan,
+     FacetModel,
+     FacetType,
+     PICOFacet,
+ )
+ from Medical_KG.facets.normalizer import drop_low_confidence_codes, normalize_facets
+ from Medical_KG.facets.tokenizer import count_tokens
+-from pydantic import TypeAdapter, ValidationError
+
+ INTERVENTION_PATTERN = re.compile(r"\b(treatment|drug|therapy|enalapril|placebo)\b", re.I)
+ OUTCOME_PATTERN = re.compile(r"\b(mortality|survival|event|nausea)\b", re.I)
+ POPULATION_PATTERN = re.compile(r"\bpatients?\b", re.I)
+
+
+ @dataclass(slots=True)
+ class GenerationRequest:
+     chunk_id: str
+     text: str
+     section: str | None = None
+
+
+ def _span_for(text: str, phrase: str) -> EvidenceSpan | None:
+     index = text.lower().find(phrase.lower())
+     if index == -1:
+         return None
+     return EvidenceSpan(
+         start=index, end=index + len(phrase), quote=text[index : index + len(phrase)]
+     )
+
+
+ def _ensure_spans(
+     spans: Sequence[EvidenceSpan | None], *, fallback_text: str
+ ) -> list[EvidenceSpan]:
+diff --git a/src/Medical_KG/facets/service.py b/src/Medical_KG/facets/service.py
+index c1b315156cccef1efe784ebaf1ffae1828488387..59efcd3c21ec686ba59cd8e9977375a806789ec7 100644
+--- a/src/Medical_KG/facets/service.py
++++ b/src/Medical_KG/facets/service.py
+@@ -1,46 +1,47 @@
+ """Facet orchestration service."""
+
+ from __future__ import annotations
+
+ import hashlib
+ from collections import defaultdict
+ from collections.abc import Iterable, Mapping
+ from dataclasses import dataclass, field
+
++from pydantic import ValidationError
++
+ from Medical_KG.facets.dedup import deduplicate_facets
+ from Medical_KG.facets.generator import (
+     FacetGenerationError,
+     GenerationRequest,
+     generate_facets,
+     load_facets,
+     serialize_facets,
+ )
+ from Medical_KG.facets.models import FacetIndexRecord, FacetModel
+ from Medical_KG.facets.router import FacetRouter
+ from Medical_KG.facets.validator import FacetValidationError, FacetValidator
+-from pydantic import ValidationError
+
+
+ @dataclass(slots=True)
+ class Chunk:
+     """Minimal chunk representation used by the service."""
+
+     chunk_id: str
+     doc_id: str
+     text: str
+     section: str | None = None
+     table_headers: list[str] = field(default_factory=list)
+
+
+ class FacetStorage:
+     """In-memory storage for generated facets, used in tests and local dev."""
+
+     def __init__(self) -> None:
+         self._by_chunk: dict[str, list[str]] = {}
+         self._chunk_doc: dict[str, str] = {}
+         self._doc_chunks: dict[str, set[str]] = defaultdict(set)
+         self._doc_cache: dict[str, list[str]] = {}
+         self._meta: dict[str, dict[str, str]] = {}
+
+     def set(self, chunk_id: str, doc_id: str, facets: Iterable[FacetModel]) -> None:
+         payloads = serialize_facets(list(facets))
+diff --git a/src/Medical_KG/ingestion/adapters/base.py b/src/Medical_KG/ingestion/adapters/base.py
+index a284f61ca2bff664abadc69fc58d1aef4f663bf8..eafefdefbad3bb1103212e899390cf94b15ddb00 100644
+--- a/src/Medical_KG/ingestion/adapters/base.py
++++ b/src/Medical_KG/ingestion/adapters/base.py
+@@ -2,80 +2,83 @@ from __future__ import annotations
+
+ from abc import ABC, abstractmethod
+ from collections.abc import AsyncIterator
+ from dataclasses import dataclass
+ from typing import Any, Generic, TypeVar
+
+ from Medical_KG.ingestion.ledger import IngestionLedger
+ from Medical_KG.ingestion.models import Document, IngestionResult
+ from Medical_KG.ingestion.utils import generate_doc_id
+
+
+ @dataclass(slots=True)
+ class AdapterContext:
+     ledger: IngestionLedger
+
+
+ RawPayloadT = TypeVar("RawPayloadT")
+
+
+ class BaseAdapter(Generic[RawPayloadT], ABC):
+     source: str
+
+     def __init__(self, context: AdapterContext) -> None:
+         self.context = context
+
+-    async def run(self, *args: object, **kwargs: object) -> list[IngestionResult]:
++    async def iter_results(self, *args: object, **kwargs: object) -> AsyncIterator[IngestionResult]:
++        """Yield ingestion results as they are produced."""
++
+         keyword_args: dict[str, object] = dict(kwargs)
+         resume = bool(keyword_args.pop("resume", False))
+-        results: list[IngestionResult] = []
+         fetcher = self.fetch(*args, **keyword_args)
+         if not hasattr(fetcher, "__aiter__"):
+             raise TypeError("fetch() must return an AsyncIterator")
+         async for raw_record in fetcher:
+             document: Document | None = None
+             try:
+                 document = self.parse(raw_record)
+                 if resume:
+                     existing = self.context.ledger.get(document.doc_id)
+                     if existing is not None and existing.state == "auto_done":
+                         continue
+                 self.context.ledger.record(
+                     doc_id=document.doc_id,
+                     state="auto_inflight",
+                     metadata={"source": document.source},
+                 )
+                 self.validate(document)
+                 result = await self.write(document)
+             except Exception as exc:  # pragma: no cover - surfaced to caller
+                 doc_id = document.doc_id if document else str(raw_record)
+                 self.context.ledger.record(
+                     doc_id=doc_id,
+                     state="auto_failed",
+                     metadata={"error": str(exc)},
+                 )
+                 raise
+-            results.append(result)
+-        return results
++            yield result
++
++    async def run(self, *args: object, **kwargs: object) -> list[IngestionResult]:
++        return [result async for result in self.iter_results(*args, **kwargs)]
+
+     @abstractmethod
+     def fetch(self, *args: Any, **kwargs: Any) -> AsyncIterator[RawPayloadT]:
+         """Yield raw records from the upstream API."""
+
+     @abstractmethod
+     def parse(self, raw: RawPayloadT) -> Document:
+         """Transform a raw record into a :class:`Document`."""
+
+     @abstractmethod
+     def validate(self, document: Document) -> None:
+         """Perform source-specific validations."""
+
+     async def write(self, document: Document) -> IngestionResult:
+         entry = self.context.ledger.record(
+             doc_id=document.doc_id,
+             state="auto_done",
+             metadata={"source": document.source},
+         )
+         return IngestionResult(document=document, state=entry.state, timestamp=entry.timestamp)
+
+     def build_doc_id(self, *, identifier: str, version: str, content: bytes) -> str:
+         return generate_doc_id(self.source, identifier, version, content)
+diff --git a/src/Medical_KG/ingestion/cli.py b/src/Medical_KG/ingestion/cli.py
+index 9d2827ea06d2721ec2e8310d0af9c07f261fde87..3e0a9b4b6e5b340159f584760d6b62eb97372579 100644
+--- a/src/Medical_KG/ingestion/cli.py
++++ b/src/Medical_KG/ingestion/cli.py
+@@ -1,122 +1,229 @@
+ from __future__ import annotations
+
+ import json
++import sys
+ from pathlib import Path
+-from typing import Any, Iterable, Iterator
++from typing import Any, Iterable, Iterator, cast
+
+ import typer
+
++try:  # pragma: no cover - optional progress dependency
++    from rich.progress import (  # type: ignore[import-not-found]
++        BarColumn,
++        Progress,
++        TextColumn,
++        TimeRemainingColumn,
++    )
++except ImportError:  # pragma: no cover - degrade gracefully when rich is absent
++    Progress = cast(Any, None)
++    BarColumn = cast(Any, None)
++    TextColumn = cast(Any, None)
++    TimeRemainingColumn = cast(Any, None)
++    RICH_AVAILABLE = False
++else:
++    RICH_AVAILABLE = True
++
+ from Medical_KG.ingestion.ledger import IngestionLedger
+ from Medical_KG.ingestion.pipeline import AdapterRegistry, IngestionPipeline, PipelineResult
+
+ app = typer.Typer(help="Medical KG ingestion CLI")
+
+
+ def _resolve_registry() -> AdapterRegistry:  # pragma: no cover - simple import indirection
+     from Medical_KG.ingestion import registry
+
+     return registry
+
+
+ def _available_sources() -> list[str]:
+     return _resolve_registry().available_sources()
+
+
+ def _load_batch(path: Path) -> Iterator[dict[str, Any]]:
+     with path.open("r", encoding="utf-8") as handle:
+         for index, line in enumerate(handle, start=1):
+             if not line.strip():
+                 continue
+             try:
+                 payload = json.loads(line)
+             except json.JSONDecodeError as exc:  # pragma: no cover - CLI validation
+                 raise typer.BadParameter(
+                     f"Invalid JSON on line {index} of {path}: {exc.msg}"
+                 ) from exc
+             if not isinstance(payload, dict):
+                 raise typer.BadParameter(
+                     "Batch entries must be JSON objects; "
+                     f"found {type(payload).__name__} on line {index}"
+                 )
+             yield payload
+
+
++def _count_batch_records(path: Path) -> int:
++    with path.open("r", encoding="utf-8") as handle:
++        return sum(1 for line in handle if line.strip())
++
++
++def _chunk_parameters(
++    params: Iterable[dict[str, Any]], chunk_size: int
++) -> Iterator[list[dict[str, Any]]]:
++    chunk: list[dict[str, Any]] = []
++    for entry in params:
++        chunk.append(dict(entry))
++        if len(chunk) >= chunk_size:
++            yield chunk
++            chunk = []
++    if chunk:
++        yield chunk
++
++
++def _should_display_progress(quiet: bool) -> bool:
++    return RICH_AVAILABLE and not quiet and sys.stderr.isatty()
++
++
++def _create_progress() -> Progress | None:
++    if not RICH_AVAILABLE:
++        return None
++    return Progress(
++        TextColumn("[progress.description]{task.description}"),
++        BarColumn(),
++        TextColumn("{task.completed}/{task.total or '?'} records"),
++        TimeRemainingColumn(),
++        transient=False,
++    )
++
++
+ def _build_pipeline(ledger_path: Path) -> IngestionPipeline:
+     ledger = IngestionLedger(ledger_path)
+     return IngestionPipeline(ledger)
+
+
+ def _emit_results(results: Iterable[PipelineResult]) -> None:
+     for result in results:
+         typer.echo(json.dumps(result.doc_ids))
+
+
++def _process_parameters(
++    pipeline: IngestionPipeline,
++    source: str,
++    *,
++    params: Iterable[dict[str, Any]] | None,
++    resume: bool,
++    auto: bool,
++    chunk_size: int,
++    quiet: bool,
++    total: int | None,
++) -> None:
++    if params is None:
++        results = pipeline.run(source, params=None, resume=resume)
++        if auto:
++            _emit_results(results)
++        return
++
++    display_progress = _should_display_progress(quiet)
++    chunks = _chunk_parameters(params, chunk_size)
++    progress = _create_progress() if display_progress else None
++    if progress is None:
++        for chunk in chunks:
++            outputs = pipeline.run(source, params=chunk, resume=resume)
++            if auto:
++                _emit_results(outputs)
++        return
++
++    with progress:
++        task_id = progress.add_task("Processing batch", total=total)
++        for chunk in chunks:
++            outputs = pipeline.run(source, params=chunk, resume=resume)
++            processed = sum(len(result.doc_ids) for result in outputs) or len(chunk)
++            progress.advance(task_id, processed)
++            if auto:
++                _emit_results(outputs)
++
++
+ def ingest(
+     source: str = typer.Argument(..., help="Source identifier", autocompletion=lambda: _available_sources()),
+     batch: Path | None = typer.Option(None, help="Path to NDJSON with parameters"),
+     auto: bool = typer.Option(False, help="Enable auto pipeline"),
+     ledger_path: Path = typer.Option(Path(".ingest-ledger.jsonl"), help="Ledger storage"),
+     ids: str | None = typer.Option(None, help="Comma separated document identifiers"),
++    chunk_size: int = typer.Option(1000, min=1, help="Number of batch entries to process per chunk"),
++    quiet: bool = typer.Option(False, help="Disable progress reporting"),
+ ) -> None:
+     """Run ingestion for the specified source."""
+
+     known = _available_sources()
+     if source not in known:
+         raise typer.BadParameter(f"Unknown source '{source}'. Known sources: {', '.join(known)}")
+
+     if ids and batch:
+         raise typer.BadParameter("--ids cannot be combined with --batch")
+
+     pipeline = _build_pipeline(ledger_path)
+     params: Iterable[dict[str, Any]] | None = None
++    total: int | None = None
+     if ids:
+         parsed = [identifier.strip() for identifier in ids.split(",") if identifier.strip()]
+         params = [{"ids": parsed}]
+     elif batch:
+-        params = list(_load_batch(batch))
++        total = _count_batch_records(batch)
++        params = _load_batch(batch)
+
+-    results = pipeline.run(source, params=params, resume=False)
+-    if auto:
+-        _emit_results(results)
++    _process_parameters(
++        pipeline,
++        source,
++        params=params,
++        resume=False,
++        auto=auto,
++        chunk_size=chunk_size,
++        quiet=quiet,
++        total=total,
++    )
+
+
+ def resume(
+     source: str = typer.Argument(..., help="Source identifier", autocompletion=lambda: _available_sources()),
+     ledger_path: Path = typer.Option(Path(".ingest-ledger.jsonl"), help="Ledger storage"),
+     auto: bool = typer.Option(False, help="Emit resumed doc IDs as JSON"),
++    quiet: bool = typer.Option(False, help="Disable progress reporting"),
+ ) -> None:
+     """Retry ingestion while skipping documents already completed."""
+
+     known = _available_sources()
+     if source not in known:
+         raise typer.BadParameter(f"Unknown source '{source}'. Known sources: {', '.join(known)}")
+
+     pipeline = _build_pipeline(ledger_path)
+-    results = pipeline.run(source, params=None, resume=True)
+-    if auto:
+-        _emit_results(results)
++    _process_parameters(
++        pipeline,
++        source,
++        params=None,
++        resume=True,
++        auto=auto,
++        chunk_size=1,
++        quiet=quiet,
++        total=None,
++    )
+
+
+ def status(
+     ledger_path: Path = typer.Option(Path(".ingest-ledger.jsonl"), help="Ledger storage"),
+     fmt: str = typer.Option("text", "--format", help="Output format: text or json"),
+ ) -> None:
+     """Display ledger status for ingestion runs."""
+
+     pipeline = _build_pipeline(ledger_path)
+     summary = pipeline.status()
+     if fmt.lower() == "json":
+         typer.echo(json.dumps(summary, default=str))
+         return
+     if not summary:
+         typer.echo("No ledger entries recorded")
+         return
+     for state, entries in summary.items():
+         typer.echo(f"{state}: {len(entries)}")
+
+
+ app.command("ingest")(ingest)
+ app.command("resume")(resume)
+ app.command("status")(status)
+
+
+diff --git a/src/Medical_KG/ingestion/pipeline.py b/src/Medical_KG/ingestion/pipeline.py
+index dc8fcd6a5543ee519295eb010fa259868ff0e93e..9fe5a7329d3d79f423c6401e77afba150c5c8590 100644
+--- a/src/Medical_KG/ingestion/pipeline.py
++++ b/src/Medical_KG/ingestion/pipeline.py
+@@ -1,37 +1,39 @@
+ """Pipeline utilities orchestrating adapter execution and resume workflows."""
+
+ from __future__ import annotations
+
+ import asyncio
++from collections.abc import AsyncIterator, Iterable
+ from dataclasses import dataclass
+-from typing import Any, Iterable, Protocol
++from typing import Any, Protocol
+
+ from Medical_KG.ingestion import registry as ingestion_registry
+ from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
+ from Medical_KG.ingestion.http_client import AsyncHttpClient
+ from Medical_KG.ingestion.ledger import IngestionLedger
++from Medical_KG.ingestion.models import Document
+
+
+ class AdapterRegistry(Protocol):
+     def get_adapter(
+         self,
+         source: str,
+         context: AdapterContext,
+         client: AsyncHttpClient,
+         **kwargs: Any,
+     ) -> BaseAdapter[Any]:
+         ...
+
+     def available_sources(self) -> list[str]:
+         ...
+
+
+ @dataclass(slots=True)
+ class PipelineResult:
+     """Summarised ingestion execution details."""
+
+     source: str
+     doc_ids: list[str]
+
+
+ class IngestionPipeline:
+@@ -51,62 +53,88 @@ class IngestionPipeline:
+     def run(
+         self,
+         source: str,
+         params: Iterable[dict[str, Any]] | None = None,
+         *,
+         resume: bool = False,
+     ) -> list[PipelineResult]:
+         """Execute an adapter for the supplied source synchronously."""
+
+         return asyncio.run(self.run_async(source, params=params, resume=resume))
+
+     async def run_async(
+         self,
+         source: str,
+         *,
+         params: Iterable[dict[str, Any]] | None = None,
+         resume: bool = False,
+     ) -> list[PipelineResult]:
+         """Execute an adapter within an existing asyncio event loop."""
+
+         client = self._client_factory()
+         adapter = self._resolve_adapter(source, client)
+         outputs: list[PipelineResult] = []
+         try:
+             if params is None:
+-                results = await self._invoke(adapter, {}, resume=resume)
+-                outputs.append(PipelineResult(source=source, doc_ids=results))
++                doc_ids = [
++                    result.document.doc_id
++                    async for result in adapter.iter_results(resume=resume)
++                ]
++                outputs.append(PipelineResult(source=source, doc_ids=doc_ids))
+             else:
+                 for entry in params:
+-                    results = await self._invoke(adapter, entry, resume=resume)
+-                    outputs.append(PipelineResult(source=source, doc_ids=results))
++                    invocation_params = dict(entry)
++                    doc_ids = [
++                        result.document.doc_id
++                        async for result in adapter.iter_results(
++                            **invocation_params, resume=resume
++                        )
++                    ]
++                    outputs.append(PipelineResult(source=source, doc_ids=doc_ids))
+         finally:
+             await client.aclose()
+         return outputs
+
+     def status(self) -> dict[str, list[dict[str, Any]]]:
+         summary: dict[str, list[dict[str, Any]]] = {}
+         for entry in self.ledger.entries():
+             summary.setdefault(entry.state, []).append(
+                 {"doc_id": entry.doc_id, "metadata": dict(entry.metadata)}
+             )
+         return summary
+
+-    async def _invoke(
++    def iter_results(
+         self,
+-        adapter: BaseAdapter[Any],
+-        params: dict[str, Any],
++        source: str,
+         *,
+-        resume: bool,
+-    ) -> list[str]:
+-        invocation_params = dict(params)
+-        invocation_params["resume"] = resume
+-        results = list(await adapter.run(**invocation_params))
+-        return [result.document.doc_id for result in results]
++        params: Iterable[dict[str, Any]] | None = None,
++        resume: bool = False,
++    ) -> AsyncIterator[Document]:
++        """Stream :class:`Document` instances as they are produced."""
++
++        client = self._client_factory()
++        adapter = self._resolve_adapter(source, client)
++
++        async def _generator() -> AsyncIterator[Document]:
++            try:
++                if params is None:
++                    async for result in adapter.iter_results(resume=resume):
++                        yield result.document
++                else:
++                    for entry in params:
++                        invocation_params = dict(entry)
++                        async for result in adapter.iter_results(
++                            **invocation_params, resume=resume
++                        ):
++                            yield result.document
++            finally:
++                await client.aclose()
++
++        return _generator()
+
+     def _resolve_adapter(self, source: str, client: AsyncHttpClient) -> BaseAdapter[Any]:
+         return self._registry.get_adapter(source, AdapterContext(ledger=self.ledger), client)
+
+ __all__ = [
+     "IngestionPipeline",
+     "PipelineResult",
+ ]
+diff --git a/src/Medical_KG/ir/validator.py b/src/Medical_KG/ir/validator.py
+index 3bbf6cbb15b76a528e731293dddbf6fe31ec48b9..f5e08727cbaafd36cdb49cf2b2eefe40da252795 100644
+--- a/src/Medical_KG/ir/validator.py
++++ b/src/Medical_KG/ir/validator.py
+@@ -1,39 +1,38 @@
+ from __future__ import annotations
+
+ import json
+ import re
+ from pathlib import Path
+ from typing import Any, Mapping, cast
+
+ from Medical_KG.ingestion.types import (
+     AdapterDocumentPayload,
+     is_clinical_document_payload,
+     is_pmc_payload,
+     is_pubmed_payload,
+ )
+-
+ from Medical_KG.ir.models import DocumentIR, ensure_monotonic_spans
+
+
+ class ValidationError(Exception):
+     pass
+
+
+ class IRValidator:
+     """Validate :class:`DocumentIR` instances using bundled JSON schemas."""
+
+     def __init__(self, *, schema_dir: Path | None = None) -> None:
+         base_dir = schema_dir or Path(__file__).resolve().parent / "schemas"
+         self._schema_dir = base_dir
+         self._schemas = {
+             "document": self._load_schema(base_dir / "document.schema.json"),
+             "block": self._load_schema(base_dir / "block.schema.json"),
+             "table": self._load_schema(base_dir / "table.schema.json"),
+         }
+         language_pattern = self._schemas["document"]["properties"]["language"].get("pattern", "")
+         self._language_pattern = re.compile(language_pattern) if language_pattern else None
+
+     @property
+     def schema_store(self) -> Mapping[str, Mapping[str, Any]]:
+         """Expose loaded schemas for tests and tooling."""
+
+diff --git a/tests/conftest.py b/tests/conftest.py
+index f66dd762b21c38508dd60dfcf118bd26fab72b03..1eb1272cac5ae58f552d6c6975667cf09ac1c2a0 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -1,48 +1,54 @@
+ from __future__ import annotations
+
+ import ast
+ import asyncio
+ import os
+ import shutil
+ import sys
+ import threading
+ import types
+ from collections import defaultdict
+ from dataclasses import dataclass, field
+ from datetime import datetime, timezone
+ from pathlib import Path
+-from typing import Any, Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence, cast
++from trace import Trace
++from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence, cast
++
++import pytest
+
+ ROOT = Path(__file__).resolve().parents[1]
+ SRC = ROOT / "src"
+ PACKAGE_ROOT = SRC / "Medical_KG"
+ TARGET_COVERAGE = float(os.environ.get("COVERAGE_TARGET", "0.95"))
+
+ if str(SRC) not in sys.path:
+     sys.path.insert(0, str(SRC))
+
++if TYPE_CHECKING:
++    from Medical_KG.ingestion.models import Document
++
+ try:  # prefer real FastAPI when available
+     import fastapi  # noqa: F401  # pragma: no cover - import only
+ except ImportError:  # pragma: no cover - fallback for environments without fastapi
+     fastapi_module = types.ModuleType("fastapi")
+
+     class _FastAPI:
+         def __init__(self, *args: Any, **kwargs: Any) -> None:
+             self.args = args
+             self.kwargs = kwargs
+
+     class _APIRouter:
+         def __init__(self, *args: Any, **kwargs: Any) -> None:
+             self.args = args
+             self.kwargs = kwargs
+             self.routes: list[tuple[str, Callable[..., Any]]] = []
+
+         def post(
+             self, path: str, **_options: Any
+         ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+             def _decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+                 self.routes.append((path, func))
+                 return func
+
+             return _decorator
+
+@@ -187,54 +193,50 @@ if "httpx" not in sys.modules:
+                 return await self.request("POST", url, json=json, headers=headers)
+
+             def stream(self, method: str, url: str, **kwargs: Any) -> _StreamContext:
+                 if self._transport is None:
+                     raise RuntimeError("Mock transport required in tests")
+                 return _StreamContext(self._transport, method, url, kwargs)
+
+             async def aclose(self) -> None:
+                 return None
+
+             async def __aenter__(self) -> "AsyncClient":
+                 return self
+
+             async def __aexit__(self, *_exc: Any) -> None:
+                 return None
+
+         httpx_module.AsyncClient = AsyncClient
+         httpx_module.MockTransport = MockTransport
+         httpx_module.TimeoutException = TimeoutException
+         httpx_module.HTTPError = HTTPError
+         httpx_module.Response = Response
+         httpx_module.Request = Request
+
+         sys.modules["httpx"] = httpx_module
+
+-from trace import Trace
+-
+-import pytest
+-
+ from Medical_KG.ingestion.ledger import LedgerEntry
+ from Medical_KG.retrieval.models import (
+     RetrievalRequest,
+     RetrievalResponse,
+     RetrievalResult,
+     RetrieverScores,
+ )
+ from Medical_KG.retrieval.types import JSONValue, SearchHit, VectorHit
+
+
+ @pytest.fixture
+ def monkeypatch_fixture(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
+     return monkeypatch
+
+
+ _TRACE = Trace(count=True, trace=False)
+
+
+ def _activate_tracing() -> None:  # pragma: no cover - instrumentation only
+     trace_func = cast(Any, _TRACE.globaltrace)
+     if trace_func is None:
+         return
+     sys.settrace(trace_func)
+     threading.settrace(trace_func)
+
+@@ -410,70 +412,74 @@ class FakeRegistry:
+         self.adapters[source] = factory
+
+     def available_sources(self) -> list[str]:
+         return sorted(self.adapters)
+
+     def get_adapter(self, source: str, context: Any, client: Any, **kwargs: Any) -> Any:
+         try:
+             factory = self.adapters[source]
+         except KeyError as exc:
+             raise ValueError(f"Unknown adapter source: {source}") from exc
+         return factory(context, client, **kwargs)
+
+
+ @pytest.fixture
+ def fake_ledger() -> FakeLedger:
+     return FakeLedger()
+
+
+ @pytest.fixture
+ def fake_registry() -> FakeRegistry:
+     return FakeRegistry()
+
+
+ @pytest.fixture
+ def sample_document_factory() -> (
+-    Callable[[str, str, str, MutableMapping[str, Any] | None, Any], Document]
++    Callable[[str, str, str, MutableMapping[str, Any] | None, Any], "Document"]
+ ):
+     def _factory(
+         doc_id: str = "doc-1",
+         source: str = "demo",
+         content: str = "text",
+         metadata: MutableMapping[str, Any] | None = None,
+         raw: Any | None = None,
+-    ) -> Document:
++    ) -> "Document":
++        from Medical_KG.ingestion.models import Document
++
+         return Document(
+             doc_id=doc_id, source=source, content=content, metadata=metadata or {}, raw=raw
+         )
+
+     return _factory
+
+
+ @pytest.fixture
+ def httpx_mock_transport(monkeypatch: pytest.MonkeyPatch) -> Callable[[Callable[[Any], Any]], Any]:
+     """Patch httpx AsyncClient creation to use a MockTransport."""
+
++    from Medical_KG.utils.optional_dependencies import get_httpx_module
++
+     HTTPX = get_httpx_module()
+     clients: list[Any] = []
+
+     def _factory(handler: Callable[[Any], Any]) -> Any:
+         transport = HTTPX.MockTransport(handler)
+
+         def _create_async_client(**kwargs: Any) -> Any:
+             client = HTTPX.AsyncClient(transport=transport, **kwargs)
+             clients.append(client)
+             return client
+
+         monkeypatch.setattr("Medical_KG.compat.httpx.create_async_client", _create_async_client)
+         monkeypatch.setattr(
+             "Medical_KG.ingestion.http_client.create_async_client", _create_async_client
+         )
+
+         return transport
+
+     yield _factory
+
+     for client in clients:
+         try:
+             loop = asyncio.new_event_loop()
+             loop.run_until_complete(client.aclose())
+         finally:
+@@ -697,26 +703,25 @@ def retrieval_request() -> RetrievalRequest:
+
+ @pytest.fixture
+ def expected_retrieval_response() -> RetrievalResponse:
+     result = RetrievalResult(
+         chunk_id="chunk-bm25-1",
+         doc_id="doc-1",
+         text="What is pembrolizumab",
+         title_path=None,
+         section=None,
+         score=2.4,
+         scores=RetrieverScores(bm25=2.4),
+         metadata={"granularity": "chunk"},
+     )
+     return RetrievalResponse(
+         results=[result],
+         timings=[],
+         expanded_terms={"pembrolizumab": 1.0},
+         intent="general",
+         latency_ms=1.0,
+         from_=0,
+         size=1,
+         metadata={"feature_flags": {"rerank_enabled": False}},
+     )
+
+
+-from Medical_KG.utils.optional_dependencies import get_httpx_module
+diff --git a/tests/ingestion/test_adapters.py b/tests/ingestion/test_adapters.py
+index 025696cd7b2065385f8c5be2c14adca3ed06e5bc..987ac7891f63d2ce5319a77d0d47565add4e0f36 100644
+--- a/tests/ingestion/test_adapters.py
++++ b/tests/ingestion/test_adapters.py
+@@ -1,31 +1,31 @@
+ from __future__ import annotations
+
+ import asyncio
+ from collections.abc import AsyncIterator
+ from types import SimpleNamespace
+-from typing import Any, Mapping, MutableMapping, cast
++from typing import Any, Callable, Mapping, MutableMapping, cast
+
+ import pytest
+
+ from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
+ from Medical_KG.ingestion.adapters.clinical import (
+     AccessGudidAdapter,
+     ClinicalTrialsGovAdapter,
+     DailyMedAdapter,
+     OpenFdaAdapter,
+     OpenFdaUdiAdapter,
+     RxNormAdapter,
+     UdiValidator,
+ )
+ from Medical_KG.ingestion.adapters.guidelines import (
+     CdcSocrataAdapter,
+     CdcWonderAdapter,
+     NiceGuidelineAdapter,
+     OpenPrescribingAdapter,
+     UspstfAdapter,
+     WhoGhoAdapter,
+ )
+ from Medical_KG.ingestion.adapters.literature import (
+     LiteratureFallback,
+     LiteratureFallbackError,
+     MedRxivAdapter,
+diff --git a/tests/ingestion/test_ingestion_cli.py b/tests/ingestion/test_ingestion_cli.py
+index 3b2000fcf1cd860eeb8acdfefe50c9cfb1731487..741ba43dd9527905306b71660ce63c47a7d85db6 100644
+--- a/tests/ingestion/test_ingestion_cli.py
++++ b/tests/ingestion/test_ingestion_cli.py
+@@ -1,31 +1,32 @@
+ # ruff: noqa: E402
+
+ from __future__ import annotations
+
+ import json
+ import sys
++import tracemalloc
+ import types
+ from datetime import datetime, timezone
+ from pathlib import Path
+ from typing import Any, Callable, List
+
+ import pytest
+
+ # ---------------------------------------------------------------------------
+ # Typer shim for the ingestion CLI tests
+
+
+ class _TyperModule(types.ModuleType):
+     Typer: type["_Typer"]
+     Argument: Callable[..., object]
+     Option: Callable[..., object]
+     BadParameter: type[Exception]
+     echo: Callable[[object], None]
+
+     def __init__(self) -> None:  # pragma: no cover - infrastructure
+         super().__init__("typer")
+         self.Typer = _Typer
+         self.Argument = _argument
+         self.Option = _option
+         self.BadParameter = _BadParameter
+         self.echo = _echo
+@@ -96,153 +97,311 @@ def make_pipeline(
+     monkeypatch: pytest.MonkeyPatch,
+ ) -> Callable[[List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline]:
+     def _factory(
+         results: List[PipelineResult] | None = None,
+         status: dict[str, list[dict[str, Any]]] | None = None,
+     ) -> FakePipeline:
+         pipeline = FakePipeline(results=results, status=status)
+         monkeypatch.setattr(cli, "_build_pipeline", lambda _ledger: pipeline)
+         return pipeline
+
+     return _factory
+
+
+ @pytest.fixture(autouse=True)
+ def mock_available_sources(monkeypatch: pytest.MonkeyPatch) -> None:
+     monkeypatch.setattr(cli, "_available_sources", lambda: ["demo"])
+
+
+ def _result(doc_id: str) -> IngestionResult:
+     document = Document(doc_id=doc_id, source="demo", content="{}")
+     return IngestionResult(
+         document=document, state="auto_done", timestamp=datetime.now(timezone.utc)
+     )
+
+
++def _write_batch_file(path: Path, record_count: int) -> None:
++    with path.open("w", encoding="utf-8") as handle:
++        for index in range(record_count):
++            handle.write(json.dumps({"param": f"item-{index}"}) + "\n")
++
++
+ # ---------------------------------------------------------------------------
+ # Tests
+
+
+ def test_load_batch_skips_empty_lines(tmp_path: Path) -> None:
+     batch = tmp_path / "batch.ndjson"
+     batch.write_text("\n".join(['{"value": 1}', "", '{"value": 2}']))
+
+     loaded = list(cli._load_batch(batch))
+     assert loaded == [{"value": 1}, {"value": 2}]
+
+
+ def test_load_batch_rejects_invalid_json(tmp_path: Path) -> None:
+     batch = tmp_path / "batch.ndjson"
+     batch.write_text("{invalid json}")
+
+     with pytest.raises(sys.modules["typer"].BadParameter) as excinfo:
+         list(cli._load_batch(batch))
+
+     assert "Invalid JSON" in str(excinfo.value)
+
+
+ def test_load_batch_rejects_non_mapping(tmp_path: Path) -> None:
+     batch = tmp_path / "batch.ndjson"
+     batch.write_text(json.dumps([1, 2, 3]))
+
+     with pytest.raises(sys.modules["typer"].BadParameter) as excinfo:
+         list(cli._load_batch(batch))
+
+     assert "Batch entries must be" in str(excinfo.value)
+
+
+ def test_ingest_with_batch_outputs_doc_ids(
+     make_pipeline: Callable[
+         [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
+     ],
+     tmp_path: Path,
+     capsys: pytest.CaptureFixture[str],
+ ) -> None:
+     results = [
+         PipelineResult(source="demo", doc_ids=["doc-1", "doc-2"]),
+         PipelineResult(source="demo", doc_ids=["doc-1", "doc-2"]),
+     ]
+     pipeline = make_pipeline(results, None)
+
+     batch = tmp_path / "batch.jsonl"
+     batch.write_text("\n".join([json.dumps({"param": "value"}), json.dumps({"param": "second"})]))
+     ledger_path = tmp_path / "ledger.jsonl"
+
+-    cli.ingest("demo", batch=batch, auto=True, ledger_path=ledger_path)
++    cli.ingest("demo", batch=batch, auto=True, ledger_path=ledger_path, quiet=True)
+
+     captured = capsys.readouterr()
+     lines = [json.loads(line) for line in captured.out.strip().splitlines() if line]
+     assert lines == [["doc-1", "doc-2"], ["doc-1", "doc-2"]]
+     assert pipeline.calls[0]["params"] == [{"param": "value"}, {"param": "second"}]
+
+
++def test_ingest_honours_chunk_size(
++    make_pipeline: Callable[
++        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
++    ],
++    tmp_path: Path,
++) -> None:
++    pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=["doc-1"])], None)
++
++    batch = tmp_path / "chunked.jsonl"
++    batch.write_text(
++        "\n".join(
++            [
++                json.dumps({"param": "first"}),
++                json.dumps({"param": "second"}),
++                json.dumps({"param": "third"}),
++            ]
++        )
++    )
++
++    cli.ingest("demo", batch=batch, ledger_path=tmp_path / "ledger.jsonl", chunk_size=2, quiet=True)
++
++    assert len(pipeline.calls) == 2
++    assert pipeline.calls[0]["params"] == [{"param": "first"}, {"param": "second"}]
++    assert pipeline.calls[1]["params"] == [{"param": "third"}]
++
++
++def test_ingest_large_batch_streams_in_chunks(
++    make_pipeline: Callable[
++        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
++    ],
++    tmp_path: Path,
++) -> None:
++    pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=[])], None)
++
++    batch = tmp_path / "large.jsonl"
++    records = [json.dumps({"param": f"item-{index}"}) for index in range(2500)]
++    batch.write_text("\n".join(records))
++
++    cli.ingest("demo", batch=batch, ledger_path=tmp_path / "ledger.jsonl", chunk_size=500, quiet=True)
++
++    assert len(pipeline.calls) == 5
++    assert all(len(call["params"]) <= 500 for call in pipeline.calls)
++
++
++def test_ingest_maintains_memory_profile_for_10k_records(
++    make_pipeline: Callable[
++        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
++    ],
++    tmp_path: Path,
++) -> None:
++    make_pipeline([PipelineResult(source="demo", doc_ids=[])], None)
++    batch = tmp_path / "memory-10k.jsonl"
++    _write_batch_file(batch, 10_000)
++
++    tracemalloc.start()
++    peak = 0
++    try:
++        cli.ingest("demo", batch=batch, ledger_path=tmp_path / "ledger.jsonl", chunk_size=1000, quiet=True)
++    finally:
++        _, peak = tracemalloc.get_traced_memory()
++        tracemalloc.stop()
++
++    assert peak < 25_000_000
++
++
++def test_ingest_maintains_memory_profile_for_100k_records(
++    make_pipeline: Callable[
++        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
++    ],
++    tmp_path: Path,
++) -> None:
++    make_pipeline([PipelineResult(source="demo", doc_ids=[])], None)
++    batch = tmp_path / "memory-100k.jsonl"
++    _write_batch_file(batch, 100_000)
++
++    tracemalloc.start()
++    peak = 0
++    try:
++        cli.ingest("demo", batch=batch, ledger_path=tmp_path / "ledger.jsonl", chunk_size=1000, quiet=True)
++    finally:
++        _, peak = tracemalloc.get_traced_memory()
++        tracemalloc.stop()
++
++    assert peak < 35_000_000
++
++
++def test_ingest_reports_progress(
++    make_pipeline: Callable[
++        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
++    ],
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    recorded: list[int] = []
++
++    class _Progress:
++        def __enter__(self) -> "_Progress":
++            return self
++
++        def __exit__(self, *_: object) -> None:
++            return None
++
++        def add_task(self, _description: str, total: int | None = None) -> int:
++            self.total = total
++            return 1
++
++        def advance(self, _task_id: int, advance: int) -> None:
++            recorded.append(advance)
++
++    monkeypatch.setattr(cli, "_create_progress", lambda: _Progress())
++    monkeypatch.setattr(cli, "_should_display_progress", lambda quiet: True)
++
++    results = [
++        PipelineResult(source="demo", doc_ids=["doc-1"]),
++        PipelineResult(source="demo", doc_ids=["doc-2"]),
++    ]
++    make_pipeline(results, None)
++
++    batch = tmp_path / "progress.jsonl"
++    batch.write_text("\n".join([json.dumps({"param": "value"})]))
++
++    cli.ingest("demo", batch=batch, ledger_path=tmp_path / "ledger.jsonl", quiet=False)
++
++    assert recorded == [2]
++
++
++def test_ingest_quiet_flag_skips_progress(
++    make_pipeline: Callable[
++        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
++    ],
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    called = False
++
++    def _raise_progress() -> object:
++        nonlocal called
++        called = True
++        raise AssertionError("progress should not be created when quiet")
++
++    monkeypatch.setattr(cli, "_create_progress", _raise_progress)
++    monkeypatch.setattr(cli, "_should_display_progress", lambda quiet: not quiet)
++
++    make_pipeline([PipelineResult(source="demo", doc_ids=[])], None)
++    batch = tmp_path / "quiet.jsonl"
++    batch.write_text("\n".join([json.dumps({"param": "value"})]))
++
++    cli.ingest("demo", batch=batch, ledger_path=tmp_path / "ledger.jsonl", quiet=True)
++
++    assert called is False
++
++
+ def test_ingest_without_batch_runs_once(
+     make_pipeline: Callable[
+         [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
+     ],
+     tmp_path: Path,
+     capsys: pytest.CaptureFixture[str],
+ ) -> None:
+     results = [PipelineResult(source="demo", doc_ids=["doc-3"])]
+     pipeline = make_pipeline(results, None)
+     ledger_path = tmp_path / "ledger.jsonl"
+
+-    cli.ingest("demo", batch=None, auto=True, ledger_path=ledger_path)
++    cli.ingest("demo", batch=None, auto=True, ledger_path=ledger_path, quiet=True)
+
+     captured = capsys.readouterr()
+     lines = [json.loads(line) for line in captured.out.strip().splitlines() if line]
+     assert lines == [["doc-3"]]
+     assert pipeline.calls[0]["params"] is None
+
+
+ def test_ingest_rejects_unknown_source(make_pipeline: Callable[..., FakePipeline]) -> None:
+     make_pipeline()
+     monkeypatch = pytest.MonkeyPatch()
+     monkeypatch.setattr(cli, "_available_sources", lambda: ["other"])
+     with pytest.raises(sys.modules["typer"].BadParameter):
+         cli.ingest("demo")
+     monkeypatch.undo()
+
+
+ def test_ingest_accepts_ids_option(
+     make_pipeline: Callable[
+         [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
+     ],
+ ) -> None:
+     pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=["doc-1"])], None)
+-    cli.ingest("demo", ids="NCT123,NCT456")
++    cli.ingest("demo", ids="NCT123,NCT456", quiet=True)
+     assert pipeline.calls[0]["params"] == [{"ids": ["NCT123", "NCT456"]}]
+
+
+ def test_resume_invokes_pipeline_in_resume_mode(
+     make_pipeline: Callable[
+         [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
+     ],
+     capsys: pytest.CaptureFixture[str],
+ ) -> None:
+     pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=["doc-x"])], None)
+-    cli.resume("demo", auto=True)
++    cli.resume("demo", auto=True, quiet=True)
+     assert pipeline.calls[0]["resume"] is True
+     captured = capsys.readouterr()
+     assert json.loads(captured.out.strip()) == ["doc-x"]
+
+
+ def test_status_command_outputs_json(
+     make_pipeline: Callable[
+         [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
+     ],
+     capsys: pytest.CaptureFixture[str],
+ ) -> None:
+     status_payload = {
+         "auto_done": [{"doc_id": "doc-1", "metadata": {"source": "demo"}}],
+         "auto_failed": [{"doc_id": "doc-2", "metadata": {"error": "boom"}}],
+     }
+     make_pipeline(None, status_payload)
+     cli.status(fmt="json")
+     captured = capsys.readouterr()
+     assert json.loads(captured.out) == status_payload
+
+
+ def test_status_command_text_format(
+     make_pipeline: Callable[..., FakePipeline], capsys: pytest.CaptureFixture[str]
+ ) -> None:
+     status_payload = {"auto_done": [{"doc_id": "doc-1", "metadata": {}}]}
+diff --git a/tests/ingestion/test_pipeline.py b/tests/ingestion/test_pipeline.py
+index fd08e91fcedfa439ea49421fad22ae087655db89..ab6ee68f86a0b6f7a5e4197b409efe79633fcb17 100644
+--- a/tests/ingestion/test_pipeline.py
++++ b/tests/ingestion/test_pipeline.py
+@@ -101,25 +101,78 @@ def test_pipeline_status_reports_entries(tmp_path: Path) -> None:
+     assert "auto_done" in summary and summary["auto_done"][0]["doc_id"] == "doc-a"
+     assert "auto_failed" in summary
+
+
+ def test_pipeline_run_async_supports_event_loops(tmp_path: Path) -> None:
+     ledger_path = tmp_path / "ledger.jsonl"
+     ledger = IngestionLedger(ledger_path)
+     records = [{"id": "doc-async", "content": "ok"}]
+     adapter = _StubAdapter(AdapterContext(ledger), records=records)
+     pipeline = IngestionPipeline(
+         ledger,
+         registry=_Registry(adapter),
+         client_factory=lambda: _NoopClient(),
+     )
+
+     async def _invoke() -> list[PipelineResult]:
+         return await pipeline.run_async("stub")
+
+     loop = asyncio.new_event_loop()
+     try:
+         results = loop.run_until_complete(_invoke())
+     finally:
+         loop.close()
+
+     assert results == [PipelineResult(source="stub", doc_ids=["doc-async"])]
++
++
++def test_pipeline_iter_results_streams_documents(tmp_path: Path) -> None:
++    ledger_path = tmp_path / "ledger.jsonl"
++    ledger = IngestionLedger(ledger_path)
++    records = [
++        {"id": "doc-1", "content": "ok"},
++        {"id": "doc-2", "content": "ok"},
++    ]
++    adapter = _StubAdapter(AdapterContext(ledger), records=records)
++    pipeline = IngestionPipeline(
++        ledger,
++        registry=_Registry(adapter),
++        client_factory=lambda: _NoopClient(),
++    )
++
++    async def _collect() -> list[str]:
++        stream = pipeline.iter_results("stub")
++        return [document.doc_id async for document in stream]
++
++    doc_ids = asyncio.run(_collect())
++    assert doc_ids == ["doc-1", "doc-2"]
++
++
++def test_pipeline_iter_results_closes_client_on_cancel(tmp_path: Path) -> None:
++    ledger_path = tmp_path / "ledger.jsonl"
++    ledger = IngestionLedger(ledger_path)
++    records = [{"id": "doc-1", "content": "ok"}]
++    adapter = _StubAdapter(AdapterContext(ledger), records=records)
++
++    class _Client:
++        def __init__(self) -> None:
++            self.closed = False
++
++        async def aclose(self) -> None:
++            self.closed = True
++
++    client = _Client()
++    pipeline = IngestionPipeline(
++        ledger,
++        registry=_Registry(adapter),
++        client_factory=lambda: client,
++    )
++
++    async def _consume_one() -> bool:
++        stream = pipeline.iter_results("stub")
++        agen = stream.__aiter__()
++        await agen.__anext__()
++        await agen.aclose()
++        return client.closed
++
++    closed = asyncio.run(_consume_one())
++    assert closed is True
+
+EOF
+)

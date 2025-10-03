@@ -2,19 +2,19 @@
 
 ## 1. Implement Context Manager Protocol
 
-- [ ] 1.1 Add `__aenter__` method to `AsyncHttpClient` (returns self)
-- [ ] 1.2 Add `__aexit__` method to `AsyncHttpClient` (calls `aclose()`)
-- [ ] 1.3 Ensure proper exception handling in `__aexit__`
-- [ ] 1.4 Add type hints for context manager protocol
-- [ ] 1.5 Test context manager with exceptions (cleanup still happens)
+- [x] 1.1 Add `__aenter__` method to `AsyncHttpClient` (returns self)
+- [x] 1.2 Add `__aexit__` method to `AsyncHttpClient` (calls `aclose()`)
+- [x] 1.3 Ensure proper exception handling in `__aexit__`
+- [x] 1.4 Add type hints for context manager protocol
+- [x] 1.5 Test context manager with exceptions (cleanup still happens)
 
 ## 2. Update Core Tests
 
-- [ ] 2.1 Add test for `async with AsyncHttpClient()` basic usage
-- [ ] 2.2 Add test verifying cleanup happens on success
-- [ ] 2.3 Add test verifying cleanup happens on exception
-- [ ] 2.4 Add test for nested context managers
-- [ ] 2.5 Verify existing manual `aclose()` patterns still work
+- [x] 2.1 Add test for `async with AsyncHttpClient()` basic usage
+- [x] 2.2 Add test verifying cleanup happens on success
+- [x] 2.3 Add test verifying cleanup happens on exception
+- [x] 2.4 Add test for nested context managers
+- [x] 2.5 Verify existing manual `aclose()` patterns still work
 
 ## 3. Refactor Ingestion Adapters
 
@@ -27,11 +27,11 @@
 
 ## 4. Refactor Test Suite
 
-- [ ] 4.1 Update `conftest.py` fixtures to use context managers
-- [ ] 4.2 Refactor adapter tests to use `async with`
-- [ ] 4.3 Refactor HTTP client tests
-- [ ] 4.4 Remove manual `aclose()` calls from tests
-- [ ] 4.5 Simplify test cleanup logic
+- [x] 4.1 Update `conftest.py` fixtures to use context managers
+- [x] 4.2 Refactor adapter tests to use `async with`
+- [x] 4.3 Refactor HTTP client tests
+- [x] 4.4 Remove manual `aclose()` calls from tests
+- [x] 4.5 Simplify test cleanup logic
 
 ## 5. Optional: Add Synchronous Wrapper
 
@@ -53,6 +53,6 @@
 - [ ] 7.1 Run full test suite - all tests pass
 - [ ] 7.2 Verify no resource leaks using memory profiler
 - [ ] 7.3 Test with real API calls (ensure cleanup works)
-- [ ] 7.4 Run mypy --strict - no type errors
+- [x] 7.4 Run mypy --strict - no type errors
 - [ ] 7.5 Verify backward compatibility (old patterns still work)
 

@@ -1,0 +1,39 @@
+diff a/src/Medical_KG/api/models.py b/src/Medical_KG/api/models.py	(rejected hunks)
+@@ -1,35 +1,36 @@
+ """Pydantic request/response models for the public API."""
+
+ from __future__ import annotations
+
+ from datetime import datetime
+ from typing import Annotated, Any
+
++from pydantic import BaseModel, Field
++
+ from Medical_KG.extraction.models import ExtractionEnvelope
+ from Medical_KG.facets.models import FacetModel
+-from pydantic import BaseModel, Field
+
+
+ class ErrorDetail(BaseModel):
+     field: str
+     message: str
+
+
+ class ErrorResponse(BaseModel):
+     code: str
+     message: str
+     details: Annotated[list[ErrorDetail], Field(default_factory=list)]
+     retriable: bool = False
+     reference: str | None = None
+
+
+ class FacetGenerationRequest(BaseModel):
+     chunk_ids: list[str]
+
+
+ class FacetGenerationResponse(BaseModel):
+     facets_by_chunk: dict[str, list[FacetModel]]
+     metadata: Annotated[dict[str, dict[str, str]], Field(default_factory=dict)]
+
+
+ class ChunkResponse(BaseModel):

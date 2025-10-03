@@ -228,11 +228,10 @@ def _command_ingest(args: argparse.Namespace) -> int:
 
     ledger = IngestionLedger(args.ledger)
     context = AdapterContext(ledger=ledger)
-    client = AsyncHttpClient()
-    adapter = get_adapter(args.source, context, client)
 
     async def _run() -> None:
-        try:
+        async with AsyncHttpClient() as client:
+            adapter = get_adapter(args.source, context, client)
             if args.batch:
                 with args.batch.open() as handle:
                     for line in handle:
@@ -246,8 +245,6 @@ def _command_ingest(args: argparse.Namespace) -> int:
                 results = await adapter.run()
                 if args.auto:
                     print(json.dumps([res.document.doc_id for res in results]))
-        finally:
-            await client.aclose()
 
     asyncio.run(_run())
     return 0

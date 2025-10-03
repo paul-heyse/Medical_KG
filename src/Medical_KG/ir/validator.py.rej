@@ -1,0 +1,41 @@
+diff a/src/Medical_KG/ir/validator.py b/src/Medical_KG/ir/validator.py	(rejected hunks)
+@@ -1,39 +1,38 @@
+ from __future__ import annotations
+
+ import json
+ import re
+ from pathlib import Path
+ from typing import Any, Mapping, cast
+
+ from Medical_KG.ingestion.types import (
+     AdapterDocumentPayload,
+     is_clinical_document_payload,
+     is_pmc_payload,
+     is_pubmed_payload,
+ )
+-
+ from Medical_KG.ir.models import DocumentIR, ensure_monotonic_spans
+
+
+ class ValidationError(Exception):
+     pass
+
+
+ class IRValidator:
+     """Validate :class:`DocumentIR` instances using bundled JSON schemas."""
+
+     def __init__(self, *, schema_dir: Path | None = None) -> None:
+         base_dir = schema_dir or Path(__file__).resolve().parent / "schemas"
+         self._schema_dir = base_dir
+         self._schemas = {
+             "document": self._load_schema(base_dir / "document.schema.json"),
+             "block": self._load_schema(base_dir / "block.schema.json"),
+             "table": self._load_schema(base_dir / "table.schema.json"),
+         }
+         language_pattern = self._schemas["document"]["properties"]["language"].get("pattern", "")
+         self._language_pattern = re.compile(language_pattern) if language_pattern else None
+
+     @property
+     def schema_store(self) -> Mapping[str, Mapping[str, Any]]:
+         """Expose loaded schemas for tests and tooling."""
+

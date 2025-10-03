@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable, Protocol
+from typing import Any, Protocol
 
 from Medical_KG.ingestion import registry as ingestion_registry
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 from Medical_KG.ingestion.ledger import IngestionLedger
+from Medical_KG.ingestion.models import Document
 
 
 class AdapterRegistry(Protocol):
@@ -68,19 +70,25 @@ class IngestionPipeline:
     ) -> list[PipelineResult]:
         """Execute an adapter within an existing asyncio event loop."""
 
-        client = self._client_factory()
-        adapter = self._resolve_adapter(source, client)
         outputs: list[PipelineResult] = []
-        try:
+        async with self._client_factory() as client:
+            adapter = self._resolve_adapter(source, client)
             if params is None:
-                results = await self._invoke(adapter, {}, resume=resume)
-                outputs.append(PipelineResult(source=source, doc_ids=results))
+                doc_ids = [
+                    result.document.doc_id
+                    async for result in adapter.iter_results(resume=resume)
+                ]
+                outputs.append(PipelineResult(source=source, doc_ids=doc_ids))
             else:
                 for entry in params:
-                    results = await self._invoke(adapter, entry, resume=resume)
-                    outputs.append(PipelineResult(source=source, doc_ids=results))
-        finally:
-            await client.aclose()
+                    invocation_params = dict(entry)
+                    doc_ids = [
+                        result.document.doc_id
+                        async for result in adapter.iter_results(
+                            **invocation_params, resume=resume
+                        )
+                    ]
+                    outputs.append(PipelineResult(source=source, doc_ids=doc_ids))
         return outputs
 
     def status(self) -> dict[str, list[dict[str, Any]]]:
@@ -91,17 +99,30 @@ class IngestionPipeline:
             )
         return summary
 
-    async def _invoke(
+    def iter_results(
         self,
-        adapter: BaseAdapter[Any],
-        params: dict[str, Any],
+        source: str,
         *,
-        resume: bool,
-    ) -> list[str]:
-        invocation_params = dict(params)
-        invocation_params["resume"] = resume
-        results = list(await adapter.run(**invocation_params))
-        return [result.document.doc_id for result in results]
+        params: Iterable[dict[str, Any]] | None = None,
+        resume: bool = False,
+    ) -> AsyncIterator[Document]:
+        """Stream :class:`Document` instances as they are produced."""
+
+        async def _generator() -> AsyncIterator[Document]:
+            async with self._client_factory() as client:
+                adapter = self._resolve_adapter(source, client)
+                if params is None:
+                    async for result in adapter.iter_results(resume=resume):
+                        yield result.document
+                else:
+                    for entry in params:
+                        invocation_params = dict(entry)
+                        async for result in adapter.iter_results(
+                            **invocation_params, resume=resume
+                        ):
+                            yield result.document
+
+        return _generator()
 
     def _resolve_adapter(self, source: str, client: AsyncHttpClient) -> BaseAdapter[Any]:
         return self._registry.get_adapter(source, AdapterContext(ledger=self.ledger), client)

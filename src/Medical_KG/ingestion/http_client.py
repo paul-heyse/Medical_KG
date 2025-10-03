@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import logging
 import random
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from time import time
-from typing import AsyncIterator, Generic, Mapping, MutableMapping, TypeVar, cast
+from types import TracebackType
+from typing import (
+    AsyncIterator,
+    Generic,
+    Mapping,
+    MutableMapping,
+    TypeVar,
+    cast,
+)
 from urllib.parse import urlparse
 
 from Medical_KG.compat.httpx import (
@@ -38,6 +47,8 @@ HTTP_LATENCY: HistogramProtocol = build_histogram(
     "Latency of HTTP requests made by the ingestion system",
     buckets=(0.1, 0.3, 0.6, 1.0, 2.0, 5.0, 10.0),
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -121,6 +132,29 @@ class AsyncHttpClient:
 
     async def aclose(self) -> None:
         await self._client.aclose()
+
+    async def __aenter__(self) -> "AsyncHttpClient":
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool:
+        close_error: Exception | None = None
+        try:
+            await self.aclose()
+        except Exception as err:  # pragma: no cover - rare cleanup failure
+            close_error = err
+            if exc is not None:
+                LOGGER.warning(
+                    "AsyncHttpClient cleanup failed during exception handling: %s",
+                    err,
+                )
+        if close_error is not None and exc_type is None:
+            raise close_error
+        return False
 
     def _get_limiter(self, host: str) -> _SimpleLimiter:
         if host not in self._limiters:

@@ -1,0 +1,50 @@
+diff a/src/Medical_KG/facets/service.py b/src/Medical_KG/facets/service.py	(rejected hunks)
+@@ -1,46 +1,47 @@
+ """Facet orchestration service."""
+
+ from __future__ import annotations
+
+ import hashlib
+ from collections import defaultdict
+ from collections.abc import Iterable, Mapping
+ from dataclasses import dataclass, field
+
++from pydantic import ValidationError
++
+ from Medical_KG.facets.dedup import deduplicate_facets
+ from Medical_KG.facets.generator import (
+     FacetGenerationError,
+     GenerationRequest,
+     generate_facets,
+     load_facets,
+     serialize_facets,
+ )
+ from Medical_KG.facets.models import FacetIndexRecord, FacetModel
+ from Medical_KG.facets.router import FacetRouter
+ from Medical_KG.facets.validator import FacetValidationError, FacetValidator
+-from pydantic import ValidationError
+
+
+ @dataclass(slots=True)
+ class Chunk:
+     """Minimal chunk representation used by the service."""
+
+     chunk_id: str
+     doc_id: str
+     text: str
+     section: str | None = None
+     table_headers: list[str] = field(default_factory=list)
+
+
+ class FacetStorage:
+     """In-memory storage for generated facets, used in tests and local dev."""
+
+     def __init__(self) -> None:
+         self._by_chunk: dict[str, list[str]] = {}
+         self._chunk_doc: dict[str, str] = {}
+         self._doc_chunks: dict[str, set[str]] = defaultdict(set)
+         self._doc_cache: dict[str, list[str]] = {}
+         self._meta: dict[str, dict[str, str]] = {}
+
+     def set(self, chunk_id: str, doc_id: str, facets: Iterable[FacetModel]) -> None:
+         payloads = serialize_facets(list(facets))

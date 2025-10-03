@@ -1,0 +1,51 @@
+diff a/src/Medical_KG/facets/generator.py b/src/Medical_KG/facets/generator.py	(rejected hunks)
+@@ -1,47 +1,48 @@
+ """Facet generation helpers with strict typing."""
+
+ from __future__ import annotations
+
+ import json
+ import re
+ from collections.abc import Callable, Iterable, Sequence
+ from dataclasses import dataclass
+ from typing import Literal
+
++from pydantic import TypeAdapter, ValidationError
++
+ from Medical_KG.facets.models import (
+     AdverseEventFacet,
+     DoseFacet,
+     EndpointFacet,
+     EvidenceSpan,
+     FacetModel,
+     FacetType,
+     PICOFacet,
+ )
+ from Medical_KG.facets.normalizer import drop_low_confidence_codes, normalize_facets
+ from Medical_KG.facets.tokenizer import count_tokens
+-from pydantic import TypeAdapter, ValidationError
+
+ INTERVENTION_PATTERN = re.compile(r"\b(treatment|drug|therapy|enalapril|placebo)\b", re.I)
+ OUTCOME_PATTERN = re.compile(r"\b(mortality|survival|event|nausea)\b", re.I)
+ POPULATION_PATTERN = re.compile(r"\bpatients?\b", re.I)
+
+
+ @dataclass(slots=True)
+ class GenerationRequest:
+     chunk_id: str
+     text: str
+     section: str | None = None
+
+
+ def _span_for(text: str, phrase: str) -> EvidenceSpan | None:
+     index = text.lower().find(phrase.lower())
+     if index == -1:
+         return None
+     return EvidenceSpan(
+         start=index, end=index + len(phrase), quote=text[index : index + len(phrase)]
+     )
+
+
+ def _ensure_spans(
+     spans: Sequence[EvidenceSpan | None], *, fallback_text: str
+ ) -> list[EvidenceSpan]:

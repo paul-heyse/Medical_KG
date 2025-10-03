@@ -24,10 +24,11 @@ class BaseAdapter(Generic[RawPayloadT], ABC):
     def __init__(self, context: AdapterContext) -> None:
         self.context = context
 
-    async def run(self, *args: object, **kwargs: object) -> list[IngestionResult]:
+    async def iter_results(self, *args: object, **kwargs: object) -> AsyncIterator[IngestionResult]:
+        """Yield ingestion results as they are produced."""
+
         keyword_args: dict[str, object] = dict(kwargs)
         resume = bool(keyword_args.pop("resume", False))
-        results: list[IngestionResult] = []
         fetcher = self.fetch(*args, **keyword_args)
         if not hasattr(fetcher, "__aiter__"):
             raise TypeError("fetch() must return an AsyncIterator")
@@ -54,8 +55,10 @@ class BaseAdapter(Generic[RawPayloadT], ABC):
                     metadata={"error": str(exc)},
                 )
                 raise
-            results.append(result)
-        return results
+            yield result
+
+    async def run(self, *args: object, **kwargs: object) -> list[IngestionResult]:
+        return [result async for result in self.iter_results(*args, **kwargs)]
 
     @abstractmethod
     def fetch(self, *args: Any, **kwargs: Any) -> AsyncIterator[RawPayloadT]:

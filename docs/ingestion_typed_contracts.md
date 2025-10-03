@@ -273,7 +273,13 @@ class UmlsDocumentPayload(IdentifierMixin, TitleMixin):
     relations: NotRequired[Sequence[JSONMapping]]  # May be absent
 
 # In src/Medical_KG/ingestion/adapters/terminology.py
-from Medical_KG.ingestion.types import UmlsDocumentPayload, is_umls_payload
+from typing import Any, AsyncIterator, Sequence, cast
+
+from Medical_KG.ingestion.types import (
+    JSONMapping,
+    UmlsDocumentPayload,
+    is_umls_payload,
+)
 
 class UMLSAdapter(HttpAdapter[UmlsDocumentPayload]):
     """UMLS Metathesaurus ingestion adapter."""
@@ -283,7 +289,7 @@ class UMLSAdapter(HttpAdapter[UmlsDocumentPayload]):
         async for concept_id in self._iter_concept_ids():
             url = f"{self.base_url}/content/current/CUI/{concept_id}"
             response = await self.client.get_json(url)
-            yield response
+            yield cast(JSONMapping, response.data)
 
     def parse(self, raw: Any) -> Document:
         """Transform raw API response into typed payload and Document."""
@@ -350,6 +356,20 @@ class PubMedDocumentPayload(TitleMixin):
     keywords: NotRequired[Sequence[str]]
 
 # In src/Medical_KG/ingestion/adapters/literature.py
+from typing import Any, AsyncIterator, Mapping, Sequence, TypedDict, cast
+
+from Medical_KG.ingestion.types import (
+    JSONMapping,
+    PubMedDocumentPayload,
+    is_pubmed_payload,
+)
+
+
+class PubMedSummaryEnvelope(TypedDict):
+    result: Mapping[str, JSONMapping]
+    uids: Sequence[str]
+
+
 class PubMedAdapter(HttpAdapter[PubMedDocumentPayload]):
     """PubMed article ingestion adapter."""
 
@@ -358,7 +378,8 @@ class PubMedAdapter(HttpAdapter[PubMedDocumentPayload]):
         async for pmid in self._iter_pmids():
             url = f"{self.base_url}/esummary.fcgi"
             response = await self.client.get_json(url, params={"id": pmid})
-            yield response["result"][pmid]
+            payload = cast(PubMedSummaryEnvelope, response.data)
+            yield payload["result"][pmid]
 
     def parse(self, raw: Any) -> Document:
         """Parse PubMed API response into typed payload."""
@@ -444,6 +465,16 @@ class ClinicalDocumentPayload(TitleMixin, VersionMixin):
     completion_date: NotRequired[str | None]
 
 # In src/Medical_KG/ingestion/adapters/clinical.py
+from typing import Any, AsyncIterator, cast
+
+from Medical_KG.ingestion.types import (
+    ClinicalDocumentPayload,
+    ClinicalTrialsStudyPayload,
+    JSONMapping,
+    is_clinical_document_payload,
+)
+
+
 class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
     """ClinicalTrials.gov API v2 adapter."""
 
@@ -452,7 +483,7 @@ class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
         async for nct_id in self._iter_nct_ids():
             url = f"{self.base_url}/studies/{nct_id}"
             response = await self.client.get_json(url)
-            yield response
+            yield cast(JSONMapping, response.data)
 
     def parse(self, raw: Any) -> Document:
         """Parse API v2 study into structured document payload."""

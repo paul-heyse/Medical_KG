@@ -1,0 +1,117 @@
+diff a/src/Medical_KG/ingestion/pipeline.py b/src/Medical_KG/ingestion/pipeline.py	(rejected hunks)
+@@ -1,30 +1,31 @@
+ """Pipeline utilities orchestrating adapter execution and resume workflows."""
+
+ from __future__ import annotations
+
+ import asyncio
++from contextlib import AsyncExitStack
+ from dataclasses import dataclass
+ from typing import Any, Iterable, Protocol
+
+ from Medical_KG.ingestion import registry as ingestion_registry
+ from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
+ from Medical_KG.ingestion.http_client import AsyncHttpClient
+ from Medical_KG.ingestion.ledger import IngestionLedger
+
+
+ class AdapterRegistry(Protocol):
+     def get_adapter(
+         self,
+         source: str,
+         context: AdapterContext,
+         client: AsyncHttpClient,
+         **kwargs: Any,
+     ) -> BaseAdapter[Any]:
+         ...
+
+     def available_sources(self) -> list[str]:
+         ...
+
+
+ @dataclass(slots=True)
+ class PipelineResult:
+@@ -46,67 +47,76 @@ class IngestionPipeline:
+     ) -> None:
+         self.ledger = ledger
+         self._registry = registry or ingestion_registry
+         self._client_factory = client_factory or AsyncHttpClient
+
+     def run(
+         self,
+         source: str,
+         params: Iterable[dict[str, Any]] | None = None,
+         *,
+         resume: bool = False,
+     ) -> list[PipelineResult]:
+         """Execute an adapter for the supplied source synchronously."""
+
+         return asyncio.run(self.run_async(source, params=params, resume=resume))
+
+     async def run_async(
+         self,
+         source: str,
+         *,
+         params: Iterable[dict[str, Any]] | None = None,
+         resume: bool = False,
+     ) -> list[PipelineResult]:
+         """Execute an adapter within an existing asyncio event loop."""
+
+-        client = self._client_factory()
+-        adapter = self._resolve_adapter(source, client)
+-        outputs: list[PipelineResult] = []
+-        try:
++        async with AsyncExitStack() as stack:
++            raw_client = self._client_factory()
++            client = await _enter_client(stack, raw_client)
++            adapter = self._resolve_adapter(source, client)
++            outputs: list[PipelineResult] = []
+             if params is None:
+                 results = await self._invoke(adapter, {}, resume=resume)
+                 outputs.append(PipelineResult(source=source, doc_ids=results))
+             else:
+                 for entry in params:
+                     results = await self._invoke(adapter, entry, resume=resume)
+                     outputs.append(PipelineResult(source=source, doc_ids=results))
+-        finally:
+-            await client.aclose()
+-        return outputs
++            return outputs
+
+     def status(self) -> dict[str, list[dict[str, Any]]]:
+         summary: dict[str, list[dict[str, Any]]] = {}
+         for entry in self.ledger.entries():
+             summary.setdefault(entry.state, []).append(
+                 {"doc_id": entry.doc_id, "metadata": dict(entry.metadata)}
+             )
+         return summary
+
+     async def _invoke(
+         self,
+         adapter: BaseAdapter[Any],
+         params: dict[str, Any],
+         *,
+         resume: bool,
+     ) -> list[str]:
+         invocation_params = dict(params)
+         invocation_params["resume"] = resume
+         results = list(await adapter.run(**invocation_params))
+         return [result.document.doc_id for result in results]
+
+     def _resolve_adapter(self, source: str, client: AsyncHttpClient) -> BaseAdapter[Any]:
+         return self._registry.get_adapter(source, AdapterContext(ledger=self.ledger), client)
+
++
++async def _enter_client(stack: AsyncExitStack, client: AsyncHttpClient | Any) -> AsyncHttpClient | Any:
++    """Ensure both context-manager and legacy clients close correctly."""
++
++    if hasattr(client, "__aenter__") and hasattr(client, "__aexit__"):
++        return await stack.enter_async_context(client)
++
++    stack.push_async_callback(client.aclose)
++    return client
++
+ __all__ = [
+     "IngestionPipeline",
+     "PipelineResult",
+ ]

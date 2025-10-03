@@ -28,6 +28,75 @@ class _MockTransport:
         return self._responses.pop(0)
 
 
+def test_async_context_manager_closes_client(monkeypatch: Any) -> None:
+    client = AsyncHttpClient()
+    closed = False
+    original_aclose = client._client.aclose
+
+    async def _aclose() -> None:
+        nonlocal closed
+        closed = True
+        await original_aclose()
+
+    monkeypatch.setattr(client._client, "aclose", _aclose)
+
+    async def _run() -> None:
+        async with client:
+            assert isinstance(client, AsyncHttpClient)
+
+    asyncio.run(_run())
+    assert closed is True
+
+
+def test_async_context_manager_closes_on_exception(monkeypatch: Any) -> None:
+    client = AsyncHttpClient()
+    closed = False
+    original_aclose = client._client.aclose
+
+    async def _aclose() -> None:
+        nonlocal closed
+        closed = True
+        await original_aclose()
+
+    monkeypatch.setattr(client._client, "aclose", _aclose)
+
+    async def _run() -> None:
+        async with client:
+            raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(_run())
+    assert closed is True
+
+
+def test_nested_context_managers_close_in_reverse_order(monkeypatch: Any) -> None:
+    outer = AsyncHttpClient()
+    inner = AsyncHttpClient()
+    order: list[str] = []
+
+    outer_original = outer._client.aclose
+    inner_original = inner._client.aclose
+
+    async def _outer_close() -> None:
+        order.append("outer")
+        await outer_original()
+
+    async def _inner_close() -> None:
+        order.append("inner")
+        await inner_original()
+
+    monkeypatch.setattr(outer._client, "aclose", _outer_close)
+    monkeypatch.setattr(inner._client, "aclose", _inner_close)
+
+    async def _run() -> None:
+        async with outer:
+            async with inner:
+                assert True
+
+    asyncio.run(_run())
+    assert order == ["inner", "outer"]
+
+
 def test_http_client_uses_mock_transport(httpx_mock_transport: Any) -> None:
     def handler(request: HttpxRequestProtocol) -> HttpxResponseProtocol:
         assert request.method == "GET"
@@ -38,14 +107,12 @@ def test_http_client_uses_mock_transport(httpx_mock_transport: Any) -> None:
         )
 
     httpx_mock_transport(handler)
-    client = AsyncHttpClient()
-
     async def _run() -> None:
-        payload = await client.get_json("https://example.com")
-        assert payload.data["ok"] is True
+        async with AsyncHttpClient() as client:
+            payload = await client.get_json("https://example.com")
+            assert payload.data["ok"] is True
 
     asyncio.run(_run())
-    asyncio.run(client.aclose())
 
 
 def test_retry_on_transient_failure(monkeypatch: Any) -> None:
@@ -69,10 +136,13 @@ def test_retry_on_transient_failure(monkeypatch: Any) -> None:
         client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient)
     )
 
-    payload = asyncio.run(client.get_json("https://example.com"))
+    async def _run() -> Any:
+        async with client:
+            return await client.get_json("https://example.com")
+
+    payload = asyncio.run(_run())
     assert payload.data == {"ok": True}
     assert len(transport.calls) == 2
-    asyncio.run(client.aclose())
 
 
 def test_rate_limiter_serializes_calls(monkeypatch: Any) -> None:
@@ -94,12 +164,12 @@ def test_rate_limiter_serializes_calls(monkeypatch: Any) -> None:
     )
 
     async def _run() -> None:
-        await asyncio.gather(*(client.get_json("https://example.com") for _ in range(3)))
+        async with client:
+            await asyncio.gather(*(client.get_json("https://example.com") for _ in range(3)))
 
     asyncio.run(_run())
     assert len(calls) == 3
     assert all(b >= a for a, b in zip(calls, calls[1:]))
-    asyncio.run(client.aclose())
 
 
 def test_timeout_propagates(monkeypatch: Any) -> None:
@@ -114,11 +184,11 @@ def test_timeout_propagates(monkeypatch: Any) -> None:
     )
 
     async def _call() -> None:
-        await client.get_json("https://example.com")
+        async with client:
+            await client.get_json("https://example.com")
 
     with pytest.raises(HTTPX.TimeoutException):
         asyncio.run(_call())
-    asyncio.run(client.aclose())
 
 
 def test_get_text_and_bytes(monkeypatch: Any) -> None:
@@ -137,13 +207,13 @@ def test_get_text_and_bytes(monkeypatch: Any) -> None:
     )
 
     async def _run() -> None:
-        text = await client.get_text("https://example.com")
-        content = await client.get_bytes("https://example.com")
-        assert text.text == "payload"
-        assert content.content == b"payload"
+        async with client:
+            text = await client.get_text("https://example.com")
+            content = await client.get_bytes("https://example.com")
+            assert text.text == "payload"
+            assert content.content == b"payload"
 
     asyncio.run(_run())
-    asyncio.run(client.aclose())
 
 
 def test_post_uses_execute(monkeypatch: Any) -> None:
@@ -162,12 +232,11 @@ def test_post_uses_execute(monkeypatch: Any) -> None:
     )
 
     async def _run() -> None:
-        response = await client.post("https://example.com", json={"value": 1})
-        assert response.json()["ok"] is True
+        async with client:
+            response = await client.post("https://example.com", json={"value": 1})
+            assert response.json()["ok"] is True
 
     asyncio.run(_run())
-    asyncio.run(client.aclose())
-    asyncio.run(client.aclose())
 
 
 def test_stream_context_manager(monkeypatch: Any) -> None:
@@ -196,11 +265,11 @@ def test_stream_context_manager(monkeypatch: Any) -> None:
     )
 
     async def _run() -> None:
-        async with client.stream("GET", "https://example.com") as resp:
-            assert resp.content == b"stream"
+        async with client:
+            async with client.stream("GET", "https://example.com") as resp:
+                assert resp.content == b"stream"
 
     asyncio.run(_run())
-    asyncio.run(client.aclose())
 
 
 def test_set_rate_limit_resets_existing_limiter() -> None:

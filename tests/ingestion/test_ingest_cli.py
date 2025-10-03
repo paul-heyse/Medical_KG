@@ -33,6 +33,12 @@ def test_ingest_cli_batch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
         async def aclose(self) -> None:
             return None
 
+        async def __aenter__(self) -> "DummyClient":
+            return self
+
+        async def __aexit__(self, *_exc: Any) -> bool:
+            return False
+
     monkeypatch.setattr("Medical_KG.cli.get_adapter", lambda *args, **kwargs: DummyAdapter())
     monkeypatch.setattr("Medical_KG.cli.AsyncHttpClient", lambda: DummyClient())
     result = args.func(args)

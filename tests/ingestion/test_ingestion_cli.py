@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+import tracemalloc
 import types
 from datetime import datetime, timezone
 from pathlib import Path
@@ -118,6 +119,12 @@ def _result(doc_id: str) -> IngestionResult:
     )
 
 
+def _write_batch_file(path: Path, record_count: int) -> None:
+    with path.open("w", encoding="utf-8") as handle:
+        for index in range(record_count):
+            handle.write(json.dumps({"param": f"item-{index}"}) + "\n")
+
+
 # ---------------------------------------------------------------------------
 # Tests
 
@@ -167,12 +174,164 @@ def test_ingest_with_batch_outputs_doc_ids(
     batch.write_text("\n".join([json.dumps({"param": "value"}), json.dumps({"param": "second"})]))
     ledger_path = tmp_path / "ledger.jsonl"
 
-    cli.ingest("demo", batch=batch, auto=True, ledger_path=ledger_path)
+    cli.ingest("demo", batch=batch, auto=True, ledger_path=ledger_path, quiet=True)
 
     captured = capsys.readouterr()
     lines = [json.loads(line) for line in captured.out.strip().splitlines() if line]
     assert lines == [["doc-1", "doc-2"], ["doc-1", "doc-2"]]
     assert pipeline.calls[0]["params"] == [{"param": "value"}, {"param": "second"}]
+
+
+def test_ingest_honours_chunk_size(
+    make_pipeline: Callable[
+        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
+    ],
+    tmp_path: Path,
+) -> None:
+    pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=["doc-1"])], None)
+
+    batch = tmp_path / "chunked.jsonl"
+    batch.write_text(
+        "\n".join(
+            [
+                json.dumps({"param": "first"}),
+                json.dumps({"param": "second"}),
+                json.dumps({"param": "third"}),
+            ]
+        )
+    )
+
+    cli.ingest("demo", batch=batch, ledger_path=tmp_path / "ledger.jsonl", chunk_size=2, quiet=True)
+
+    assert len(pipeline.calls) == 2
+    assert pipeline.calls[0]["params"] == [{"param": "first"}, {"param": "second"}]
+    assert pipeline.calls[1]["params"] == [{"param": "third"}]
+
+
+def test_ingest_large_batch_streams_in_chunks(
+    make_pipeline: Callable[
+        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
+    ],
+    tmp_path: Path,
+) -> None:
+    pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=[])], None)
+
+    batch = tmp_path / "large.jsonl"
+    records = [json.dumps({"param": f"item-{index}"}) for index in range(2500)]
+    batch.write_text("\n".join(records))
+
+    cli.ingest("demo", batch=batch, ledger_path=tmp_path / "ledger.jsonl", chunk_size=500, quiet=True)
+
+    assert len(pipeline.calls) == 5
+    assert all(len(call["params"]) <= 500 for call in pipeline.calls)
+
+
+def test_ingest_maintains_memory_profile_for_10k_records(
+    make_pipeline: Callable[
+        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
+    ],
+    tmp_path: Path,
+) -> None:
+    make_pipeline([PipelineResult(source="demo", doc_ids=[])], None)
+    batch = tmp_path / "memory-10k.jsonl"
+    _write_batch_file(batch, 10_000)
+
+    tracemalloc.start()
+    peak = 0
+    try:
+        cli.ingest("demo", batch=batch, ledger_path=tmp_path / "ledger.jsonl", chunk_size=1000, quiet=True)
+    finally:
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
+    assert peak < 25_000_000
+
+
+def test_ingest_maintains_memory_profile_for_100k_records(
+    make_pipeline: Callable[
+        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
+    ],
+    tmp_path: Path,
+) -> None:
+    make_pipeline([PipelineResult(source="demo", doc_ids=[])], None)
+    batch = tmp_path / "memory-100k.jsonl"
+    _write_batch_file(batch, 100_000)
+
+    tracemalloc.start()
+    peak = 0
+    try:
+        cli.ingest("demo", batch=batch, ledger_path=tmp_path / "ledger.jsonl", chunk_size=1000, quiet=True)
+    finally:
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
+    assert peak < 35_000_000
+
+
+def test_ingest_reports_progress(
+    make_pipeline: Callable[
+        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
+    ],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorded: list[int] = []
+
+    class _Progress:
+        def __enter__(self) -> "_Progress":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def add_task(self, _description: str, total: int | None = None) -> int:
+            self.total = total
+            return 1
+
+        def advance(self, _task_id: int, advance: int) -> None:
+            recorded.append(advance)
+
+    monkeypatch.setattr(cli, "_create_progress", lambda: _Progress())
+    monkeypatch.setattr(cli, "_should_display_progress", lambda quiet: True)
+
+    results = [
+        PipelineResult(source="demo", doc_ids=["doc-1"]),
+        PipelineResult(source="demo", doc_ids=["doc-2"]),
+    ]
+    make_pipeline(results, None)
+
+    batch = tmp_path / "progress.jsonl"
+    batch.write_text("\n".join([json.dumps({"param": "value"})]))
+
+    cli.ingest("demo", batch=batch, ledger_path=tmp_path / "ledger.jsonl", quiet=False)
+
+    assert recorded == [2]
+
+
+def test_ingest_quiet_flag_skips_progress(
+    make_pipeline: Callable[
+        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
+    ],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    def _raise_progress() -> object:
+        nonlocal called
+        called = True
+        raise AssertionError("progress should not be created when quiet")
+
+    monkeypatch.setattr(cli, "_create_progress", _raise_progress)
+    monkeypatch.setattr(cli, "_should_display_progress", lambda quiet: not quiet)
+
+    make_pipeline([PipelineResult(source="demo", doc_ids=[])], None)
+    batch = tmp_path / "quiet.jsonl"
+    batch.write_text("\n".join([json.dumps({"param": "value"})]))
+
+    cli.ingest("demo", batch=batch, ledger_path=tmp_path / "ledger.jsonl", quiet=True)
+
+    assert called is False
 
 
 def test_ingest_without_batch_runs_once(
@@ -186,7 +345,7 @@ def test_ingest_without_batch_runs_once(
     pipeline = make_pipeline(results, None)
     ledger_path = tmp_path / "ledger.jsonl"
 
-    cli.ingest("demo", batch=None, auto=True, ledger_path=ledger_path)
+    cli.ingest("demo", batch=None, auto=True, ledger_path=ledger_path, quiet=True)
 
     captured = capsys.readouterr()
     lines = [json.loads(line) for line in captured.out.strip().splitlines() if line]
@@ -209,7 +368,7 @@ def test_ingest_accepts_ids_option(
     ],
 ) -> None:
     pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=["doc-1"])], None)
-    cli.ingest("demo", ids="NCT123,NCT456")
+    cli.ingest("demo", ids="NCT123,NCT456", quiet=True)
     assert pipeline.calls[0]["params"] == [{"ids": ["NCT123", "NCT456"]}]
 
 
@@ -220,7 +379,7 @@ def test_resume_invokes_pipeline_in_resume_mode(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=["doc-x"])], None)
-    cli.resume("demo", auto=True)
+    cli.resume("demo", auto=True, quiet=True)
     assert pipeline.calls[0]["resume"] is True
     captured = capsys.readouterr()
     assert json.loads(captured.out.strip()) == ["doc-x"]

@@ -1,7 +1,33 @@
+"""IR builders for ingestion sources with typed payload extraction support.
+
+The module exposes :class:`IrBuilder` as the common entry point.  Callers can
+continue supplying plain text and metadata, or provide the typed ingestion
+payload via ``raw=`` to enable automatic block/provenance extraction::
+
+    builder = IrBuilder()
+    document = builder.build(
+        doc_id="pubmed:123",
+        source="pubmed",
+        uri="https://pubmed.ncbi.nlm.nih.gov/123/",
+        text="",
+        raw=pubmed_payload,
+    )
+
+Legacy usage without payloads remains unchanged::
+
+    document = builder.build(
+        doc_id="doc:1",
+        source="generic",
+        uri="https://example",  # plain metadata only
+        text="Plain content",
+    )
+"""
+
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, MutableMapping, Sequence
 from html.parser import HTMLParser
+import json
 from typing import Any, List, Tuple
 
 try:  # pragma: no cover - optional dependency
@@ -11,12 +37,35 @@ try:  # pragma: no cover - optional dependency
 except ModuleNotFoundError:  # pragma: no cover - fallback to stdlib parser
     BS4_AVAILABLE = False
 
+from Medical_KG.ingestion.types import (
+    AdapterDocumentPayload,
+    ClinicalCatalogDocumentPayload,
+    GuidelineDocumentPayload,
+    LiteratureDocumentPayload,
+    JSONMapping,
+    JSONValue,
+    is_clinical_document_payload,
+    is_clinical_payload,
+    is_guideline_payload,
+    is_literature_payload,
+    is_medrxiv_payload,
+    is_nice_guideline_payload,
+    is_pmc_payload,
+    is_pubmed_payload,
+    is_uspstf_payload,
+)
 from Medical_KG.ir.models import Block, DocumentIR, SpanMap, Table
 from Medical_KG.ir.normalizer import TextNormalizer, section_from_heading
 
 
 class IrBuilder:
-    """Base builder converting source payloads into IR objects."""
+    """Base builder converting source payloads into IR objects.
+
+    ``build()`` accepts the optional ``raw`` payload union emitted by ingestion
+    adapters. When provided the builder derives canonical text, semantic blocks,
+    and provenance metadata directly from the typed payload while preserving the
+    legacy behaviour for callers that omit ``raw``.
+    """
 
     def __init__(self, *, normalizer: TextNormalizer | None = None) -> None:
         self.normalizer = normalizer or TextNormalizer()
@@ -29,9 +78,22 @@ class IrBuilder:
         uri: str,
         text: str,
         metadata: Mapping[str, Any] | None = None,
+        raw: AdapterDocumentPayload | None = None,
     ) -> DocumentIR:
         metadata = metadata or {}
-        normalized = self.normalizer.normalize(text)
+        payload_blocks: list[tuple[str, str, str | None, dict[str, Any]]] = []
+        payload_tables: list[tuple[str, list[str], list[list[str]], dict[str, Any]]] = []
+        payload_provenance: dict[str, Any] = {}
+        text_input = text
+        if raw is not None:
+            (
+                text_input,
+                payload_blocks,
+                payload_tables,
+                payload_provenance,
+            ) = self._prepare_payload(text, raw)
+
+        normalized = self.normalizer.normalize(text_input)
         document = DocumentIR(
             doc_id=doc_id,
             source=source,
@@ -56,7 +118,13 @@ class IrBuilder:
                     bbox=entry.get("bbox"),
                 )
         if provenance := metadata.get("provenance"):
-            document.provenance.update(provenance)
+            self._merge_provenance(document.provenance, provenance)
+        if payload_provenance:
+            self._merge_provenance(document.provenance, payload_provenance)
+        if payload_blocks:
+            self._add_blocks(document, payload_blocks)
+        if payload_tables:
+            self._add_tables(document, payload_tables)
         return document
 
     def _add_blocks(
@@ -85,6 +153,247 @@ class IrBuilder:
             offset = end
             if index < len(blocks) - 1:
                 offset += sep_len
+
+    def _add_tables(
+        self,
+        document: DocumentIR,
+        tables: Sequence[tuple[str, list[str], list[list[str]], dict[str, Any]]],
+    ) -> None:
+        for caption, headers, rows, meta in tables:
+            start = len(document.text)
+            end = start + len(caption)
+            document.add_table(
+                Table(caption=caption, headers=headers, rows=rows, start=start, end=end, meta=meta)
+            )
+
+    def _merge_provenance(
+        self,
+        target: MutableMapping[str, Any],
+        update: Mapping[str, Any],
+    ) -> None:
+        for key, value in update.items():
+            existing = target.get(key)
+            if isinstance(existing, MutableMapping) and isinstance(value, Mapping):
+                self._merge_provenance(existing, value)
+                continue
+            target[key] = value
+
+    def _prepare_payload(
+        self,
+        text: str,
+        raw: AdapterDocumentPayload,
+    ) -> tuple[
+        str,
+        list[tuple[str, str, str | None, dict[str, Any]]],
+        list[tuple[str, list[str], list[list[str]], dict[str, Any]]],
+        dict[str, Any],
+    ]:
+        if is_literature_payload(raw):
+            return self._prepare_literature_payload(text, raw)
+        if is_clinical_payload(raw):
+            return self._prepare_clinical_payload(text, raw)
+        if is_guideline_payload(raw):
+            return self._prepare_guideline_payload(text, raw)
+        return text, [], [], {}
+
+    def _prepare_literature_payload(
+        self,
+        default_text: str,
+        raw: LiteratureDocumentPayload,
+    ) -> tuple[
+        str,
+        list[tuple[str, str, str | None, dict[str, Any]]],
+        list[tuple[str, list[str], list[list[str]], dict[str, Any]]],
+        dict[str, Any],
+    ]:
+        blocks: list[tuple[str, str, str | None, dict[str, Any]]] = []
+        provenance: dict[str, Any] = {}
+        if is_pubmed_payload(raw):
+            pubmed_parts: list[str] = []
+            title = raw.get("title", "")
+            if title:
+                blocks.append(("heading", title, "title", {"pmid": raw["pmid"]}))
+                pubmed_parts.append(title)
+            abstract = raw.get("abstract", "")
+            abstract_text = abstract or default_text
+            if abstract_text:
+                blocks.append(("paragraph", abstract_text, "abstract", {"pmid": raw["pmid"]}))
+                pubmed_parts.append(abstract_text)
+            provenance["pubmed"] = {"pmid": raw["pmid"]}
+            if raw.get("pmcid"):
+                provenance["pubmed"]["pmcid"] = raw["pmcid"]
+            if raw.get("doi"):
+                provenance["pubmed"]["doi"] = raw["doi"]
+            if raw["mesh_terms"]:
+                provenance["mesh_terms"] = list(raw["mesh_terms"])
+            if raw["authors"]:
+                provenance["authors"] = list(raw["authors"])
+            combined_text = "\n\n".join(pubmed_parts) or default_text
+            return combined_text, blocks, [], provenance
+        if is_pmc_payload(raw):
+            provenance["pmcid"] = raw["pmcid"]
+            pmc_parts: list[str] = []
+            title = raw.get("title", "")
+            if title:
+                blocks.append(("heading", title, "title", {"pmcid": raw["pmcid"]}))
+                pmc_parts.append(title)
+            abstract = raw.get("abstract", "")
+            if abstract:
+                blocks.append(("paragraph", abstract, "abstract", {"heading": "Abstract"}))
+                pmc_parts.append(abstract)
+            for section in raw.get("sections", []):
+                heading = section.get("title", "").strip()
+                text = section.get("text", "").strip()
+                section_name = section_from_heading(heading) if heading else "body"
+                if heading:
+                    blocks.append(("heading", heading, section_name, {"heading": heading}))
+                    pmc_parts.append(heading)
+                if text:
+                    meta: dict[str, Any] = {"heading": heading} if heading else {}
+                    blocks.append(("paragraph", text, section_name, meta))
+                    pmc_parts.append(text)
+            combined_text = "\n\n".join(part for part in pmc_parts if part) or default_text
+            return combined_text, blocks, [], provenance
+        if is_medrxiv_payload(raw):
+            provenance["medrxiv"] = {"doi": raw["doi"]}
+            if raw.get("date"):
+                provenance["medrxiv"]["date"] = raw["date"]
+            medrxiv_parts: list[str] = []
+            title = raw.get("title", "")
+            if title:
+                blocks.append(("heading", title, "title", {"doi": raw["doi"]}))
+                medrxiv_parts.append(title)
+            abstract = raw.get("abstract", "")
+            combined_text = abstract or default_text
+            if combined_text:
+                blocks.append(("paragraph", combined_text, "abstract", {"doi": raw["doi"]}))
+                medrxiv_parts.append(combined_text)
+            final_text = "\n\n".join(medrxiv_parts) or combined_text or default_text
+            return final_text, blocks, [], provenance
+        return default_text, [], [], {}
+
+    def _prepare_clinical_payload(
+        self,
+        default_text: str,
+        raw: ClinicalCatalogDocumentPayload,
+    ) -> tuple[
+        str,
+        list[tuple[str, str, str | None, dict[str, Any]]],
+        list[tuple[str, list[str], list[list[str]], dict[str, Any]]],
+        dict[str, Any],
+    ]:
+        if not is_clinical_document_payload(raw):
+            return default_text, [], [], {}
+        blocks: list[tuple[str, str, str | None, dict[str, Any]]] = []
+        provenance: dict[str, Any] = {"nct_id": raw["nct_id"]}
+        parts: list[str] = []
+        title = raw.get("title", "")
+        if title:
+            blocks.append(("heading", title, "title", {"nct_id": raw["nct_id"]}))
+            parts.append(title)
+        status = raw.get("status")
+        if status:
+            status_text = f"Status: {status}"
+            blocks.append(("paragraph", status_text, "status", {"status": status}))
+            parts.append(status_text)
+        phase = raw.get("phase")
+        if phase:
+            phase_text = f"Phase: {phase}"
+            blocks.append(("paragraph", phase_text, "phase", {"phase": phase}))
+            parts.append(phase_text)
+        eligibility_text = self._stringify_json_value(raw.get("eligibility"))
+        if eligibility_text:
+            blocks.append(("paragraph", eligibility_text, "eligibility", {}))
+            parts.append(eligibility_text)
+        for index, arm in enumerate(raw.get("arms", [])):
+            summary = self._summarize_mapping(arm)
+            arm_meta: dict[str, Any] = {"arm_index": index}
+            if arm_type := arm.get("armType"):
+                arm_meta["arm_type"] = arm_type
+            arm_meta["payload"] = arm
+            blocks.append(("paragraph", summary, "arm", arm_meta))
+            parts.append(summary)
+        outcomes = raw.get("outcomes") or []
+        for index, outcome in enumerate(outcomes):
+            summary = self._summarize_mapping(outcome)
+            outcome_meta: dict[str, Any] = {"outcome_index": index}
+            if measure := outcome.get("measure"):
+                outcome_meta["measure"] = measure
+            if timeframe := outcome.get("timeFrame"):
+                outcome_meta["time_frame"] = timeframe
+            blocks.append(("paragraph", summary, "outcome", outcome_meta))
+            parts.append(summary)
+        combined_text = "\n\n".join(part for part in parts if part) or default_text
+        return combined_text, blocks, [], provenance
+
+    def _prepare_guideline_payload(
+        self,
+        default_text: str,
+        raw: GuidelineDocumentPayload,
+    ) -> tuple[
+        str,
+        list[tuple[str, str, str | None, dict[str, Any]]],
+        list[tuple[str, list[str], list[list[str]], dict[str, Any]]],
+        dict[str, Any],
+    ]:
+        blocks: list[tuple[str, str, str | None, dict[str, Any]]] = []
+        provenance: dict[str, Any] = {}
+        parts: list[str] = []
+        if is_nice_guideline_payload(raw):
+            provenance["guideline"] = {"uid": raw["uid"]}
+            if raw.get("url"):
+                provenance["guideline"]["url"] = raw["url"]
+            if raw.get("licence"):
+                provenance["guideline"]["licence"] = raw["licence"]
+            title = raw.get("title", "")
+            if title:
+                blocks.append(("heading", title, "title", {"uid": raw["uid"]}))
+                parts.append(title)
+            summary = raw.get("summary", "")
+            if summary:
+                blocks.append(("paragraph", summary, "summary", {"uid": raw["uid"]}))
+                parts.append(summary)
+            combined_text = "\n\n".join(parts) or default_text
+            return combined_text, blocks, [], provenance
+        if is_uspstf_payload(raw):
+            provenance["guideline"] = {}
+            if raw.get("id"):
+                provenance["guideline"]["id"] = raw["id"]
+            if raw.get("url"):
+                provenance["guideline"]["url"] = raw["url"]
+            title = raw.get("title", "")
+            if title:
+                blocks.append(("heading", title, "title", {}))
+                parts.append(title)
+            status = raw.get("status")
+            if status:
+                status_text = f"Status: {status}"
+                blocks.append(("paragraph", status_text, "status", {"status": status}))
+                parts.append(status_text)
+            combined_text = "\n\n".join(parts) or default_text
+            return combined_text, blocks, [], provenance
+        return default_text, [], [], {}
+
+    @staticmethod
+    def _summarize_mapping(value: JSONMapping) -> str:
+        description = value.get("description")
+        if isinstance(description, str) and description.strip():
+            return description.strip()
+        name = value.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+        label = value.get("label")
+        if isinstance(label, str) and label.strip():
+            return label.strip()
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+    @staticmethod
+    def _stringify_json_value(value: JSONValue | None) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
 
 class ClinicalTrialsBuilder(IrBuilder):

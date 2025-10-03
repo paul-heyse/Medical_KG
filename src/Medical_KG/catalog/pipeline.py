@@ -1,15 +1,13 @@
-"""Catalog build pipeline orchestrating loaders, normalisation, and embeddings."""
+"""Catalog build pipeline with typed concepts and audit records."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, List, Mapping, MutableMapping, Sequence
-
-if TYPE_CHECKING:  # pragma: no cover
-    from Medical_KG.embeddings.service import EmbeddingService
+from typing import TYPE_CHECKING, cast
 
 import yaml
 
@@ -17,6 +15,10 @@ from .loaders import ConceptLoader
 from .models import Concept
 from .normalization import ConceptNormaliser
 from .state import CatalogStateStore
+from .types import AuditMetadata, JsonValue
+
+if TYPE_CHECKING:  # pragma: no cover
+    from Medical_KG.embeddings.service import ConceptLike, EmbeddingService
 
 
 @dataclass(slots=True)
@@ -59,7 +61,7 @@ class LicensePolicy:
             return False
         return self.entitlements.get(loader.license_bucket, False)
 
-    def filter_concepts(self, concepts: Iterable[Concept]) -> List[Concept]:
+    def filter_concepts(self, concepts: Iterable[Concept]) -> list[Concept]:
         return [
             concept
             for concept in concepts
@@ -69,29 +71,54 @@ class LicensePolicy:
 
 
 @dataclass(slots=True)
+class CatalogAuditEntry:
+    action: str
+    user: str
+    resource: str
+    metadata: AuditMetadata | None = None
+
+    def to_payload(self) -> dict[str, JsonValue]:
+        payload: dict[str, JsonValue] = {
+            "action": self.action,
+            "user": self.user,
+            "resource": self.resource,
+        }
+        if self.metadata:
+            payload.update(dict(self.metadata))
+        return payload
+
+
+@dataclass(slots=True)
 class CatalogAuditLog:
     """Collects audit entries for catalog operations."""
 
-    entries: List[Mapping[str, object]] = field(default_factory=list)
+    entries: list[CatalogAuditEntry] = field(default_factory=list)
 
     def record(
-        self, action: str, *, user: str, resource: str, metadata: Mapping[str, object] | None = None
+        self,
+        action: str,
+        *,
+        user: str,
+        resource: str,
+        metadata: AuditMetadata | None = None,
     ) -> None:
-        payload = {"action": action, "user": user, "resource": resource}
-        if metadata:
-            payload.update(metadata)
-        self.entries.append(payload)
+        self.entries.append(
+            CatalogAuditEntry(action=action, user=user, resource=resource, metadata=metadata)
+        )
+
+    def as_payloads(self) -> list[dict[str, JsonValue]]:
+        return [entry.to_payload() for entry in self.entries]
 
 
 @dataclass(slots=True)
 class CatalogBuildResult:
     """Result of running the catalog build pipeline."""
 
-    concepts: List[Concept]
+    concepts: list[Concept]
     release_hash: str
-    synonym_catalog: Mapping[str, List[str]]
+    synonym_catalog: dict[str, list[str]]
     audit_log: CatalogAuditLog
-    release_versions: Mapping[str, str]
+    release_versions: dict[str, str]
     changed_ontologies: set[str]
     skipped: bool = False
 
@@ -143,7 +170,7 @@ class CrosswalkBuilder:
 class ConceptDeduplicator:
     """Deduplicate concepts by label and definition."""
 
-    def deduplicate(self, concepts: Iterable[Concept]) -> List[Concept]:
+    def deduplicate(self, concepts: Iterable[Concept]) -> list[Concept]:
         deduped: MutableMapping[tuple[str, str | None], Concept] = {}
         for concept in concepts:
             key = (concept.label.lower(), concept.definition)
@@ -175,7 +202,7 @@ class ConceptCatalogBuilder:
         self._state_store = state_store
 
     def build(self) -> CatalogBuildResult:
-        concepts: List[Concept] = []
+        concepts: list[Concept] = []
         audit_log = CatalogAuditLog()
         release_versions: dict[str, str] = {}
         for loader in self._loaders:
@@ -219,7 +246,8 @@ class ConceptCatalogBuilder:
         else:
             changed_ontologies = set(release_versions)
         if not skipped and self._embedding_service:
-            self._embedding_service.embed_concepts(deduped)
+            concepts_like = cast("Sequence[ConceptLike]", deduped)
+            self._embedding_service.embed_concepts(concepts_like)
         if self._state_store and not skipped:
             self._state_store.set_release_hash(release_hash)
             self._state_store.set_release_versions(release_versions)

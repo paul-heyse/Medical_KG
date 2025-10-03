@@ -3,11 +3,112 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import date
-from typing import Iterable, Mapping, Sequence
+from typing import NotRequired, TypedDict
 
 from .models import Concept, ConceptFamily, Synonym, SynonymType
-from .normalization import ConceptNormaliser
+from .types import JsonValue
+
+
+class SnomedRF2Record(TypedDict):
+    conceptId: str | int
+    fsn: str
+    preferred: NotRequired[str]
+    definition: NotRequired[str]
+    synonyms: NotRequired[Sequence[str]]
+    parents: NotRequired[Sequence[str | int]]
+    ancestors: NotRequired[Sequence[str | int]]
+    icd10: NotRequired[Sequence[str | int]]
+    active: NotRequired[bool]
+
+
+class ICD11Entry(TypedDict):
+    code: str
+    title: str
+    preferred: NotRequired[str]
+    definition: NotRequired[str]
+    parents: NotRequired[Sequence[str]]
+    synonyms: NotRequired[Sequence[str]]
+    snomed: NotRequired[Sequence[str | int]]
+    api_version: NotRequired[str]
+
+
+class MONDONode(TypedDict):
+    id: str
+    label: str
+    preferred: NotRequired[str]
+    definition: NotRequired[str]
+    synonyms: NotRequired[Sequence[str]]
+    xrefs: NotRequired[Mapping[str, Sequence[str | int]]]
+    format: NotRequired[str]
+
+
+class HPONode(TypedDict):
+    id: str
+    label: str
+    preferred: NotRequired[str]
+    definition: NotRequired[str]
+    synonyms: NotRequired[Sequence[str]]
+    diseases: NotRequired[Sequence[str | int]]
+    format: NotRequired[str]
+
+
+class LOINCRow(TypedDict):
+    loinc_num: str | int
+    component: NotRequired[str]
+    property: NotRequired[str]
+    shortname: NotRequired[str]
+    long_common_name: NotRequired[str]
+    system: NotRequired[str]
+    scale: NotRequired[str]
+    method: NotRequired[str]
+    ucum_unit: NotRequired[str]
+
+
+class RxNormConcept(TypedDict):
+    rxcui: str | int
+    name: str
+    definition: NotRequired[str]
+    synonyms: NotRequired[Sequence[str]]
+    tty: NotRequired[str]
+    ingredients: NotRequired[Sequence[str | int]]
+    snomed: NotRequired[Sequence[str | int]]
+
+
+class UNIIEntry(TypedDict):
+    unii: str
+    substance_name: str
+    synonyms: NotRequired[Sequence[str]]
+    preferred_term: NotRequired[str]
+
+
+class MedDRARow(TypedDict):
+    code: str
+    pt: str
+    level: NotRequired[str]
+    definition: NotRequired[str]
+    llt: NotRequired[Sequence[str]]
+    soc: NotRequired[str]
+    parents: NotRequired[Sequence[str | int]]
+
+
+class CTCAERow(TypedDict):
+    meddra_code: str
+    term: str
+    description: NotRequired[str]
+    grade: NotRequired[int | str]
+    synonyms: NotRequired[Sequence[str]]
+
+
+class GUDIDDevice(TypedDict):
+    di: str
+    brand_name: str
+    device_name: NotRequired[str]
+    catalog_number: NotRequired[str]
+    version: NotRequired[str]
+    model_number: NotRequired[str]
+    synonyms: NotRequired[Sequence[str]]
 
 
 def _default_release(version: str) -> dict[str, str]:
@@ -24,7 +125,6 @@ class ConceptLoader(ABC):
 
     def __init__(self, *, release_version: str | None = None) -> None:
         self._release = _default_release(release_version or "unversioned")
-        self._normaliser = ConceptNormaliser()
 
     @abstractmethod
     def load(self) -> Iterable[Concept]:
@@ -46,10 +146,10 @@ class ConceptLoader(ABC):
         parents: Sequence[str] | None = None,
         ancestors: Sequence[str] | None = None,
         xrefs: Mapping[str, Sequence[str]] | None = None,
-        attributes: Mapping[str, object] | None = None,
+        attributes: Mapping[str, JsonValue] | None = None,
         semantic_types: Sequence[str] | None = None,
         status: str = "active",
-        provenance: Mapping[str, object] | None = None,
+        provenance: Mapping[str, JsonValue] | None = None,
     ) -> Concept:
         synonyms_models = [Synonym(value=value, type=s_type) for value, s_type in synonyms if value]
         concept = Concept(
@@ -72,10 +172,10 @@ class ConceptLoader(ABC):
             provenance={
                 "source": self.ontology,
                 "loader_version": self.loader_version,
-                **(provenance or {}),
+                **(dict(provenance or {})),
             },
         )
-        return self._normaliser.normalise(concept)
+        return concept
 
 
 class SnomedCTLoader(ConceptLoader):
@@ -86,10 +186,10 @@ class SnomedCTLoader(ConceptLoader):
     license_bucket = "restricted"
 
     def __init__(
-        self, records: Sequence[Mapping[str, object]], *, release_version: str = "2025-01-31"
+        self, records: Sequence[SnomedRF2Record], *, release_version: str = "2025-01-31"
     ) -> None:
         super().__init__(release_version=release_version)
-        self._records = records
+        self._records = list(records)
 
     def load(self) -> Iterable[Concept]:
         for record in self._records:
@@ -98,10 +198,17 @@ class SnomedCTLoader(ConceptLoader):
             label = str(record["fsn"])
             preferred = str(record.get("preferred", label))
             definition = record.get("definition")
-            synonyms = [(syn, SynonymType.EXACT) for syn in record.get("synonyms", [])]
-            parents = [f"http://snomed.info/id/{pid}" for pid in record.get("parents", [])]
-            ancestors = [f"http://snomed.info/id/{aid}" for aid in record.get("ancestors", [])]
-            xrefs = {"icd10": [*map(str, record.get("icd10", []))]}
+            synonym_values = record.get("synonyms") or []
+            synonyms = [(syn, SynonymType.EXACT) for syn in synonym_values]
+            parents = [
+                f"http://snomed.info/id/{pid}"
+                for pid in (record.get("parents") or [])
+            ]
+            ancestors = [
+                f"http://snomed.info/id/{aid}"
+                for aid in (record.get("ancestors") or [])
+            ]
+            xrefs = {"icd10": [str(code) for code in (record.get("icd10") or [])]}
             attributes = {"active": bool(record.get("active", True))}
             status = "active" if attributes["active"] else "retired"
             yield self._build(
@@ -128,10 +235,10 @@ class ICD11Loader(ConceptLoader):
     license_bucket = "permissive"
 
     def __init__(
-        self, entries: Sequence[Mapping[str, object]], *, release_version: str = "2025"
+        self, entries: Sequence[ICD11Entry], *, release_version: str = "2025"
     ) -> None:
         super().__init__(release_version=release_version)
-        self._entries = entries
+        self._entries = list(entries)
 
     def load(self) -> Iterable[Concept]:
         for entry in self._entries:
@@ -140,10 +247,12 @@ class ICD11Loader(ConceptLoader):
             title = str(entry["title"])
             definition = entry.get("definition")
             parents = [
-                f"https://id.who.int/icd/release/11/{parent}" for parent in entry.get("parents", [])
+                f"https://id.who.int/icd/release/11/{parent}"
+                for parent in (entry.get("parents") or [])
             ]
-            synonyms = [(syn, SynonymType.RELATED) for syn in entry.get("synonyms", [])]
-            xrefs = {"snomed": list(map(str, entry.get("snomed", [])))}
+            synonym_values = entry.get("synonyms") or []
+            synonyms = [(syn, SynonymType.RELATED) for syn in synonym_values]
+            xrefs = {"snomed": [str(code) for code in (entry.get("snomed") or [])]}
             yield self._build(
                 iri=iri,
                 label=title,
@@ -167,10 +276,10 @@ class MONDOLoader(ConceptLoader):
     license_bucket = "open"
 
     def __init__(
-        self, nodes: Sequence[Mapping[str, object]], *, release_version: str = "2025-02"
+        self, nodes: Sequence[MONDONode], *, release_version: str = "2025-02"
     ) -> None:
         super().__init__(release_version=release_version)
-        self._nodes = nodes
+        self._nodes = list(nodes)
 
     def load(self) -> Iterable[Concept]:
         for node in self._nodes:
@@ -178,8 +287,8 @@ class MONDOLoader(ConceptLoader):
             iri = f"http://purl.obolibrary.org/obo/{identifier.replace(':', '_')}"
             label = str(node["label"])
             definition = node.get("definition")
-            synonyms = [(syn, SynonymType.RELATED) for syn in node.get("synonyms", [])]
-            mappings = node.get("xrefs", {})
+            synonyms = [(syn, SynonymType.RELATED) for syn in (node.get("synonyms") or [])]
+            mappings = node.get("xrefs") or {}
             yield self._build(
                 iri=iri,
                 label=label,
@@ -201,10 +310,10 @@ class HPOLoader(ConceptLoader):
     license_bucket = "open"
 
     def __init__(
-        self, items: Sequence[Mapping[str, object]], *, release_version: str = "2025-02-01"
+        self, items: Sequence[HPONode], *, release_version: str = "2025-02-01"
     ) -> None:
         super().__init__(release_version=release_version)
-        self._items = items
+        self._items = list(items)
 
     def load(self) -> Iterable[Concept]:
         for item in self._items:
@@ -212,8 +321,8 @@ class HPOLoader(ConceptLoader):
             iri = f"http://purl.obolibrary.org/obo/{hp_id.replace(':', '_')}"
             label = str(item["label"])
             definition = item.get("definition")
-            synonyms = [(syn, SynonymType.EXACT) for syn in item.get("synonyms", [])]
-            attributes = {"diseases": list(map(str, item.get("diseases", [])))}
+            synonyms = [(syn, SynonymType.EXACT) for syn in (item.get("synonyms") or [])]
+            attributes = {"diseases": [str(code) for code in (item.get("diseases") or [])]}
             yield self._build(
                 iri=iri,
                 label=label,
@@ -234,10 +343,10 @@ class LOINCLoader(ConceptLoader):
     license_bucket = "permissive"
 
     def __init__(
-        self, rows: Sequence[Mapping[str, object]], *, release_version: str = "2.77"
+        self, rows: Sequence[LOINCRow], *, release_version: str = "2.77"
     ) -> None:
         super().__init__(release_version=release_version)
-        self._rows = rows
+        self._rows = list(rows)
 
     def load(self) -> Iterable[Concept]:
         for row in self._rows:
@@ -276,10 +385,10 @@ class RxNormLoader(ConceptLoader):
     license_bucket = "open"
 
     def __init__(
-        self, concepts: Sequence[Mapping[str, object]], *, release_version: str = "2025-01-01"
+        self, concepts: Sequence[RxNormConcept], *, release_version: str = "2025-01-01"
     ) -> None:
         super().__init__(release_version=release_version)
-        self._concepts = concepts
+        self._concepts = list(concepts)
 
     def load(self) -> Iterable[Concept]:
         for concept in self._concepts:
@@ -287,10 +396,10 @@ class RxNormLoader(ConceptLoader):
             iri = f"https://rxnav.nlm.nih.gov/REST/rxcui/{rxcui}"
             name = str(concept["name"])
             definition = concept.get("definition")
-            synonyms = [(syn, SynonymType.RELATED) for syn in concept.get("synonyms", [])]
+            synonyms = [(syn, SynonymType.RELATED) for syn in (concept.get("synonyms") or [])]
             attributes = {
                 "tty": concept.get("tty"),
-                "ingredients": list(map(str, concept.get("ingredients", []))),
+                "ingredients": [str(item) for item in (concept.get("ingredients") or [])],
             }
             yield self._build(
                 iri=iri,
@@ -300,7 +409,7 @@ class RxNormLoader(ConceptLoader):
                 synonyms=synonyms,
                 codes={"rxcui": rxcui},
                 attributes=attributes,
-                xrefs={"snomed": list(map(str, concept.get("snomed", [])))},
+                xrefs={"snomed": [str(code) for code in (concept.get("snomed") or [])]},
             )
 
 
@@ -312,17 +421,17 @@ class UNIILoader(ConceptLoader):
     license_bucket = "open"
 
     def __init__(
-        self, entries: Sequence[Mapping[str, object]], *, release_version: str = "2025-01-15"
+        self, entries: Sequence[UNIIEntry], *, release_version: str = "2025-01-15"
     ) -> None:
         super().__init__(release_version=release_version)
-        self._entries = entries
+        self._entries = list(entries)
 
     def load(self) -> Iterable[Concept]:
         for entry in self._entries:
             unii = str(entry["unii"])
             iri = f"https://fdasis.nlm.nih.gov/srs/unii/{unii}"
             name = str(entry["substance_name"])
-            synonyms = [(syn, SynonymType.RELATED) for syn in entry.get("synonyms", [])]
+            synonyms = [(syn, SynonymType.RELATED) for syn in (entry.get("synonyms") or [])]
             attributes = {"preferred_term": entry.get("preferred_term", name)}
             yield self._build(
                 iri=iri,
@@ -343,10 +452,10 @@ class MedDRALoader(ConceptLoader):
     license_bucket = "proprietary"
 
     def __init__(
-        self, rows: Sequence[Mapping[str, object]], *, release_version: str = "27.1"
+        self, rows: Sequence[MedDRARow], *, release_version: str = "27.1"
     ) -> None:
         super().__init__(release_version=release_version)
-        self._rows = rows
+        self._rows = list(rows)
 
     def load(self) -> Iterable[Concept]:
         for row in self._rows:
@@ -355,9 +464,11 @@ class MedDRALoader(ConceptLoader):
             label = str(row["pt"])
             level = str(row.get("level", "PT"))
             definition = row.get("definition")
-            synonyms = [(syn, SynonymType.RELATED) for syn in row.get("llt", [])]
+            synonyms = [(syn, SynonymType.RELATED) for syn in (row.get("llt") or [])]
             attributes = {"soc": row.get("soc"), "level": level}
-            parents = [f"https://meddra.org/meddra/{p}" for p in row.get("parents", [])]
+            parents = [
+                f"https://meddra.org/meddra/{p}" for p in (row.get("parents") or [])
+            ]
             yield self._build(
                 iri=iri,
                 label=label,
@@ -378,10 +489,10 @@ class CTCAELoader(ConceptLoader):
     license_bucket = "open"
 
     def __init__(
-        self, grades: Sequence[Mapping[str, object]], *, release_version: str = "5.0"
+        self, grades: Sequence[CTCAERow], *, release_version: str = "5.0"
     ) -> None:
         super().__init__(release_version=release_version)
-        self._grades = grades
+        self._grades = list(grades)
 
     def load(self) -> Iterable[Concept]:
         for grade in self._grades:
@@ -389,7 +500,7 @@ class CTCAELoader(ConceptLoader):
             iri = f"https://ctcae.nci.nih.gov/{meddra_code}"
             term = str(grade["term"])
             synonyms = [(term, SynonymType.EXACT)] + [
-                (syn, SynonymType.RELATED) for syn in grade.get("synonyms", [])
+                (syn, SynonymType.RELATED) for syn in (grade.get("synonyms") or [])
             ]
             attributes = {
                 "grade": grade.get("grade"),
@@ -416,10 +527,10 @@ class AccessGUDIDLoader(ConceptLoader):
     license_bucket = "open"
 
     def __init__(
-        self, devices: Sequence[Mapping[str, object]], *, release_version: str = "2025-01-01"
+        self, devices: Sequence[GUDIDDevice], *, release_version: str = "2025-01-01"
     ) -> None:
         super().__init__(release_version=release_version)
-        self._devices = devices
+        self._devices = list(devices)
 
     def load(self) -> Iterable[Concept]:
         for device in self._devices:
@@ -428,7 +539,7 @@ class AccessGUDIDLoader(ConceptLoader):
             label = str(device["brand_name"])
             definition = device.get("model_number")
             synonyms = [(label, SynonymType.BRAND)] + [
-                (syn, SynonymType.RELATED) for syn in device.get("synonyms", [])
+                (syn, SynonymType.RELATED) for syn in (device.get("synonyms") or [])
             ]
             attributes = {
                 "device_name": device.get("device_name"),

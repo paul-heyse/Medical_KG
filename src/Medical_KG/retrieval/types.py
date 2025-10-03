@@ -1,7 +1,17 @@
 """Typed structures shared across retrieval modules."""
 from __future__ import annotations
 
-from typing import Mapping, Sequence, TypedDict
+from typing import Mapping, MutableMapping, Sequence, TypedDict, Union
+
+
+JSONPrimitive = Union[str, int, float, bool, None]
+JSONValue = Union[
+    JSONPrimitive,
+    Sequence["JSONValue"],
+    Mapping[str, "JSONValue"],
+]
+JSONMapping = Mapping[str, JSONValue]
+MutableJSONMapping = MutableMapping[str, JSONValue]
 
 
 class SearchHit(TypedDict, total=False):
@@ -13,7 +23,7 @@ class SearchHit(TypedDict, total=False):
     title_path: str
     section: str
     score: float
-    metadata: Mapping[str, object]
+    metadata: JSONMapping
     start: int
     end: int
 
@@ -25,7 +35,7 @@ class VectorHit(TypedDict, total=False):
     doc_id: str
     text: str
     score: float
-    metadata: Mapping[str, object]
+    metadata: JSONMapping
     title_path: str
     section: str
     start: int
@@ -48,12 +58,19 @@ class MultiGranularityConfig(TypedDict, total=False):
 
 EmbeddingVector = Sequence[float]
 
+FusionScores = Mapping[str, float]
+
 
 __all__ = [
+    "JSONValue",
+    "JSONMapping",
+    "MutableJSONMapping",
     "SearchHit",
     "VectorHit",
     "NeighborMergeConfig",
     "MultiGranularityConfig",
     "EmbeddingVector",
+    "FusionScores",
 ]
+
 

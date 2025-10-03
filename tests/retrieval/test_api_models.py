@@ -32,6 +32,6 @@ def test_retrieve_query_with_filters_and_aliases() -> None:
     assert request.explain is True
 
 
-def test_retrieve_query_normalizes_filters_none() -> None:
-    payload = RetrieveQuery(query="term", filters=None)
+def test_retrieve_query_defaults_filters_to_empty_dict() -> None:
+    payload = RetrieveQuery(query="term")
     assert payload.filters == {}

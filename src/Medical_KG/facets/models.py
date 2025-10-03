@@ -1,8 +1,10 @@
-"""Pydantic models for facet payloads and supporting types."""
+"""Typed Pydantic models representing retrieval facets."""
+
 from __future__ import annotations
 
+from collections.abc import Sequence
 from enum import Enum
-from typing import Annotated, Literal, Sequence
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -24,6 +26,8 @@ class EvidenceSpan(BaseModel):
 
 
 class FacetType(str, Enum):
+    """Enumeration of supported facet families."""
+
     PICO = "pico"
     ENDPOINT = "endpoint"
     ADVERSE_EVENT = "ae"
@@ -134,3 +138,17 @@ class FacetIndexRecord(BaseModel):
             elif isinstance(facet, DoseFacet):
                 codes.extend(code.code for code in facet.drug_codes)
         return codes
+
+
+__all__ = [
+    "AdverseEventFacet",
+    "Code",
+    "DoseFacet",
+    "EndpointFacet",
+    "EvidenceSpan",
+    "Facet",
+    "FacetIndexRecord",
+    "FacetModel",
+    "FacetType",
+    "PICOFacet",
+]

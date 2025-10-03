@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from typing import cast
+
+import httpx
+import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from Medical_KG.retrieval.api import create_router
 from Medical_KG.retrieval.models import RetrievalRequest, RetrievalResponse, RetrievalResult, RetrieverScores, RetrieverTiming
+from Medical_KG.retrieval.service import RetrievalService
 
 
 class StubRetrievalService:
@@ -33,13 +37,21 @@ class StubRetrievalService:
         )
 
 
-def test_retrieval_api_transforms_response() -> None:
+@pytest.mark.asyncio
+async def test_retrieval_api_transforms_response() -> None:
     app = FastAPI()
-    router = create_router(StubRetrievalService())
+    router = create_router(cast(RetrievalService, StubRetrievalService()))
     app.include_router(router)
-    client = TestClient(app)
-    payload = {"query": "pembrolizumab", "topK": 5, "from": 2, "filters": {"facet": "drug"}, "explain": True}
-    response = client.post("/retrieve", json=payload)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        payload = {
+            "query": "pembrolizumab",
+            "topK": 5,
+            "from": 2,
+            "filters": {"facet": "drug"},
+            "explain": True,
+        }
+        response = await client.post("/retrieve", json=payload)
     assert response.status_code == 200
     body = response.json()
     assert body["results"][0]["metadata"]["foo"] == "bar"

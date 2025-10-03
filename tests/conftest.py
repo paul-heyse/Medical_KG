@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import os
 import sys
 import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Mapping, Sequence
+from types import FrameType
+from typing import Any, Mapping, Sequence, cast
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 PACKAGE_ROOT = SRC / "Medical_KG"
@@ -20,12 +23,8 @@ from trace import Trace
 
 import pytest
 
-from Medical_KG.retrieval.models import (
-    RetrievalRequest,
-    RetrievalResponse,
-    RetrievalResult,
-    RetrieverScores,
-)
+from Medical_KG.retrieval.models import RetrievalRequest, RetrievalResponse, RetrievalResult, RetrieverScores
+from Medical_KG.retrieval.types import JSONValue, SearchHit, VectorHit
 
 
 @pytest.fixture
@@ -34,9 +33,13 @@ def monkeypatch_fixture(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
 
 _TRACE = Trace(count=True, trace=False)
 
+
 def _activate_tracing() -> None:  # pragma: no cover - instrumentation only
-    sys.settrace(_TRACE.globaltrace)
-    threading.settrace(_TRACE.globaltrace)
+    trace_func = cast(Any, _TRACE.globaltrace)
+    if trace_func is None:
+        return
+    sys.settrace(trace_func)
+    threading.settrace(trace_func)
 
 
 if os.environ.get("DISABLE_COVERAGE_TRACE") != "1":
@@ -45,7 +48,7 @@ if os.environ.get("DISABLE_COVERAGE_TRACE") != "1":
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # pragma: no cover - instrumentation only
     sys.settrace(None)
-    threading.settrace(None)
+    threading.settrace(cast(Any, None))
     if os.environ.get("DISABLE_COVERAGE_TRACE") == "1":
         return
     results = _TRACE.results()
@@ -120,6 +123,111 @@ def _statement_lines(path: Path) -> set[int]:
 
 
 # ---------------------------------------------------------------------------
+# Ingestion testing utilities
+
+
+@dataclass
+class FakeLedger:
+    """In-memory ledger that mirrors :class:`IngestionLedger`."""
+
+    records: MutableMapping[str, LedgerEntry] = field(default_factory=dict)
+    writes: list[LedgerEntry] = field(default_factory=list)
+
+    def record(self, doc_id: str, state: str, metadata: Mapping[str, Any] | None = None) -> LedgerEntry:
+        entry = LedgerEntry(
+            doc_id=doc_id,
+            state=state,
+            timestamp=datetime.now(timezone.utc),
+            metadata=dict(metadata or {}),
+        )
+        self.records[doc_id] = entry
+        self.writes.append(entry)
+        return entry
+
+    def get(self, doc_id: str) -> LedgerEntry | None:
+        return self.records.get(doc_id)
+
+    def entries(self, *, state: str | None = None) -> Iterable[LedgerEntry]:
+        values = list(self.records.values())
+        if state is None:
+            return values
+        return [entry for entry in values if entry.state == state]
+
+
+@dataclass
+class FakeRegistry:
+    """Simple adapter registry for CLI tests."""
+
+    adapters: MutableMapping[str, Callable[[Any, Any, Any], Any]] = field(default_factory=dict)
+
+    def register(self, source: str, factory: Callable[[Any, Any, Any], Any]) -> None:
+        self.adapters[source] = factory
+
+    def available_sources(self) -> list[str]:
+        return sorted(self.adapters)
+
+    def get_adapter(self, source: str, context: Any, client: Any, **kwargs: Any) -> Any:
+        try:
+            factory = self.adapters[source]
+        except KeyError as exc:
+            raise ValueError(f"Unknown adapter source: {source}") from exc
+        return factory(context, client, **kwargs)
+
+
+@pytest.fixture
+def fake_ledger() -> FakeLedger:
+    return FakeLedger()
+
+
+@pytest.fixture
+def fake_registry() -> FakeRegistry:
+    return FakeRegistry()
+
+
+@pytest.fixture
+def sample_document_factory() -> Callable[[str, str, str, MutableMapping[str, Any] | None, Any], Document]:
+    def _factory(
+        doc_id: str = "doc-1",
+        source: str = "demo",
+        content: str = "text",
+        metadata: MutableMapping[str, Any] | None = None,
+        raw: Any | None = None,
+    ) -> Document:
+        return Document(doc_id=doc_id, source=source, content=content, metadata=metadata or {}, raw=raw)
+
+    return _factory
+
+
+@pytest.fixture
+def httpx_mock_transport(monkeypatch: pytest.MonkeyPatch) -> Callable[[Callable[..., Any]], None]:
+    """Patch httpx AsyncClient creation to use a MockTransport."""
+
+    HTTPX = get_httpx_module()
+    clients: list[Any] = []
+
+    def _factory(handler: Callable[[Any], Any]) -> Any:
+        transport = HTTPX.MockTransport(handler)
+
+        def _create_async_client(**kwargs: Any) -> Any:
+            client = HTTPX.AsyncClient(transport=transport, **kwargs)
+            clients.append(client)
+            return client
+
+        monkeypatch.setattr("Medical_KG.compat.httpx.create_async_client", _create_async_client)
+
+        return transport
+
+    yield _factory
+
+    for client in clients:
+        try:
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(client.aclose())
+        finally:
+            loop.close()
+
+
+# ---------------------------------------------------------------------------
 # Shared retrieval fixtures
 
 
@@ -152,26 +260,32 @@ class FakeSpladeEncoder:
 class FakeOpenSearchClient:
     """In-memory OpenSearch facade keyed by index name."""
 
-    hits_by_index: Mapping[str, Sequence[Mapping[str, Any]]]
-    executed: list[tuple[str, Dict[str, Any]]] = field(default_factory=list)
+    hits_by_index: Mapping[str, Sequence[SearchHit]]
+    executed: list[tuple[str, dict[str, JSONValue]]] = field(default_factory=list)
 
-    def search(self, *, index: str, body: Mapping[str, Any], size: int) -> Sequence[Mapping[str, Any]]:
+    def search(
+        self,
+        *,
+        index: str,
+        body: Mapping[str, JSONValue],
+        size: int,
+    ) -> Sequence[SearchHit]:
         self.executed.append((index, dict(body)))
         hits = list(self.hits_by_index.get(index, ()))
-        return [dict(hit) for hit in hits[:size]]
+        return [cast(SearchHit, dict(hit)) for hit in hits[:size]]
 
 
 @dataclass
 class FakeVectorClient:
     """Vector store returning pre-seeded hits regardless of embedding."""
 
-    hits: Sequence[Mapping[str, Any]]
+    hits: Sequence[VectorHit]
     queries: list[Sequence[float]] = field(default_factory=list)
 
-    def query(self, *, index: str, embedding: Sequence[float], top_k: int) -> Sequence[Mapping[str, Any]]:
+    def query(self, *, index: str, embedding: Sequence[float], top_k: int) -> Sequence[VectorHit]:
         _ = index
         self.queries.append(tuple(embedding))
-        return [dict(hit) for hit in self.hits[:top_k]]
+        return [cast(VectorHit, dict(hit)) for hit in self.hits[:top_k]]
 
 
 @dataclass
@@ -212,8 +326,8 @@ def fake_splade_encoder() -> FakeSpladeEncoder:
 
 
 @pytest.fixture
-def fake_vector_hits() -> Sequence[Mapping[str, Any]]:
-    return (
+def fake_vector_hits() -> Sequence[VectorHit]:
+    hits: list[VectorHit] = [
         {
             "chunk_id": "chunk-dense-1",
             "doc_id": "doc-10",
@@ -228,17 +342,18 @@ def fake_vector_hits() -> Sequence[Mapping[str, Any]]:
             "score": 0.88,
             "metadata": {"cosine": 0.88},
         },
-    )
+    ]
+    return hits
 
 
 @pytest.fixture
-def fake_vector_client(fake_vector_hits: Sequence[Mapping[str, Any]]) -> FakeVectorClient:
+def fake_vector_client(fake_vector_hits: Sequence[VectorHit]) -> FakeVectorClient:
     return FakeVectorClient(hits=fake_vector_hits)
 
 
 @pytest.fixture
-def fake_opensearch_hits() -> Mapping[str, Sequence[Mapping[str, Any]]]:
-    shared = [
+def fake_opensearch_hits() -> Mapping[str, Sequence[SearchHit]]:
+    shared: list[SearchHit] = [
         {
             "chunk_id": "chunk-bm25-1",
             "doc_id": "doc-1",
@@ -254,7 +369,7 @@ def fake_opensearch_hits() -> Mapping[str, Sequence[Mapping[str, Any]]]:
             "metadata": {"cosine": 0.89},
         },
     ]
-    splade = [
+    splade: list[SearchHit] = [
         {
             "chunk_id": "chunk-splade-1",
             "doc_id": "doc-3",
@@ -263,7 +378,7 @@ def fake_opensearch_hits() -> Mapping[str, Sequence[Mapping[str, Any]]]:
             "metadata": {},
         }
     ]
-    graph = [
+    graph: list[SearchHit] = [
         {
             "chunk_id": "chunk-graph-1",
             "doc_id": "doc-neo4j",
@@ -280,7 +395,7 @@ def fake_opensearch_hits() -> Mapping[str, Sequence[Mapping[str, Any]]]:
 
 
 @pytest.fixture
-def fake_opensearch_client(fake_opensearch_hits: Mapping[str, Sequence[Mapping[str, Any]]]) -> FakeOpenSearchClient:
+def fake_opensearch_client(fake_opensearch_hits: Mapping[str, Sequence[SearchHit]]) -> FakeOpenSearchClient:
     return FakeOpenSearchClient(hits_by_index=fake_opensearch_hits)
 
 

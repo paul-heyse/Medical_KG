@@ -1,15 +1,17 @@
 """Post-generation facet normalization utilities."""
+
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from Medical_KG.facets.models import (
     AdverseEventFacet,
     DoseFacet,
     EndpointFacet,
     Facet,
+    FacetModel,
 )
 
 CI_PATTERN = re.compile(r"(?P<low>-?\d+(?:\.\d+)?)\s*(?:–|-|to|,)\s*(?P<high>-?\d+(?:\.\d+)?)")
@@ -104,10 +106,10 @@ def normalize_dose(facet: DoseFacet, *, text: str) -> DoseFacet:
 class NormalizationPlan:
     """Defines which normalizers to apply for a generated facet."""
 
-    facet: Facet
+    facet: FacetModel
     text: str
 
-    def execute(self) -> Facet:
+    def execute(self) -> FacetModel:
         if isinstance(self.facet, EndpointFacet):
             return normalize_endpoint(self.facet, text=self.text)
         if isinstance(self.facet, AdverseEventFacet):
@@ -117,12 +119,12 @@ class NormalizationPlan:
         return self.facet
 
 
-def normalize_facets(facets: Iterable[Facet], *, text: str) -> list[Facet]:
+def normalize_facets(facets: Iterable[FacetModel], *, text: str) -> list[FacetModel]:
     return [NormalizationPlan(facet=facet, text=text).execute() for facet in facets]
 
 
-def drop_low_confidence_codes(facets: Iterable[Facet]) -> list[Facet]:
-    sanitized: list[Facet] = []
+def drop_low_confidence_codes(facets: Iterable[FacetModel]) -> list[FacetModel]:
+    sanitized: list[FacetModel] = []
     for facet in facets:
         if isinstance(facet, EndpointFacet):
             facet.outcome_codes = [code for code in facet.outcome_codes if (code.confidence or 0) >= 0.5]

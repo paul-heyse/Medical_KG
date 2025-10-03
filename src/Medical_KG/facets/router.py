@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
 from Medical_KG.facets.models import FacetType
 
@@ -65,7 +65,7 @@ class FacetRouter:
         return votes
 
     def detect(self, text: str, *, section: str | None = None) -> list[FacetType]:
-        votes = Counter()
+        votes: Counter[FacetType] = Counter()
         votes.update(self._header_votes())
         votes.update(self._text_votes(text))
         votes.update(self._section_votes(section))
@@ -76,11 +76,19 @@ class FacetRouter:
 
     @classmethod
     def detect_multiple(
-        cls, chunks: Iterable[tuple[str, dict[str, str | None]]]
+        cls, chunks: Iterable[tuple[str, Mapping[str, Sequence[str] | str | None]]]
     ) -> dict[int, list[FacetType]]:
         routing: dict[int, list[FacetType]] = {}
         for idx, (text, metadata) in enumerate(chunks):
-            router = cls(table_headers=metadata.get("table_headers") or [])
-            section = metadata.get("section")
+            table_headers_value = metadata.get("table_headers")
+            if isinstance(table_headers_value, Sequence) and not isinstance(table_headers_value, str):
+                headers = list(table_headers_value)
+            elif isinstance(table_headers_value, str):
+                headers = [table_headers_value]
+            else:
+                headers = []
+            router = cls(table_headers=headers)
+            section_value = metadata.get("section")
+            section = section_value if isinstance(section_value, str) else None
             routing[idx] = router.detect(text, section=section)
         return routing

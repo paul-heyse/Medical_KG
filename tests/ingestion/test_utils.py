@@ -22,3 +22,15 @@ def test_generate_doc_id_uses_hash() -> None:
     doc_id = utils.generate_doc_id("source", "id", "v1", content)
     assert doc_id.startswith("source:id#v1:")
     assert len(doc_id.split(":")[-1]) == 12
+
+
+def test_hash_content_matches_sha256() -> None:
+    digest = utils.hash_content(b"payload")
+    assert len(digest) == 64
+    assert digest.startswith("239f59")
+
+
+def test_canonical_json_sorts_keys() -> None:
+    payload = {"b": 1, "a": 2}
+    encoded = utils.canonical_json(payload)
+    assert encoded == b"{\"a\":2,\"b\":1}"

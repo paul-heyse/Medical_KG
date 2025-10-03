@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from threading import Lock
-from typing import Callable, Dict, Generic, Hashable, Iterable, MutableMapping, Tuple, TypeVar
+from typing import Callable, Dict, Generic, Hashable, Protocol, TypeVar
 
 T = TypeVar("T")
 
@@ -13,6 +13,25 @@ T = TypeVar("T")
 class _Entry(Generic[T]):
     value: T
     expires_at: datetime
+
+
+class CacheProtocol(Protocol[T]):
+    """Typed interface for cache implementations used by retrieval."""
+
+    def get_or_set(self, key: Hashable, factory: Callable[[], T]) -> T:
+        ...
+
+    def get(self, key: Hashable) -> T | None:
+        ...
+
+    def set(self, key: Hashable, value: T) -> None:
+        ...
+
+    def invalidate(self, key: Hashable) -> None:
+        ...
+
+    def clear(self) -> None:
+        ...
 
 
 class TTLCache(Generic[T]):
@@ -59,4 +78,4 @@ class TTLCache(Generic[T]):
             self._data.clear()
 
 
-__all__ = ["TTLCache"]
+__all__ = ["TTLCache", "CacheProtocol"]

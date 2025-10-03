@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Callable, List, Sequence
 
 from Medical_KG.compat import ClientProtocol, create_client
+from Medical_KG.utils.optional_dependencies import HttpxModule, get_httpx_module
 
 HTTPX: HttpxModule = get_httpx_module()
 

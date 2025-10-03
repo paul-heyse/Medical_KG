@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from typing import Mapping, Sequence
 
 import pytest
 
@@ -8,8 +8,10 @@ from Medical_KG.retrieval.caching import TTLCache
 from Medical_KG.retrieval.models import RetrievalRequest
 from Medical_KG.retrieval.service import RetrievalService, RetrieverConfig
 from Medical_KG.retrieval.intent import IntentRule
+from Medical_KG.retrieval.ontology import OntologyExpander
+from Medical_KG.retrieval.types import SearchHit, VectorHit
 
-from conftest import (
+from tests.conftest import (
     FakeOpenSearchClient,
     FakeQwenEmbedder,
     FakeSpladeEncoder,
@@ -17,8 +19,9 @@ from conftest import (
 )
 
 
-class CountingOntology:
+class CountingOntology(OntologyExpander):
     def __init__(self) -> None:
+        super().__init__()
         self.calls: list[str] = []
 
     def expand(self, query: str) -> dict[str, float]:
@@ -80,10 +83,8 @@ def test_ttl_cache_basic_cycle() -> None:
 
 
 def test_ttl_cache_expiration(monkeypatch: pytest.MonkeyPatch) -> None:
-    cache: TTLCache[int] = TTLCache(ttl_seconds=10)
+    cache: TTLCache[int] = TTLCache(ttl_seconds=0)
     cache.set("key", 99)
-    entry = cache._data["key"]  # type: ignore[attr-defined]
-    entry.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
     assert cache.get("key") is None
 
 
@@ -116,8 +117,8 @@ async def test_cache_miss_after_invalidation(cache_service: RetrievalService, fa
 
 @pytest.mark.asyncio
 async def test_embedding_cache_reuses_vectors(
-    fake_opensearch_hits: dict[str, list[dict[str, object]]],
-    fake_vector_hits: list[dict[str, object]],
+    fake_opensearch_hits: Mapping[str, Sequence[SearchHit]],
+    fake_vector_hits: Sequence[VectorHit],
 ) -> None:
     embedder = FakeQwenEmbedder({"query": [0.1, 0.2, 0.3]})
     service = RetrievalService(
@@ -153,8 +154,8 @@ async def test_embedding_cache_reuses_vectors(
 
 @pytest.mark.asyncio
 async def test_expansion_cache_avoids_duplicate_calls(
-    fake_opensearch_hits: dict[str, list[dict[str, object]]],
-    fake_vector_hits: list[dict[str, object]],
+    fake_opensearch_hits: Mapping[str, Sequence[SearchHit]],
+    fake_vector_hits: Sequence[VectorHit],
 ) -> None:
     ontology = CountingOntology()
     service = RetrievalService(

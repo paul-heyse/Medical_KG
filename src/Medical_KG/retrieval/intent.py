@@ -5,13 +5,15 @@ import re
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 
+from .types import JSONValue
+
 
 @dataclass(frozen=True)
 class IntentRule:
     name: str
     keywords: tuple[re.Pattern[str], ...]
     boosts: Mapping[str, float]
-    filters: Mapping[str, object]
+    filters: Mapping[str, JSONValue]
 
 
 class IntentClassifier:
@@ -28,7 +30,7 @@ class IntentClassifier:
                 return rule.name
         return self._default
 
-    def context_for(self, intent: str) -> tuple[Mapping[str, float], Mapping[str, object]]:
+    def context_for(self, intent: str) -> tuple[Mapping[str, float], Mapping[str, JSONValue]]:
         for rule in self._rules:
             if rule.name == intent:
                 return rule.boosts, rule.filters

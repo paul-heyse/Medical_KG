@@ -1,12 +1,11 @@
 """Facet orchestration service."""
-from __future__ import annotations
 
 from __future__ import annotations
 
 import hashlib
 from collections import defaultdict
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Iterable, Mapping
 
 from pydantic import ValidationError
 
@@ -17,7 +16,7 @@ from Medical_KG.facets.generator import (
     load_facets,
     serialize_facets,
 )
-from Medical_KG.facets.models import Facet, FacetIndexRecord, FacetModel, FacetType
+from Medical_KG.facets.models import FacetIndexRecord, FacetModel
 from Medical_KG.facets.router import FacetRouter
 from Medical_KG.facets.validator import FacetValidationError, FacetValidator
 from Medical_KG.facets.dedup import deduplicate_facets
@@ -44,7 +43,7 @@ class FacetStorage:
         self._doc_cache: dict[str, list[str]] = {}
         self._meta: dict[str, dict[str, str]] = {}
 
-    def set(self, chunk_id: str, doc_id: str, facets: Iterable[Facet]) -> None:
+    def set(self, chunk_id: str, doc_id: str, facets: Iterable[FacetModel]) -> None:
         payloads = serialize_facets(list(facets))
         self._by_chunk[chunk_id] = payloads
         self._chunk_doc[chunk_id] = doc_id
@@ -131,6 +130,9 @@ class FacetService:
 
     def document_facets(self, doc_id: str) -> list[FacetModel]:
         return self._storage.get_document_facets(doc_id)
+
+    def metadata(self, chunk_id: str) -> Mapping[str, str]:
+        return self._storage.metadata(chunk_id)
 
     @property
     def escalation_queue(self) -> list[str]:

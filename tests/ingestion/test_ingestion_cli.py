@@ -6,7 +6,7 @@ import sys
 import types
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import pytest
 
@@ -63,8 +63,6 @@ if "typer" not in sys.modules:
 from Medical_KG.ingestion import cli
 from Medical_KG.ingestion.models import Document, IngestionResult
 
-RegistryFactory = Callable[[list[IngestionResult]], list[dict[str, object]]]
-
 
 @pytest.fixture(autouse=True)
 def reset_event_loop_policy() -> None:
@@ -87,8 +85,10 @@ def dummy_client(monkeypatch: pytest.MonkeyPatch) -> DummyClient:
 
 
 @pytest.fixture
-def make_registry(monkeypatch: pytest.MonkeyPatch) -> RegistryFactory:
-    def _factory(results: list[IngestionResult]) -> list[dict[str, object]]:
+def configure_registry(
+    monkeypatch: pytest.MonkeyPatch, fake_registry: Any
+) -> Callable[[list[IngestionResult]], list[dict[str, object]]]:
+    def _configure(results: list[IngestionResult]) -> list[dict[str, object]]:
         calls: list[dict[str, object]] = []
 
         class _Adapter:
@@ -96,17 +96,15 @@ def make_registry(monkeypatch: pytest.MonkeyPatch) -> RegistryFactory:
                 calls.append(params)
                 return results
 
-        class _Registry:
-            def available_sources(self) -> list[str]:
-                return ["demo"]
+        def _factory(_context: object, _client: DummyClient, **_kwargs: object) -> _Adapter:
+            return _Adapter()
 
-            def get_adapter(self, _source: str, _context: object, _client: DummyClient) -> _Adapter:
-                return _Adapter()
-
-        monkeypatch.setattr(cli, "_resolve_registry", lambda: _Registry())
+        fake_registry.adapters.clear()
+        fake_registry.register("demo", _factory)
+        monkeypatch.setattr(cli, "_resolve_registry", lambda: fake_registry)
         return calls
 
-    return _factory
+    return _configure
 
 
 def _result(doc_id: str) -> IngestionResult:
@@ -123,10 +121,10 @@ def test_load_batch_skips_empty_lines(tmp_path: Path) -> None:
 
 
 def test_ingest_with_batch_outputs_doc_ids(
-    dummy_client: DummyClient, make_registry: RegistryFactory, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    dummy_client: DummyClient, configure_registry: Callable[[list[IngestionResult]], list[dict[str, object]]], tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     results = [_result("doc-1"), _result("doc-2")]
-    calls = make_registry(results)
+    calls = configure_registry(results)
 
     batch = tmp_path / "batch.jsonl"
     batch.write_text("\n".join([json.dumps({"param": "value"}), json.dumps({"param": "second"})]))
@@ -142,10 +140,10 @@ def test_ingest_with_batch_outputs_doc_ids(
 
 
 def test_ingest_without_batch_runs_once(
-    dummy_client: DummyClient, make_registry: RegistryFactory, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    dummy_client: DummyClient, configure_registry: Callable[[list[IngestionResult]], list[dict[str, object]]], tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     results = [_result("doc-3")]
-    calls = make_registry(results)
+    calls = configure_registry(results)
     ledger_path = tmp_path / "ledger.jsonl"
 
     cli.ingest("demo", batch=None, auto=True, ledger_path=ledger_path)
@@ -157,8 +155,8 @@ def test_ingest_without_batch_runs_once(
     assert calls == [{}]
 
 
-def test_ingest_rejects_unknown_source(make_registry: RegistryFactory) -> None:
-    make_registry([])
+def test_ingest_rejects_unknown_source(configure_registry: Callable[[list[IngestionResult]], list[dict[str, object]]]) -> None:
+    configure_registry([])
 
     with pytest.raises(sys.modules["typer"].BadParameter):
         cli.ingest("unknown")

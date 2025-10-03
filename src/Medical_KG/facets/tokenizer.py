@@ -2,14 +2,16 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Optional
 
-from Medical_KG.utils.optional_dependencies import TokenEncoder, get_tiktoken_encoding
+from Medical_KG.compat import EncodingProtocol, load_encoding
 
 
 @lru_cache(maxsize=1)
-def _encoding() -> Optional[TokenEncoder]:
-    return get_tiktoken_encoding()
+def _encoding() -> EncodingProtocol | None:
+    try:
+        return load_encoding("cl100k_base")
+    except Exception:  # pragma: no cover - fallback path
+        return None
 
 
 def count_tokens(text: str) -> int:

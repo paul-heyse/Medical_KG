@@ -12,20 +12,18 @@ from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Dict, Mapping, MutableMapping, Optional, cast
 
 import yaml
 
-from Medical_KG.types.json import JSONMapping, JSONObject, JSONValue, MutableJSONMapping
-from Medical_KG.utils.optional_dependencies import GaugeProtocol, build_gauge
-
-from .models import AuthSettings, Config, PolicyDocument, validate_constraints
+from Medical_KG.compat.prometheus import Gauge, GaugeLike
+from .models import Config, PolicyDocument, validate_constraints
 
 
-CONFIG_INFO: GaugeProtocol = build_gauge(
+CONFIG_INFO: GaugeLike = Gauge(
     "config_info", "Current configuration metadata", ["version", "hash"]
 )
-FEATURE_FLAG: GaugeProtocol = build_gauge("feature_flag", "Feature flag states", ["name"])
+FEATURE_FLAG: GaugeLike = Gauge("feature_flag", "Feature flag states", ["name"])
 
 ENV_SIMPLE_PATHS: Mapping[str, str] = {
     "VLLM_API_BASE": "embeddings.vllm_api_base",
@@ -176,9 +174,7 @@ class ConfigManager:
         secret_resolver: SecretResolver | None = None,
     ) -> None:
         self.base_path = base_path or Path(__file__).resolve().parent
-        env_value = env if env is not None else os.getenv("CONFIG_ENV")
-        if env_value is None:
-            env_value = "dev"
+        env_value = env if env is not None else os.getenv("CONFIG_ENV", "dev")
         self.env = env_value.lower()
         self.secret_resolver = secret_resolver or SecretResolver()
         self.validator = ConfigValidator(self.base_path / "config.schema.json")
@@ -305,11 +301,9 @@ class ConfigManager:
         for part in parts[:-1]:
             next_value = cursor.get(part)
             if not isinstance(next_value, MutableMapping):
-                new_child: dict[str, JSONValue] = {}
-                cursor[part] = new_child
-                cursor = new_child
-            else:
-                cursor = cast(MutableJSONMapping, next_value)
+                next_value = {}
+                cursor[part] = next_value
+            cursor = cast(MutableMapping[str, Any], next_value)
         cursor[parts[-1]] = value
 
     def _resolve_placeholders(self, payload: JSONMapping) -> JSONObject:

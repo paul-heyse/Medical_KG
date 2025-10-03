@@ -1,52 +1,69 @@
-# Type Safety Guidelines (Work-in-Progress)
+# Type Safety Guidelines
 
-## Suppression Audit
-- `# type: ignore`: none in repository after removing legacy patch artifacts.
-- mypy config: `strict = true`, no `exclude` or `ignore_missing_imports` entries.
+This repository adopts strict type checking as part of the "type-safety" capability. All
+first-party modules must pass `mypy --strict` and optional dependencies are accessed
+through typed facades that keep `Any` from leaking into the codebase.
 
-## Optional Dependency Facades
+## Required Workflow
 
-- `Medical_KG.utils.optional_dependencies` now exposes Protocol-backed helpers for:
-  - token counting (tiktoken encodings)
-  - spaCy language pipelines
-  - torch CUDA enforcement
-  - Prometheus gauges, counters, and histograms used by metrics exporters
-  - HTTPX clients, responses, transports, and ASGI adapters
-  - Locust `HttpUser`, `between`, and `task` helpers
-- Downstream modules import these helpers instead of performing ad-hoc optional imports. Example:
+1. **Annotate new code** – functions, methods, and module-level constants MUST be
+   annotated. Prefer concrete collection types (`list[str]`) over abstract `Any`.
+2. **Use typed facades for optionals** – when working with `httpx`, `locust`, `spaCy`,
+   `torch`, or `tiktoken`, import from `Medical_KG.compat` to obtain Protocol-based
+   wrappers. These helpers degrade gracefully when the dependency is absent while
+   preserving accurate type information for mypy.
+3. **Avoid suppressions** – do not introduce `# type: ignore` comments or loosen the
+   mypy configuration. Instead, define Protocols, TypedDicts, or helper functions to
+   model the behaviour precisely.
+4. **Run mypy locally** – execute `mypy --strict src/Medical_KG` (and targeted
+   directories under `tests/`) before opening a pull request. CI rejects changes that
+   reintroduce type violations.
+
+## Patterns & Examples
+
+### Optional HTTP Clients
 
 ```python
-from Medical_KG.utils.optional_dependencies import get_httpx_module
+from Medical_KG.compat import AsyncClientProtocol, create_async_client
 
-HTTPX = get_httpx_module()
-
-async with HTTPX.AsyncClient(transport=HTTPX.ASGITransport(app=app), base_url="http://test") as client:
-    response = await client.post("/facets/generate", json={"chunk_ids": ["chunk-1"]})
-    response.raise_for_status()
+client: AsyncClientProtocol = create_async_client(timeout=5.0)
+response = await client.request("GET", "https://example.com")
+response.raise_for_status()
 ```
 
-- When the dependency is absent the helper either returns `None` (for optional features like spaCy) or raises a descriptive `ModuleNotFoundError` (for tooling that must be explicitly installed such as Locust and HTTPX).
+### spaCy Pipelines
 
-## Typed Tests and Fixtures
+```python
+from Medical_KG.compat import load_pipeline
 
-- All fixtures in `tests/ingestion/`, `tests/config/test_cli.py`, and `tests/test_retrieval_service.py` now declare explicit return types to satisfy `mypy --strict`.
-- Async helper utilities (e.g., `_run` wrappers) accept `Awaitable[T]` and return `T`, preventing leakage of `Any` from coroutine scheduling helpers.
-- Test doubles for optional dependencies (HTTPX transports, Locust users) rely on the shared Protocols exported by `optional_dependencies` so strict type checking succeeds without local stub modules.
+nlp = load_pipeline("en_core_sci_sm")
+if nlp is None:
+    return []
+return [ent.text for ent in nlp(text).ents]
+```
 
-## JSON Payload Typing
-- Added `Medical_KG.types.json` as the shared source of JSON-compatible type aliases
-  (`JSONValue`, `JSONObject`, etc.) so config and ingestion modules no longer fall
-  back to ``Any`` when manipulating nested dictionaries.
-- `ConfigManager` now consumes these aliases, guaranteeing that deep merges,
-  environment overrides, and placeholder resolution work entirely on typed
-  payloads.
+### Typed Tokenisation
 
-## Core Service Configurations
-- `Medical_KG.config.models` exposes dataclasses for auth settings and the PDF
-  pipeline, providing strongly typed accessors for downstream services.
-- CLI entrypoints consume the new `PdfPipelineSettings`, eliminating the
-  previous `dict` indexing and ensuring path handling stays typed end-to-end.
-- `ConfigManager.validate_jwt` validates tokens against the typed
-  `AuthSettings`, removing dictionary lookups and stringly-typed scope checks.
+```python
+from Medical_KG.compat import load_encoding
 
-Further sections will be completed alongside implementation.
+encoding = load_encoding("cl100k_base")
+if encoding is None:
+    return len(text.split())
+return len(encoding.encode(text))
+```
+
+## Test Fixtures
+
+- Provide annotations for fixtures and monkeypatch helpers in `conftest.py`.
+- Prefer Protocol-based mocks so mypy can enforce call signatures.
+- Avoid manipulating `sys.path`; use `importlib` and typed factories instead.
+
+## Enforcement
+
+- `pyproject.toml` configures `mypy` in strict mode.
+- CI runs `mypy --strict` and `pytest` for every PR.
+- Any attempt to add suppressions or relax strictness will fail the build.
+
+For quick reference, keep the compatibility helpers in mind and consult this document
+when introducing new optional dependencies or asynchronous adapters.

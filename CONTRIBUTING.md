@@ -1,18 +1,30 @@
-# Contributing Guidelines
+# Contributing
 
-## Type-Safe Optional Dependencies
-- Import optional third-party packages through `Medical_KG.utils.optional_dependencies`.
-  - Use `get_httpx_module()` for HTTPX clients and transports.
-  - Use `load_locust()` for Locust load tests.
-  - Use `build_counter`/`build_histogram` when exporting Prometheus metrics.
-- Avoid direct `try/except ImportError` blocks in modules—extend the shared helper instead.
+Thanks for supporting the Medical KG project! To keep the codebase healthy and fully typed,
+please follow the steps below before sending a pull request.
 
-## Tests & Fixtures
-- Annotate pytest fixtures and async helpers with explicit types. Reuse the shared `_run` helper pattern from `tests/ingestion/test_adapters.py` when driving async adapters.
-- When mocking optional dependencies (HTTPX transports, Locust users), rely on the Protocols returned by `optional_dependencies` so `mypy --strict` passes without local stubs.
-- Run `PYTHONPATH=src python -m mypy --strict tests/...` for touched directories and ensure the coverage hook (`pytest -q`) continues to meet the 95% requirement.
+## Checklist
 
-## Pull Request Checklist
-- Include documentation updates in `docs/type_safety.md` when introducing new patterns.
-- Regenerate or capture OpenAPI diffs if API routes change.
-- Update relevant OpenSpec task checklists after completing staged work.
+1. **Create typed modules** – every new function, method, and class MUST include type
+   annotations. Avoid `Any` unless interfacing with third-party libraries and prefer the
+   typed facades in [`Medical_KG.compat`](./src/Medical_KG/compat/).
+2. **Handle optional dependencies via compat** – use helpers such as `create_async_client`,
+   `load_pipeline`, `load_encoding`, and `load_locust` so strict mypy checks work even when
+   optional packages are missing locally.
+3. **Run quality gates**:
+   - `ruff check src tests`
+   - `mypy --strict src/Medical_KG`
+   - `pytest -q`
+4. **Update docs** – if you add new patterns or optional integrations, document the
+   approach in [`docs/type_safety.md`](./docs/type_safety.md).
+
+## Coding Standards
+
+- Keep functions under ~50 lines and extract helpers rather than using `# type: ignore`.
+- Prefer `Annotated` fields with `pydantic.Field` over assigning `Field` to typed
+  attributes directly.
+- Use Protocols or TypedDicts for structured payloads instead of plain dictionaries.
+- Avoid monkeypatching `sys.path`; use `importlib` and typed factories for dynamic imports.
+
+Adhering to these conventions ensures `mypy --strict` remains green and that optional
+runtime dependencies do not leak `Any` types back into the application.

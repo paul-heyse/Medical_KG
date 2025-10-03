@@ -27,9 +27,9 @@
 - [ ] 5.3 Add coverage reports (via mypy --strict --html-report) if useful
 
 ## 6. Documentation & Governance
-- [ ] 6.1 Create `docs/type_safety.md` with guidelines (optional imports, protocols, TypedDicts)
-- [ ] 6.2 Update CONTRIBUTING to require annotations for new modules
-- [ ] 6.3 Provide quick reference examples (async adapters, optional deps, contexts)
+- [x] 6.1 Create `docs/type_safety.md` with guidelines (optional imports, protocols, TypedDicts)
+- [x] 6.2 Update CONTRIBUTING to require annotations for new modules
+- [x] 6.3 Provide quick reference examples (async adapters, optional deps, contexts)
 
 ## 7. Verification
 - [ ] 7.1 mypy --strict passes with zero ignores

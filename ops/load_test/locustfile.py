@@ -20,13 +20,13 @@ from __future__ import annotations
 
 import random
 
-from Medical_KG.utils.optional_dependencies import load_locust
+from Medical_KG.compat import load_locust
 
+locust_primitives = load_locust()
+if locust_primitives is None:  # pragma: no cover - exercised only without locust
+    raise RuntimeError("locust must be installed to run load tests")
 
-LOCUST = load_locust()
-HttpUser = LOCUST.HttpUser
-between = LOCUST.between
-task = LOCUST.task
+HttpUser, between, task = locust_primitives
 
 
 class MedicalKGUser(HttpUser):

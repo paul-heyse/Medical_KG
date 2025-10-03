@@ -56,6 +56,11 @@ All proposals validated with `openspec validate --strict` ✅
 - **FOLLOWUP_SUMMARY.md** - Executive summary (4KB)
 - **IMPLEMENTATION_PLAN.md** - Complete implementation guide (this file)
 
+### Latest Progress
+
+- Clinical catalog adapters (ClinicalTrials, openFDA, DailyMed, RxNorm, AccessGUDID) now emit the refactored `ClinicalDocumentPayload`/`OpenFdaDocumentPayload` structures without runtime casts, and `Document.raw` is typed through the new `DocumentRaw` alias.
+- Guideline adapters (NICE, CDC Socrata) serialize through shared JSON coercion helpers, and adapter tests assert the shaped TypedDict payloads so optional fields remain covered.
+
 ### Total Scope
 
 - **169 implementation tasks** across 7 proposals

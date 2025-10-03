@@ -4,12 +4,26 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterable, Protocol
 
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion import registry as ingestion_registry
+
+
+class AdapterRegistry(Protocol):
+    def get_adapter(
+        self,
+        source: str,
+        context: AdapterContext,
+        client: AsyncHttpClient,
+        **kwargs: Any,
+    ) -> BaseAdapter[Any]:
+        ...
+
+    def available_sources(self) -> list[str]:
+        ...
 
 
 @dataclass(slots=True)
@@ -27,7 +41,7 @@ class IngestionPipeline:
         self,
         ledger: IngestionLedger,
         *,
-        registry: Any | None = None,
+        registry: AdapterRegistry | None = None,
         client_factory: type[AsyncHttpClient] | None = None,
     ) -> None:
         self.ledger = ledger
@@ -77,7 +91,7 @@ class IngestionPipeline:
 
     async def _invoke(
         self,
-        adapter: BaseAdapter,
+        adapter: BaseAdapter[Any],
         params: dict[str, Any],
         *,
         resume: bool,
@@ -87,7 +101,7 @@ class IngestionPipeline:
         results = list(await adapter.run(**invocation_params))
         return [result.document.doc_id for result in results]
 
-    def _resolve_adapter(self, source: str, client: AsyncHttpClient) -> BaseAdapter:
+    def _resolve_adapter(self, source: str, client: AsyncHttpClient) -> BaseAdapter[Any]:
         return self._registry.get_adapter(source, AdapterContext(ledger=self.ledger), client)
 
 __all__ = [

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
-from collections.abc import AsyncIterator
-from typing import Any, Iterable, Mapping, cast
+from collections.abc import AsyncIterator, Iterable, Mapping as MappingABC, Sequence as SequenceABC
+from typing import Any, Iterator, Mapping
 from urllib.parse import urlparse
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
@@ -11,11 +11,23 @@ from Medical_KG.ingestion.adapters.http import HttpAdapter
 from Medical_KG.ingestion.http_client import AsyncHttpClient, RateLimit
 from Medical_KG.ingestion.models import Document
 from Medical_KG.ingestion.types import (
+    JSONMapping,
+    JSONValue,
     MedRxivDocumentPayload,
+    MutableJSONMapping,
     PmcDocumentPayload,
+    PmcMediaPayload,
+    PmcReferencePayload,
+    PmcSectionPayload,
     PubMedDocumentPayload,
 )
-from Medical_KG.ingestion.utils import canonical_json, normalize_text
+from Medical_KG.ingestion.utils import (
+    canonical_json,
+    ensure_json_mapping,
+    ensure_json_sequence,
+    ensure_json_value,
+    normalize_text,
+)
 
 PUBMED_SEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 PUBMED_SUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
@@ -27,7 +39,7 @@ PMID_RE = re.compile(r"^\d{4,}")
 PMCID_RE = re.compile(r"^PMC\d+")
 
 
-class PubMedAdapter(HttpAdapter[Any]):
+class PubMedAdapter(HttpAdapter[JSONMapping]):
     source = "pubmed"
 
     def __init__(self, context: AdapterContext, client: AsyncHttpClient, *, api_key: str | None = None) -> None:
@@ -37,9 +49,9 @@ class PubMedAdapter(HttpAdapter[Any]):
         rate = RateLimit(rate=10 if api_key else 3, per=1.0)
         self.client.set_rate_limit(host, rate)
 
-    async def fetch(self, term: str, retmax: int = 1000) -> AsyncIterator[Any]:
+    async def fetch(self, term: str, retmax: int = 1000) -> AsyncIterator[JSONMapping]:
         retmax = min(retmax, 10000)
-        params = {
+        params: dict[str, object] = {
             "db": "pubmed",
             "retmode": "json",
             "retmax": retmax,
@@ -48,30 +60,47 @@ class PubMedAdapter(HttpAdapter[Any]):
         }
         if self.api_key:
             params["api_key"] = self.api_key
-        search = await self.fetch_json(PUBMED_SEARCH_URL, params=params)
-        search_result = search.get("esearchresult", {})
-        webenv = search_result.get("webenv")
-        query_key = search_result.get("querykey")
-        count = int(search_result.get("count", len(search_result.get("idlist", [])) or 0))
+        search_value = await self.fetch_json(PUBMED_SEARCH_URL, params=params)
+        search = ensure_json_mapping(search_value, context="pubmed search response")
+        search_result_value = search.get("esearchresult")
+        if isinstance(search_result_value, MappingABC):
+            search_result = ensure_json_mapping(search_result_value, context="pubmed search result")
+        else:
+            search_result = {}
+        webenv = self._as_str(search_result.get("webenv"))
+        query_key = self._as_str(search_result.get("querykey"))
+        id_list = [
+            uid
+            for uid in (self._as_str(item) for item in self._iter_sequence(search_result.get("idlist")))
+            if uid
+        ]
+        count = self._as_int(search_result.get("count")) or len(id_list)
         if not (webenv and query_key and count):
-            id_list = search_result.get("idlist", [])
             if not id_list:
                 return
-            summary_params = {"db": "pubmed", "retmode": "json", "id": ",".join(id_list)}
+            summary_params: dict[str, object] = {
+                "db": "pubmed",
+                "retmode": "json",
+                "id": ",".join(id_list),
+            }
             if self.api_key:
                 summary_params["api_key"] = self.api_key
-            summary = await self.fetch_json(PUBMED_SUMMARY_URL, params=summary_params)
-            fetch_params = {"db": "pubmed", "retmode": "xml", "id": ",".join(id_list), "rettype": "abstract"}
+            summary_value = await self.fetch_json(PUBMED_SUMMARY_URL, params=summary_params)
+            summary_uids, summary_records = self._extract_summary(summary_value)
+            fetch_params: dict[str, object] = {
+                "db": "pubmed",
+                "retmode": "xml",
+                "id": ",".join(id_list),
+                "rettype": "abstract",
+            }
             if self.api_key:
                 fetch_params["api_key"] = self.api_key
             fetch_xml = await self.fetch_text(PUBMED_FETCH_URL, params=fetch_params)
             details = self._parse_fetch_xml(fetch_xml)
-            summary_result = summary.get("result", {})
-            for uid in summary_result.get("uids", []):
-                combined = dict(details.get(uid, {}))
-                combined.update(summary_result.get(uid, {}))
-                if combined:
-                    yield combined
+            for uid in (summary_uids or id_list):
+                record = self._merge_records(uid, details, summary_records)
+                if record:
+                    yield record
             return
         retstart = 0
         while retstart < count:
@@ -85,9 +114,10 @@ class PubMedAdapter(HttpAdapter[Any]):
             }
             if self.api_key:
                 summary_params["api_key"] = self.api_key
-            summary = await self.fetch_json(PUBMED_SUMMARY_URL, params=summary_params)
-            summary_result = summary.get("result", {})
-            uids: Iterable[str] = summary_result.get("uids", [])
+            summary_value = await self.fetch_json(PUBMED_SUMMARY_URL, params=summary_params)
+            uids, summary_records = self._extract_summary(summary_value)
+            if not uids:
+                break
             fetch_params = {
                 "db": "pubmed",
                 "retmode": "xml",
@@ -102,50 +132,137 @@ class PubMedAdapter(HttpAdapter[Any]):
             fetch_xml = await self.fetch_text(PUBMED_FETCH_URL, params=fetch_params)
             details = self._parse_fetch_xml(fetch_xml)
             for uid in uids:
-                combined = dict(details.get(uid, {}))
-                combined.update(summary_result.get(uid, {}))
-                if combined:
-                    yield combined
+                record = self._merge_records(uid, details, summary_records)
+                if record:
+                    yield record
             retstart += retmax
 
-    def parse(self, raw: Any) -> Document:
-        uid = str(raw.get("pmid") or raw.get("uid"))
-        title = normalize_text(raw.get("title", ""))
-        abstract = normalize_text(raw.get("abstract", ""))
+    def parse(self, raw: JSONMapping) -> Document:
+        uid = self._as_str(raw.get("pmid")) or self._as_str(raw.get("uid"))
+        if not uid:
+            raise ValueError("PubMed payload missing pmid")
+        title = normalize_text(self._as_str(raw.get("title")) or "")
+        abstract = normalize_text(self._as_str(raw.get("abstract")) or "")
+        authors = [normalize_text(name) for name in self._iter_strings(raw.get("authors"))]
+        mesh_terms = [normalize_text(term) for term in self._iter_strings(raw.get("mesh_terms"))]
+        pub_types = [normalize_text(pub_type) for pub_type in self._iter_strings(raw.get("pub_types"))]
         payload: PubMedDocumentPayload = {
             "pmid": uid,
-            "pmcid": raw.get("pmcid"),
-            "doi": raw.get("doi"),
+            "pmcid": self._as_str(raw.get("pmcid")),
+            "doi": self._as_str(raw.get("doi")),
             "title": title,
             "abstract": abstract,
-            "authors": raw.get("authors", []),
-            "mesh_terms": raw.get("mesh_terms", []),
-            "journal": raw.get("journal"),
-            "pub_year": raw.get("pub_year"),
-            "pub_types": raw.get("pub_types", []),
-            "pubdate": raw.get("pubdate"),
+            "authors": authors,
+            "mesh_terms": mesh_terms,
+            "journal": self._as_str(raw.get("journal")),
+            "pub_year": self._as_str(raw.get("pub_year")),
+            "pub_types": pub_types,
+            "pubdate": self._as_str(raw.get("pubdate")),
         }
         content = canonical_json(payload)
-        doc_id = self.build_doc_id(identifier=uid, version=raw.get("sortpubdate", "unknown"), content=content)
-        metadata = {
-            "title": title,
-            "pub_date": raw.get("pubdate"),
-            "journal": raw.get("fulljournalname"),
-            "pmid": uid,
-        }
+        version = self._as_str(raw.get("sortpubdate")) or "unknown"
+        metadata: MutableJSONMapping = {"title": title, "pmid": uid}
+        if payload["pubdate"]:
+            metadata["pub_date"] = payload["pubdate"]
+        full_journal = self._as_str(raw.get("fulljournalname"))
+        if full_journal:
+            metadata["journal"] = full_journal
+        doc_id = self.build_doc_id(identifier=uid, version=version, content=content)
         return Document(doc_id=doc_id, source=self.source, content=abstract or title, metadata=metadata, raw=payload)
 
     def validate(self, document: Document) -> None:
-        raw = document.raw
-        if raw is None or not isinstance(raw, dict):
+        raw_value = document.raw
+        if raw_value is None:
             raise ValueError("PubMedAdapter document missing typed payload")
-        raw_payload = cast(PubMedDocumentPayload, raw)
-        pmid = raw_payload["pmid"]
-        if not isinstance(pmid, (str, int)) or not PMID_RE.match(str(pmid)):
-            raise ValueError(f"Invalid PMID: {pmid}")
+        raw_mapping = ensure_json_mapping(
+            ensure_json_value(raw_value, context="pubmed document raw"),
+            context="pubmed document raw mapping",
+        )
+        pmid = self._as_str(raw_mapping.get("pmid"))
+        if pmid is None or not PMID_RE.match(pmid):
+            raise ValueError(f"Invalid PMID: {pmid!r}")
+
+    def _extract_summary(self, summary_value: JSONValue) -> tuple[list[str], dict[str, JSONMapping]]:
+        summary_map = ensure_json_mapping(summary_value, context="pubmed summary response")
+        result_value = summary_map.get("result")
+        if not isinstance(result_value, MappingABC):
+            return [], {}
+        result_map = ensure_json_mapping(result_value, context="pubmed summary result")
+        records: dict[str, JSONMapping] = {}
+        for key, value in result_map.items():
+            if key == "uids":
+                continue
+            if isinstance(value, MappingABC):
+                records[key] = ensure_json_mapping(
+                    ensure_json_value(value, context="pubmed summary entry"),
+                    context="pubmed summary entry mapping",
+                )
+        uids = [
+            uid
+            for uid in (self._as_str(item) for item in self._iter_sequence(result_map.get("uids")))
+            if uid
+        ]
+        if not uids:
+            uids = list(records.keys())
+        return uids, records
+
+    def _merge_records(
+        self,
+        uid: str,
+        details: Mapping[str, JSONMapping],
+        summary_records: Mapping[str, JSONMapping],
+    ) -> JSONMapping | None:
+        combined: MutableJSONMapping = {}
+        detail = details.get(uid)
+        if detail:
+            combined.update(detail)
+        summary = summary_records.get(uid)
+        if summary:
+            combined.update(summary)
+        if not combined:
+            return None
+        return ensure_json_mapping(
+            ensure_json_value(combined, context=f"pubmed combined record {uid}"),
+            context="pubmed combined record mapping",
+        )
 
     @staticmethod
-    def _fetch_author_list(raw_authors: Iterable[dict[str, Any]]) -> list[str]:
+    def _iter_sequence(value: JSONValue | None) -> Iterator[JSONValue]:
+        if isinstance(value, SequenceABC) and not isinstance(value, (str, bytes, bytearray)):
+            return iter(value)
+        return iter(())
+
+    @classmethod
+    def _iter_strings(cls, value: JSONValue | None) -> Iterator[str]:
+        for item in cls._iter_sequence(value):
+            if isinstance(item, str):
+                yield item
+            elif isinstance(item, (int, float)) and not isinstance(item, bool):
+                yield str(item)
+
+    @staticmethod
+    def _as_str(value: JSONValue | None) -> str | None:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return str(value)
+        return None
+
+    @staticmethod
+    def _as_int(value: JSONValue | None) -> int | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                return None
+        return None
+
+    @staticmethod
+    def _fetch_author_list(raw_authors: Iterable[JSONMapping]) -> list[str]:
         authors: list[str] = []
         for author in raw_authors:
             if collective := author.get("CollectiveName"):
@@ -159,8 +276,8 @@ class PubMedAdapter(HttpAdapter[Any]):
         return authors
 
     @staticmethod
-    def _parse_fetch_xml(xml: str) -> dict[str, dict[str, Any]]:
-        details: dict[str, dict[str, Any]] = {}
+    def _parse_fetch_xml(xml: str) -> dict[str, JSONMapping]:
+        details: dict[str, JSONMapping] = {}
         root = ET.fromstring(xml)
 
         def strip(tag: str) -> str:
@@ -174,8 +291,8 @@ class PubMedAdapter(HttpAdapter[Any]):
             if not pmid:
                 continue
             article_data = medline.find("Article")
-            journal = None
-            pub_year = None
+            journal: str | None = None
+            pub_year: str | None = None
             abstract_text = []
             authors: list[str] = []
             pub_types: list[str] = []
@@ -211,22 +328,25 @@ class PubMedAdapter(HttpAdapter[Any]):
                     pmcid = value
                 elif id_type == "doi":
                     doi = value
-            details[pmid] = {
+            detail: MutableJSONMapping = {
                 "pmid": pmid,
-                "title": normalize_text(article_data.findtext("ArticleTitle", default="")) if article_data is not None else "",
+                "title": normalize_text(article_data.findtext("ArticleTitle", default=""))
+                if article_data is not None
+                else "",
                 "abstract": normalize_text("\n".join(filter(None, abstract_text))),
                 "authors": authors,
                 "mesh_terms": [term for term in mesh_terms if term],
                 "journal": normalize_text(journal or ""),
-                "pub_year": pub_year,
+                "pub_year": normalize_text(pub_year) if pub_year else None,
                 "pub_types": [ptype for ptype in pub_types if ptype],
                 "pmcid": pmcid,
                 "doi": doi,
             }
+            details[pmid] = detail
         return details
 
 
-class PmcAdapter(HttpAdapter[Any]):
+class PmcAdapter(HttpAdapter[ET.Element]):
     source = "pmc"
 
     def __init__(self, context: AdapterContext, client: AsyncHttpClient) -> None:
@@ -241,8 +361,8 @@ class PmcAdapter(HttpAdapter[Any]):
         metadata_prefix: str = "pmc",
         from_date: str | None = None,
         until_date: str | None = None,
-    ) -> AsyncIterator[Any]:
-        params: dict[str, Any] = {"verb": "ListRecords", "set": set_spec, "metadataPrefix": metadata_prefix}
+    ) -> AsyncIterator[ET.Element]:
+        params: dict[str, object] = {"verb": "ListRecords", "set": set_spec, "metadataPrefix": metadata_prefix}
         if from_date:
             params["from"] = from_date
         if until_date:
@@ -259,7 +379,7 @@ class PmcAdapter(HttpAdapter[Any]):
                 break
             params = {"verb": "ListRecords", "resumptionToken": token}
 
-    def parse(self, raw: Any) -> Document:
+    def parse(self, raw: ET.Element) -> Document:
         header = self._find(raw, "header")
         identifier_text = self._findtext(header, "identifier") or ""
         pmcid = identifier_text.split(":")[-1] if identifier_text else "unknown"
@@ -285,19 +405,22 @@ class PmcAdapter(HttpAdapter[Any]):
         content = canonical_json(payload)
         datestamp = self._findtext(header, "datestamp") or "unknown"
         doc_id = self.build_doc_id(identifier=pmcid, version=datestamp, content=content)
-        meta = {"title": title, "datestamp": datestamp, "pmcid": pmcid}
+        meta: MutableJSONMapping = {"title": title, "datestamp": datestamp, "pmcid": pmcid}
         body_text = "\n\n".join(section["text"] for section in sections if section["text"])
         document_content = abstract or body_text or title
         return Document(doc_id=doc_id, source=self.source, content=document_content, metadata=meta, raw=payload)
 
     def validate(self, document: Document) -> None:
-        raw = document.raw
-        if raw is None or not isinstance(raw, dict):
+        raw_value = document.raw
+        if raw_value is None:
             raise ValueError("PMC document missing typed payload")
-        raw_payload = cast(PmcDocumentPayload, raw)
-        pmcid = raw_payload["pmcid"]
-        if not isinstance(pmcid, str) or not PMCID_RE.match(pmcid):
-            raise ValueError(f"Invalid PMCID: {pmcid}")
+        raw_mapping = ensure_json_mapping(
+            ensure_json_value(raw_value, context="pmc document raw"),
+            context="pmc document raw mapping",
+        )
+        pmcid_value = raw_mapping.get("pmcid")
+        if not isinstance(pmcid_value, str) or not PMCID_RE.match(pmcid_value):
+            raise ValueError(f"Invalid PMCID: {pmcid_value!r}")
 
     @staticmethod
     def _strip(tag: str) -> str:
@@ -331,8 +454,8 @@ class PmcAdapter(HttpAdapter[Any]):
                 texts.append(normalize_text("".join(child.itertext())))
         return "\n".join(texts)
 
-    def _collect_sections(self, article: ET.Element | None) -> list[dict[str, str]]:
-        sections: list[dict[str, str]] = []
+    def _collect_sections(self, article: ET.Element | None) -> list[PmcSectionPayload]:
+        sections: list[PmcSectionPayload] = []
         if article is None:
             return sections
         for section in article.iter():
@@ -344,8 +467,8 @@ class PmcAdapter(HttpAdapter[Any]):
             sections.append({"title": title, "text": text})
         return sections
 
-    def _collect_table_like(self, article: ET.Element | None, name: str) -> list[dict[str, str]]:
-        items: list[dict[str, str]] = []
+    def _collect_table_like(self, article: ET.Element | None, name: str) -> list[PmcMediaPayload]:
+        items: list[PmcMediaPayload] = []
         if article is None:
             return items
         for node in article.iter():
@@ -360,8 +483,8 @@ class PmcAdapter(HttpAdapter[Any]):
             items.append({"label": label, "caption": caption, "uri": uri or ""})
         return items
 
-    def _collect_references(self, article: ET.Element | None) -> list[dict[str, str]]:
-        refs: list[dict[str, str]] = []
+    def _collect_references(self, article: ET.Element | None) -> list[PmcReferencePayload]:
+        refs: list[PmcReferencePayload] = []
         if article is None:
             return refs
         for node in article.iter():
@@ -373,7 +496,7 @@ class PmcAdapter(HttpAdapter[Any]):
         return refs
 
 
-class MedRxivAdapter(HttpAdapter[Any]):
+class MedRxivAdapter(HttpAdapter[JSONMapping]):
     source = "medrxiv"
 
     def __init__(
@@ -381,7 +504,7 @@ class MedRxivAdapter(HttpAdapter[Any]):
         context: AdapterContext,
         client: AsyncHttpClient,
         *,
-        bootstrap_records: Iterable[dict[str, Any]] | None = None,
+        bootstrap_records: Iterable[JSONMapping] | None = None,
     ) -> None:
         super().__init__(context, client)
         self._bootstrap = list(bootstrap_records or [])
@@ -392,48 +515,87 @@ class MedRxivAdapter(HttpAdapter[Any]):
         search: str | None = None,
         cursor: str | None = None,
         page_size: int = 100,
-    ) -> AsyncIterator[Any]:
+    ) -> AsyncIterator[JSONMapping]:
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record
             return
-        params: dict[str, Any] = {"page_size": page_size}
+        params: dict[str, object] = {"page_size": page_size}
         if search:
             params["search"] = search
         next_cursor = cursor
         while True:
             if next_cursor:
                 params["cursor"] = next_cursor
-            payload = await self.fetch_json(MEDRXIV_URL, params=params)
-            for record in payload.get("results", []):
+            payload_value = await self.fetch_json(MEDRXIV_URL, params=params)
+            payload = ensure_json_mapping(payload_value, context="medrxiv response")
+            results_value = payload.get("results")
+            for record in self._iter_records(results_value):
                 yield record
-            next_cursor = payload.get("next_cursor")
+            next_cursor_value = payload.get("next_cursor")
+            next_cursor = next_cursor_value if isinstance(next_cursor_value, str) else None
             if not next_cursor:
                 break
 
-    def parse(self, raw: Any) -> Document:
-        identifier = raw["doi"]
-        title = normalize_text(raw.get("title", ""))
-        abstract = normalize_text(raw.get("abstract", ""))
+    def parse(self, raw: JSONMapping) -> Document:
+        identifier = self._as_str(raw.get("doi"))
+        if not identifier:
+            raise ValueError("MedRxiv payload missing doi")
+        title = normalize_text(self._as_str(raw.get("title")) or "")
+        abstract = normalize_text(self._as_str(raw.get("abstract")) or "")
         payload: MedRxivDocumentPayload = {
             "doi": identifier,
             "title": title,
             "abstract": abstract,
-            "date": raw.get("date"),
+            "date": self._as_str(raw.get("date")),
         }
         content = canonical_json(payload)
-        doc_id = self.build_doc_id(identifier=identifier, version=raw.get("version", "1"), content=content)
-        metadata = {"title": title, "authors": raw.get("authors", [])}
+        version = self._as_str(raw.get("version")) or "1"
+        doc_id = self.build_doc_id(identifier=identifier, version=version, content=content)
+        authors = [normalize_text(author) for author in self._iter_strings(raw.get("authors"))]
+        metadata: MutableJSONMapping = {"title": title}
+        if authors:
+            metadata["authors"] = authors
         return Document(doc_id=doc_id, source=self.source, content=abstract or title, metadata=metadata, raw=payload)
 
     def validate(self, document: Document) -> None:
-        raw = document.raw
-        if raw is None or not isinstance(raw, dict):
+        raw_value = document.raw
+        if raw_value is None:
             raise ValueError("MedRxiv document missing typed payload")
-        raw_payload = cast(MedRxivDocumentPayload, raw)
-        doi = raw_payload["doi"]
-        if not isinstance(doi, str) or "/" not in doi:
+        raw_mapping = ensure_json_mapping(
+            ensure_json_value(raw_value, context="medrxiv document raw"),
+            context="medrxiv document raw mapping",
+        )
+        doi_value = raw_mapping.get("doi")
+        if not isinstance(doi_value, str) or "/" not in doi_value:
             raise ValueError("Invalid DOI")
+
+    @staticmethod
+    def _iter_records(value: JSONValue | None) -> Iterator[JSONMapping]:
+        if isinstance(value, SequenceABC) and not isinstance(value, (str, bytes, bytearray)):
+            for item in value:
+                if isinstance(item, MappingABC):
+                    yield ensure_json_mapping(
+                        ensure_json_value(item, context="medrxiv record"),
+                        context="medrxiv record mapping",
+                    )
+
+    @staticmethod
+    def _iter_strings(value: JSONValue | None) -> Iterator[str]:
+        if isinstance(value, SequenceABC) and not isinstance(value, (str, bytes, bytearray)):
+            for item in value:
+                if isinstance(item, str):
+                    yield item
+                elif isinstance(item, (int, float)) and not isinstance(item, bool):
+                    yield str(item)
+
+    @staticmethod
+    def _as_str(value: JSONValue | None) -> str | None:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return str(value)
+        return None
 
 
 class LiteratureFallbackError(RuntimeError):
@@ -443,7 +605,7 @@ class LiteratureFallbackError(RuntimeError):
 class LiteratureFallback:
     """Sequentially attempt literature adapters until one returns results."""
 
-    def __init__(self, *adapters: HttpAdapter) -> None:
+    def __init__(self, *adapters: HttpAdapter[Any]) -> None:
         if not adapters:
             raise ValueError("At least one adapter must be provided for fallback")
         self._adapters = list(adapters)

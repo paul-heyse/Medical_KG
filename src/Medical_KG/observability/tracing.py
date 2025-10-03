@@ -6,16 +6,23 @@ import logging
 import os
 
 from fastapi import FastAPI
-from opentelemetry import trace
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
+from opentelemetry import trace  # type: ignore[import-not-found]
+from opentelemetry.instrumentation.fastapi import (  # type: ignore[import-not-found]
+    FastAPIInstrumentor,
+)
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor  # type: ignore[import-not-found]
+from opentelemetry.sdk.resources import Resource  # type: ignore[import-not-found]
+from opentelemetry.sdk.trace import TracerProvider  # type: ignore[import-not-found]
+from opentelemetry.sdk.trace.export import (  # type: ignore[import-not-found]
+    BatchSpanProcessor,
+    ConsoleSpanExporter,
+)
+from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased  # type: ignore[import-not-found]
 
 try:  # pragma: no cover - optional dependency
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import (  # type: ignore[import-not-found]
+        OTLPSpanExporter,
+    )
 except Exception:  # pragma: no cover - exporter optional
     OTLPSpanExporter = None
 

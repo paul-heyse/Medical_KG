@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from __future__ import annotations
 
-from pydantic import BaseModel, Field, ConfigDict
+from datetime import datetime
+from typing import Annotated, Any
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from Medical_KG.extraction.models import ExtractionEnvelope
 from Medical_KG.facets.models import FacetModel
@@ -19,37 +21,37 @@ class ErrorDetail(BaseModel):
 class ErrorResponse(BaseModel):
     code: str
     message: str
-    details: List[ErrorDetail] = Field(default_factory=list)
+    details: Annotated[list[ErrorDetail], Field(default_factory=list)]
     retriable: bool = False
-    reference: Optional[str] = None
+    reference: str | None = None
 
 
 class FacetGenerationRequest(BaseModel):
-    chunk_ids: List[str]
+    chunk_ids: list[str]
 
 
 class FacetGenerationResponse(BaseModel):
-    facets_by_chunk: Dict[str, List[FacetModel]]
-    metadata: Dict[str, Dict[str, str]] = Field(default_factory=dict)
+    facets_by_chunk: dict[str, list[FacetModel]]
+    metadata: Annotated[dict[str, dict[str, str]], Field(default_factory=dict)]
 
 
 class ChunkResponse(BaseModel):
     chunk_id: str
     doc_id: str
     text: str
-    section: Optional[str] = None
-    facets: List[FacetModel] = Field(default_factory=list)
+    section: str | None = None
+    facets: Annotated[list[FacetModel], Field(default_factory=list)]
 
 
 class RetrieveFilters(BaseModel):
-    facet_type: Optional[str] = None
+    facet_type: str | None = None
 
 
 class RetrieveRequest(BaseModel):
     query: str
-    intent: Optional[str] = None
-    filters: Optional[RetrieveFilters] = None
-    topK: int = Field(default=5, alias="topK")
+    intent: str | None = None
+    filters: RetrieveFilters | None = None
+    topK: Annotated[int, Field(default=5, alias="topK")]
 
     model_config = {"populate_by_name": True}
 
@@ -58,16 +60,16 @@ class RetrieveResult(BaseModel):
     chunk_id: str
     score: float
     snippet: str
-    facet_types: List[str]
+    facet_types: list[str]
 
 
 class RetrieveResponse(BaseModel):
-    results: List[RetrieveResult]
-    query_meta: Dict[str, Any]
+    results: list[RetrieveResult]
+    query_meta: dict[str, Any]
 
 
 class ExtractionRequest(BaseModel):
-    chunk_ids: List[str]
+    chunk_ids: list[str]
 
 
 class ExtractionResponse(BaseModel):
@@ -76,14 +78,14 @@ class ExtractionResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
-    services: Dict[str, str]
+    services: dict[str, str]
     timestamp: datetime
 
 
 class VersionResponse(BaseModel):
     api_version: str
-    component_versions: Dict[str, str]
-    model_versions: Dict[str, str] = Field(default_factory=dict)
+    component_versions: dict[str, str]
+    model_versions: Annotated[dict[str, str], Field(default_factory=dict)]
 
 
 class KgNode(BaseModel):
@@ -98,15 +100,15 @@ class KgRelationship(BaseModel):
     """Relationship between two KG nodes."""
 
     type: str
-    start_id: str = Field(alias="start_id")
-    end_id: str = Field(alias="end_id")
+    start_id: Annotated[str, Field(alias="start_id")]
+    end_id: Annotated[str, Field(alias="end_id")]
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
 
 class KgWriteRequest(BaseModel):
-    nodes: List[KgNode] = Field(default_factory=list)
-    relationships: List[KgRelationship] = Field(default_factory=list)
-    graph: Dict[str, Any] | None = None
+    nodes: Annotated[list[KgNode], Field(default_factory=list)]
+    relationships: Annotated[list[KgRelationship], Field(default_factory=list)]
+    graph: dict[str, Any] | None = None
 
 
 class KgWriteResponse(BaseModel):

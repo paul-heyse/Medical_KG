@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, MutableMapping
+from typing import MutableMapping
 
 
 @dataclass(slots=True)
@@ -10,10 +10,10 @@ class PurgePipeline:
     """Deletes documents across storage layers in correct order."""
 
     raw_store: MutableMapping[str, bytes]
-    ir_store: MutableMapping[str, dict]
-    chunk_store: MutableMapping[str, dict]
-    embedding_store: MutableMapping[str, dict]
-    kg_store: MutableMapping[str, dict]
+    ir_store: MutableMapping[str, dict[str, object]]
+    chunk_store: MutableMapping[str, dict[str, object]]
+    embedding_store: MutableMapping[str, dict[str, object]]
+    kg_store: MutableMapping[str, dict[str, object]]
 
     def purge(self, doc_id: str) -> None:
         self.raw_store.pop(doc_id, None)

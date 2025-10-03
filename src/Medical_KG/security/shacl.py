@@ -17,9 +17,17 @@ def validate_shacl(graph: Mapping[str, Sequence[Mapping[str, object]]]) -> list[
         outcome = evidence.get("outcome_loinc")
         if outcome and "outcome" not in evidence:
             errors.append(f"Evidence {evidence.get('id')} missing outcome node")
-        spans = evidence.get("spans") or []
+        spans_value = evidence.get("spans")
+        spans = spans_value if isinstance(spans_value, Sequence) else []
         for span in spans:
-            if span["start"] >= span["end"]:
+            if not isinstance(span, Mapping):
+                continue
+            start = span.get("start")
+            end = span.get("end")
+            if not isinstance(start, int) or not isinstance(end, int):
+                errors.append(f"Evidence {evidence.get('id')} has malformed span")
+                continue
+            if start >= end:
                 errors.append(f"Evidence {evidence.get('id')} has invalid span")
     for adverse_event in graph.get("adverse_events", []):
         grade = adverse_event.get("grade")

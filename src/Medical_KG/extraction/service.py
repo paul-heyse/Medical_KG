@@ -5,7 +5,7 @@ import hashlib
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Iterable
+from typing import Callable, Iterable
 
 from Medical_KG.facets.models import EvidenceSpan
 
@@ -18,11 +18,12 @@ from .models import (
     EligibilityLogic,
     ExtractionEnvelope,
     ExtractionType,
+    ExtractionBase,
     PICOExtraction,
 )
 from .normalizers import normalise_extractions
 from .prompts import PromptLibrary
-from .validator import ExtractionValidationError, ExtractionValidator
+from .validator import DeadLetterRecord, ExtractionValidationError, ExtractionValidator
 
 P_VALUE_PATTERN = re.compile(r"p\s*(?:=|<)\s*(?P<value>[0-9.]+)", re.I)
 CI_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:–|-|to)\s*(\d+(?:\.\d+)?)")
@@ -164,7 +165,10 @@ def extract_eligibility(chunk: Chunk) -> list[EligibilityExtraction]:
 @dataclass(slots=True)
 class ExtractionResult:
     chunk_id: str
-    extractions: list
+    extractions: list[ExtractionBase]
+
+
+ExtractorFn = Callable[[Chunk], list[ExtractionBase] | ExtractionBase | None]
 
 
 class ClinicalExtractionService:
@@ -182,7 +186,7 @@ class ClinicalExtractionService:
         self._prompts = PromptLibrary()
         self._validator = ExtractionValidator()
         self._max_retries = max_retries
-        self._extractors: list[tuple[ExtractionType, callable[[Chunk], object]]]= [
+        self._extractors: list[tuple[ExtractionType, ExtractorFn]] = [
             (ExtractionType.PICO, extract_pico),
             (ExtractionType.EFFECT, extract_effects),
             (ExtractionType.ADVERSE_EVENT, extract_ae),
@@ -190,8 +194,8 @@ class ClinicalExtractionService:
             (ExtractionType.ELIGIBILITY, extract_eligibility),
         ]
 
-    def extract(self, chunk: Chunk) -> list:
-        results: list = []
+    def extract(self, chunk: Chunk) -> list[ExtractionBase]:
+        results: list[ExtractionBase] = []
         for extraction_type, extractor in self._extractors:
             if not self._should_extract(extraction_type, chunk):
                 continue
@@ -210,7 +214,7 @@ class ClinicalExtractionService:
 
     def extract_many(self, chunks: Iterable[Chunk]) -> ExtractionEnvelope:
         chunk_ids: list[str] = []
-        payload: list = []
+        payload: list[ExtractionBase] = []
         for chunk in chunks:
             chunk_ids.append(chunk.chunk_id)
             payload.extend(self.extract(chunk))
@@ -231,10 +235,12 @@ class ClinicalExtractionService:
         )
 
     @property
-    def dead_letter(self):  # pragma: no cover - convenience
+    def dead_letter(self) -> list[DeadLetterRecord]:  # pragma: no cover - convenience
         return list(self._validator.dead_letter.records)
 
-    def _invoke_with_retry(self, extractor, chunk: Chunk):
+    def _invoke_with_retry(
+        self, extractor: ExtractorFn, chunk: Chunk
+    ) -> list[ExtractionBase] | ExtractionBase | None:
         last_error: Exception | None = None
         for _ in range(self._max_retries + 1):
             try:

@@ -138,6 +138,28 @@ def make_openprescribing_payload() -> types.OpenPrescribingDocumentPayload:
     }
 
 
+def test_narrow_to_mapping_accepts_mapping() -> None:
+    value: types.JSONValue = {"key": "value"}
+    result = types.narrow_to_mapping(value, context="narrow mapping")
+    assert result == value
+
+
+def test_narrow_to_mapping_rejects_non_mapping() -> None:
+    with pytest.raises(TypeError, match="narrow mapping expected a mapping"):
+        types.narrow_to_mapping(["value"], context="narrow mapping")
+
+
+def test_narrow_to_sequence_accepts_sequence() -> None:
+    value: types.JSONValue = ["value", 1]
+    result = types.narrow_to_sequence(value, context="narrow sequence")
+    assert list(result) == ["value", 1]
+
+
+def test_narrow_to_sequence_rejects_string() -> None:
+    with pytest.raises(TypeError, match="narrow sequence expected a sequence"):
+        types.narrow_to_sequence("value", context="narrow sequence")
+
+
 def make_pubmed_payload() -> types.PubMedDocumentPayload:
     return {
         "pmid": "12345678",

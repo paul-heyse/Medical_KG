@@ -29,6 +29,7 @@ from Medical_KG.ingestion.types import (
     OpenFdaDocumentPayload,
     RxNormDocumentPayload,
     is_clinical_document_payload,
+    narrow_to_mapping,
 )
 from Medical_KG.ingestion.utils import (
     canonical_json,

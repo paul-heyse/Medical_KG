@@ -7,7 +7,6 @@ from threading import Lock
 from typing import Iterable, Mapping, Protocol, cast
 
 import jsonlines
-
 from Medical_KG.ingestion.types import JSONMapping, JSONValue
 
 
@@ -32,6 +31,8 @@ class IngestionLedger:
         self._latest: dict[str, LedgerEntry] = {}
         if path.exists():
             with jsonlines.open(path, mode="r") as fp:
+                # ``jsonlines.Reader`` exposes ``Iterable[Any]`` so we narrow to the
+                # JSON mapping shape persisted by :meth:`record`.
                 for row in cast(Iterable[Mapping[str, object]], fp):
                     doc_id = str(row["doc_id"])
                     state = str(row["state"])
@@ -41,7 +42,7 @@ class IngestionLedger:
                     metadata: dict[str, JSONValue]
                     if isinstance(metadata_raw, Mapping):
                         metadata = {
-                            str(key): cast(JSONValue, value)
+                            str(key): cast(JSONValue, value)  # External JSONL file stores arbitrary JSON-compatible values.
                             for key, value in metadata_raw.items()
                         }
                     else:
@@ -71,6 +72,7 @@ class IngestionLedger:
         with self._lock:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             with jsonlines.open(self._path, mode="a") as fp:
+                # ``jsonlines.Writer`` omits a protocol for ``write``; narrow for mypy.
                 cast(_JsonLinesWriter, fp).write(payload)
             self._latest[doc_id] = entry
         return entry

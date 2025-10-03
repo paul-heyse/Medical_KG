@@ -4,9 +4,10 @@ The adapters transform heterogeneous API responses into the TypedDict payloads
 described in ``Medical_KG.ingestion.types``.  Raw responses remain ``Any`` at
 fetch boundaries, but we immediately coerce them into JSON mappings or
 sequences so that ``Document.raw`` adheres to the expected schema and mypy can
-validate attribute access.  Inline comments call out the relevant
-``Medical_KG.ingestion.types`` definitions when optional fields require
-normalisation.
+validate attribute access.  When payload fragments are already JSON-compatible
+we use ``narrow_to_mapping`` or ``narrow_to_sequence`` instead of ``typing.cast``.
+Inline comments call out the relevant ``Medical_KG.ingestion.types`` definitions
+when optional fields require normalisation.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from Medical_KG.ingestion.http_client import AsyncHttpClient, RateLimit
 from Medical_KG.ingestion.models import Document
 from Medical_KG.ingestion.types import (
     JSONMapping,
+    JSONValue,
     MedRxivDocumentPayload,
     MutableJSONMapping,
     PmcDocumentPayload,
@@ -162,21 +164,18 @@ class PubMedAdapter(HttpAdapter[Any]):
             return
         retstart = 0
         while retstart < count:
-            summary_params = cast(
-                dict[str, object],
-                {
-                    "db": "pubmed",
-                    "retmode": "json",
-                    "retstart": retstart,
-                    "retmax": retmax,
-                    "query_key": query_key,
-                    "WebEnv": webenv,
-                },
-            )
+            paged_summary_params: dict[str, object] = {
+                "db": "pubmed",
+                "retmode": "json",
+                "retstart": retstart,
+                "retmax": retmax,
+                "query_key": query_key,
+                "WebEnv": webenv,
+            }
             if self.api_key:
-                summary_params["api_key"] = self.api_key
+                paged_summary_params["api_key"] = self.api_key
             summary = ensure_json_mapping(
-                await self.fetch_json(PUBMED_SUMMARY_URL, params=summary_params),
+                await self.fetch_json(PUBMED_SUMMARY_URL, params=paged_summary_params),
                 context="pubmed summary response",
             )
             summary_result = ensure_json_mapping(
@@ -191,21 +190,18 @@ class PubMedAdapter(HttpAdapter[Any]):
                 )
                 if isinstance(uid, (str, int))
             ]
-            fetch_params = cast(
-                dict[str, object],
-                {
-                    "db": "pubmed",
-                    "retmode": "xml",
-                    "retstart": retstart,
-                    "retmax": retmax,
-                    "query_key": query_key,
-                    "WebEnv": webenv,
-                    "rettype": "abstract",
-                },
-            )
+            paged_fetch_params: dict[str, object] = {
+                "db": "pubmed",
+                "retmode": "xml",
+                "retstart": retstart,
+                "retmax": retmax,
+                "query_key": query_key,
+                "WebEnv": webenv,
+                "rettype": "abstract",
+            }
             if self.api_key:
-                fetch_params["api_key"] = self.api_key
-            fetch_xml = await self.fetch_text(PUBMED_FETCH_URL, params=fetch_params)
+                paged_fetch_params["api_key"] = self.api_key
+            fetch_xml = await self.fetch_text(PUBMED_FETCH_URL, params=paged_fetch_params)
             details = self._parse_fetch_xml(fetch_xml)
             for uid in uids:
                 summary_entry = summary_result.get(uid)
@@ -262,13 +258,11 @@ class PubMedAdapter(HttpAdapter[Any]):
 
     def validate(self, document: Document) -> None:
         raw = document.raw
-        if not is_pubmed_payload(raw):
+        if is_pubmed_payload(raw):
+            pubmed_payload = raw
+        else:
             raise ValueError("PubMedAdapter document missing typed payload")
-        raw_payload = cast(
-            PubMedDocumentPayload,
-            raw,
-        )  # ``Document.raw`` stores ``AdapterDocumentPayload``; narrow for PubMed validation.
-        pmid = raw_payload["pmid"]
+        pmid = pubmed_payload["pmid"]
         if not isinstance(pmid, (str, int)) or not PMID_RE.match(str(pmid)):
             raise ValueError(f"Invalid PMID: {pmid}")
 
@@ -448,13 +442,11 @@ class PmcAdapter(HttpAdapter[ET.Element]):
 
     def validate(self, document: Document) -> None:
         raw = document.raw
-        if not is_pmc_payload(raw):
+        if is_pmc_payload(raw):
+            pmc_payload = raw
+        else:
             raise ValueError("PMC document missing typed payload")
-        raw_payload = cast(
-            PmcDocumentPayload,
-            raw,
-        )  # ``Document.raw`` is ``AdapterDocumentPayload``; narrow for PMC assertions.
-        pmcid = raw_payload["pmcid"]
+        pmcid = pmc_payload["pmcid"]
         if not isinstance(pmcid, str) or not PMCID_RE.match(pmcid):
             raise ValueError(f"Invalid PMCID: {pmcid}")
 
@@ -570,7 +562,7 @@ class MedRxivAdapter(HttpAdapter[JSONMapping]):
             # medRxiv JSON API (2024-02 docs) returns paginated ``results`` arrays;
             # keep boundary validation to surface API changes quickly.
             for entry in ensure_json_sequence(response.get("results", []), context="medrxiv results"):
-                if not isinstance(entry, Mapping):
+                if not isinstance(entry, MappingABC):
                     continue
                 yield ensure_json_mapping(entry, context="medrxiv result entry")
             next_cursor_value = response.get("next_cursor")
@@ -605,13 +597,11 @@ class MedRxivAdapter(HttpAdapter[JSONMapping]):
 
     def validate(self, document: Document) -> None:
         raw = document.raw
-        if not is_medrxiv_payload(raw):
+        if is_medrxiv_payload(raw):
+            medrxiv_payload = raw
+        else:
             raise ValueError("MedRxiv document missing typed payload")
-        raw_payload = cast(
-            MedRxivDocumentPayload,
-            raw,
-        )  # ``Document.raw`` stores ``AdapterDocumentPayload``; narrow for MedRxiv validation.
-        doi = raw_payload["doi"]
+        doi = medrxiv_payload["doi"]
         if not isinstance(doi, str) or "/" not in doi:
             raise ValueError("Invalid DOI")
 

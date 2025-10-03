@@ -4,9 +4,10 @@ Each adapter converts raw HTTP payloads into the TypedDict structures defined in
 ``Medical_KG.ingestion.types`` so that ``Document.raw`` benefits from static type
 checking.  The adapters still accept ``Any`` from ``fetch`` but immediately
 coerce payloads through ``ensure_json_mapping`` or ``ensure_json_sequence``
-before constructing the typed payload that mypy can validate.  See
-``Medical_KG.ingestion.types`` for the TypedDict definitions referenced in the
-inline comments below.
+before constructing the typed payload that mypy can validate.  When a JSON value
+already satisfies the schema we rely on ``narrow_to_mapping`` or
+``narrow_to_sequence`` to avoid ad-hoc casts.  See ``Medical_KG.ingestion.types``
+for the TypedDict definitions referenced in the inline comments below.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import AsyncIterator, Iterable
-from typing import Any, Mapping, cast
+from typing import Any, Mapping
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
@@ -33,7 +34,6 @@ from Medical_KG.ingestion.utils import (
     canonical_json,
     ensure_json_mapping,
     ensure_json_sequence,
-    ensure_json_value,
     normalize_text,
 )
 
@@ -299,17 +299,18 @@ class Icd11Adapter(HttpAdapter[Any]):
     def parse(self, raw: Any) -> Document:
         payload_map = ensure_json_mapping(raw, context="icd11 record")
         code_value = payload_map.get("code")
-        code = str(code_value) if isinstance(code_value, str) else None
+        code = str(code_value) if isinstance(code_value, str) and code_value else None
+
+        title: str | None = None
         title_value = payload_map.get("title")
-        title_text = None
         if isinstance(title_value, Mapping):
             title_map = ensure_json_mapping(title_value, context="icd11 title")
             title_raw = title_map.get("@value")
             if isinstance(title_raw, str):
                 title = normalize_text(title_raw)
 
+        definition: str | None = None
         definition_value = payload_map.get("definition")
-        definition_text = None
         if isinstance(definition_value, Mapping):
             definition_map = ensure_json_mapping(definition_value, context="icd11 definition")
             definition_raw = definition_map.get("@value")
@@ -317,6 +318,7 @@ class Icd11Adapter(HttpAdapter[Any]):
                 definition = normalize_text(definition_raw)
 
         uri_value = payload_map.get("browserUrl")
+        uri = str(uri_value) if isinstance(uri_value, str) and uri_value else None
         # ``Icd11DocumentPayload`` fields map directly to the optional ``code``,
         # ``title``, ``definition`` and ``uri`` entries documented in
         # ``Medical_KG.ingestion.types``.
@@ -327,12 +329,13 @@ class Icd11Adapter(HttpAdapter[Any]):
             "uri": uri,
         }
         content = canonical_json(payload)
-        doc_id = self.build_doc_id(identifier=code, version="v1", content=content)
+        identifier = code or uri or "unknown"
+        doc_id = self.build_doc_id(identifier=identifier, version="v1", content=content)
         return Document(
             doc_id=doc_id,
             source=self.source,
             content=json.dumps(payload),
-            metadata={"code": code},
+            metadata={"code": code or identifier},
             raw=payload,
         )
 
@@ -413,11 +416,9 @@ class SnomedAdapter(HttpAdapter[Any]):
         if not isinstance(code, str) or not _SNOMED_RE.match(code):
             raise ValueError("Invalid SNOMED CT code")
         raw_payload = document.raw
-        if not isinstance(raw_payload, dict):
+        if is_snomed_payload(raw_payload):
+            payload = raw_payload
+        else:
             raise ValueError("SNOMED record missing designation list")
-        payload = cast(
-            SnomedDocumentPayload,
-            raw_payload,
-        )  # ``Document.raw`` stores ``AdapterDocumentPayload``; narrow for SNOMED validation.
         if not payload.get("designation"):
             raise ValueError("SNOMED record missing designation list")

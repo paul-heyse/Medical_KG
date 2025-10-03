@@ -34,6 +34,12 @@ def medrxiv_record() -> dict[str, Any]:
     return deepcopy(results[0]) if results else {}
 
 
+def medrxiv_record_without_date() -> dict[str, Any]:
+    record = medrxiv_record()
+    record.pop("date", None)
+    return record
+
+
 def pubmed_summary_without_history() -> dict[str, Any]:
     payload = pubmed_summary_payload()
     payload["result"]["uids"] = payload["result"].get("uids", [])[:2]
@@ -49,12 +55,45 @@ def pubmed_search_without_history() -> dict[str, Any]:
     return payload
 
 
+def pubmed_document_with_optional_fields() -> dict[str, Any]:
+    return {
+        "pmid": "12345678",
+        "uid": "12345678",
+        "title": "Lactate Guided Therapy",
+        "abstract": "Clinical trial findings",
+        "authors": ["Alice Example", "Bob Example"],
+        "mesh_terms": ["Sepsis"],
+        "pub_types": ["Journal Article"],
+        "pmcid": "PMC1234567",
+        "doi": "10.1000/example.doi",
+        "journal": "Critical Care",
+        "pub_year": "2024",
+        "pubdate": "2024 Jan",
+        "sortpubdate": "2024/01/01",
+    }
+
+
+def pubmed_document_without_optional_fields() -> dict[str, Any]:
+    return {
+        "pmid": "87654321",
+        "uid": "87654321",
+        "title": "Minimal Record",
+        "abstract": "Abbreviated abstract",
+        "authors": ["Case Minimal"],
+        "mesh_terms": ["Intensive Care"],
+        "pub_types": ["Journal Article"],
+    }
+
+
 __all__ = [
     "pubmed_search_payload",
     "pubmed_summary_payload",
     "pubmed_fetch_xml",
     "pmc_record_xml",
     "medrxiv_record",
+    "medrxiv_record_without_date",
     "pubmed_summary_without_history",
     "pubmed_search_without_history",
+    "pubmed_document_with_optional_fields",
+    "pubmed_document_without_optional_fields",
 ]

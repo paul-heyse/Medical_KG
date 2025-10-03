@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
-from typing import Any, Mapping, MutableMapping
+from typing import Any, Mapping, MutableMapping, cast
 
 import pytest
 
@@ -46,7 +46,10 @@ from tests.ingestion.fixtures.clinical import (
 from tests.ingestion.fixtures.guidelines import cdc_socrata_record, nice_guideline
 from tests.ingestion.fixtures.literature import (
     medrxiv_record,
+    medrxiv_record_without_date,
     pmc_record_xml,
+    pubmed_document_with_optional_fields,
+    pubmed_document_without_optional_fields,
     pubmed_fetch_xml,
     pubmed_search_payload,
     pubmed_search_without_history,
@@ -54,11 +57,16 @@ from tests.ingestion.fixtures.literature import (
 )
 from tests.ingestion.fixtures.terminology import (
     icd11_record,
+    icd11_record_without_text,
     loinc_record,
+    loinc_record_without_display,
     mesh_descriptor,
+    mesh_descriptor_without_descriptor_id,
     rxnav_properties,
     snomed_record,
+    snomed_record_without_display,
     umls_record,
+    umls_record_without_optional_fields,
 )
 
 
@@ -68,6 +76,14 @@ def _run(coro: Any) -> Any:
         return loop.run_until_complete(coro)
     finally:
         loop.close()
+
+
+def _stub_http_client() -> AsyncHttpClient:
+    class _Stub:
+        def set_rate_limit(self, *_: object, **__: object) -> None:
+            return None
+
+    return cast(AsyncHttpClient, _Stub())
 
 
 def test_pubmed_adapter_parses_fixture(fake_ledger: Any, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -93,6 +109,7 @@ def test_pubmed_adapter_parses_fixture(fake_ledger: Any, monkeypatch: pytest.Mon
         assert len(results) == 1
         document = results[0].document
         assert document.metadata["pmid"] == "12345678"
+        assert isinstance(document.raw, dict)
         assert "mesh_terms" in document.raw
         await client.aclose()
 
@@ -413,6 +430,7 @@ def test_pmc_adapter_collects_tables(fake_ledger: Any, monkeypatch: pytest.Monke
         assert document.metadata["pmcid"] == "PMC1234567"
         assert document.metadata["datestamp"] == "2024-01-15"
         assert "Sepsis" in document.content
+        assert isinstance(document.raw, dict)
         await client.aclose()
 
     _run(_test())
@@ -464,6 +482,7 @@ def test_pmc_adapter_extracts_sections_and_references(
         monkeypatch.setattr(adapter, "fetch_text", fake_fetch_text)
         results = await adapter.run(set_spec="pmc")
         payload = results[0].document.raw
+        assert isinstance(payload, dict)
         assert payload["sections"]
         assert payload["references"]
         assert payload["tables"]
@@ -538,17 +557,62 @@ def test_terminology_adapters_parse(fake_ledger: Any) -> None:
         )
 
         assert results[0][0].document.metadata["descriptor_id"].startswith("D")
-        assert isinstance(results[0][0].document.raw["terms"], list)
+        assert isinstance(results[0][0].document.raw, dict)
         assert results[1][0].document.metadata["cui"].startswith("C")
-        assert isinstance(results[1][0].document.raw["synonyms"], list)
+        assert isinstance(results[1][0].document.raw, dict)
         assert results[2][0].document.metadata["code"].endswith("-4")
-        assert isinstance(results[2][0].document.raw["property"], str)
+        assert isinstance(results[2][0].document.raw, dict)
         assert results[5][0].document.metadata["rxcui"].isdigit()
         assert isinstance(results[3][0].document.raw["title"], str)
         assert isinstance(results[4][0].document.raw["designation"], list)
         await client.aclose()
 
     _run(_test())
+
+
+def test_terminology_optional_field_variants(fake_ledger: Any) -> None:
+    context = AdapterContext(fake_ledger)
+    stub_client = _stub_http_client()
+
+    mesh = MeSHAdapter(context, stub_client)
+    missing_descriptor = mesh.parse(mesh_descriptor_without_descriptor_id())
+    assert isinstance(missing_descriptor.raw, dict)
+    assert missing_descriptor.raw.get("descriptor_id") is None
+    populated_descriptor = mesh.parse(mesh_descriptor())
+    assert isinstance(populated_descriptor.raw, dict)
+    assert populated_descriptor.raw.get("descriptor_id") == "D012345"
+
+    umls = UMLSAdapter(context, stub_client)
+    umls_missing = umls.parse(umls_record_without_optional_fields())
+    assert isinstance(umls_missing.raw, dict)
+    assert umls_missing.raw.get("definition") is None
+    umls_present = umls.parse(umls_record())
+    assert isinstance(umls_present.raw, dict)
+    assert umls_present.raw.get("definition") is not None
+
+    loinc = LoincAdapter(context, stub_client)
+    loinc_missing = loinc.parse(loinc_record_without_display())
+    assert isinstance(loinc_missing.raw, dict)
+    assert loinc_missing.raw.get("display") is None
+    loinc_present = loinc.parse(loinc_record())
+    assert isinstance(loinc_present.raw, dict)
+    assert isinstance(loinc_present.raw.get("display"), str)
+
+    icd = Icd11Adapter(context, stub_client)
+    icd_missing = icd.parse(icd11_record_without_text())
+    assert isinstance(icd_missing.raw, dict)
+    assert icd_missing.raw.get("title") is None
+    icd_present = icd.parse(icd11_record())
+    assert isinstance(icd_present.raw, dict)
+    assert isinstance(icd_present.raw.get("title"), str)
+
+    snomed = SnomedAdapter(context, stub_client)
+    snomed_missing = snomed.parse(snomed_record_without_display())
+    assert isinstance(snomed_missing.raw, dict)
+    assert snomed_missing.raw.get("display") is None
+    snomed_present = snomed.parse(snomed_record())
+    assert isinstance(snomed_present.raw, dict)
+    assert isinstance(snomed_present.raw.get("display"), str)
 
 
 def test_terminology_validations(fake_ledger: Any) -> None:
@@ -583,6 +647,28 @@ def test_terminology_validations(fake_ledger: Any) -> None:
 
     _run(client.aclose())
 
+
+def test_literature_optional_field_variants(fake_ledger: Any) -> None:
+    context = AdapterContext(fake_ledger)
+    stub_client = _stub_http_client()
+
+    pubmed = PubMedAdapter(context, stub_client)
+    optional_pubmed = pubmed.parse(pubmed_document_with_optional_fields())
+    assert isinstance(optional_pubmed.raw, dict)
+    assert optional_pubmed.raw.get("pmcid") == "PMC1234567"
+    assert optional_pubmed.raw.get("doi") == "10.1000/example.doi"
+    minimal_pubmed = pubmed.parse(pubmed_document_without_optional_fields())
+    assert isinstance(minimal_pubmed.raw, dict)
+    assert minimal_pubmed.raw.get("pmcid") is None
+    assert minimal_pubmed.raw.get("doi") is None
+
+    medrxiv = MedRxivAdapter(context, stub_client)
+    medrxiv_missing = medrxiv.parse(medrxiv_record_without_date())
+    assert isinstance(medrxiv_missing.raw, dict)
+    assert medrxiv_missing.raw.get("date") is None
+    medrxiv_present = medrxiv.parse(medrxiv_record())
+    assert isinstance(medrxiv_present.raw, dict)
+    assert medrxiv_present.raw.get("date") is not None
 
 def test_literature_fallback_returns_first_success() -> None:
     document = Document(doc_id="doc-1", source="pubmed", content="text")

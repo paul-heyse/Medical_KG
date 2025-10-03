@@ -72,7 +72,6 @@ class GPUValidator:
         if status_code != 200:
             raise GPURequirementError(f"vLLM health check at {url} returned status {status_code}")
 
-
     def _get(self, url: str) -> int:
         if self.http_getter:
             return self.http_getter(url)

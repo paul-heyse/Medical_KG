@@ -53,4 +53,3 @@ def test_normalise_eligibility_resolves_logic(eligibility_extraction, clinical_s
     logic = result.criteria[0].logic
     assert logic is not None
     assert logic.age == {"gte": 18.0, "lte": 65.0}
-

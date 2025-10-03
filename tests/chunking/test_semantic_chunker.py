@@ -8,8 +8,8 @@ import pytest
 from Medical_KG.chunking import (
     ChunkGraphWriter,
     ChunkIndexer,
-    ChunkSearchIndexer,
     ChunkingPipeline,
+    ChunkSearchIndexer,
     Document,
     FacetGenerator,
     Section,

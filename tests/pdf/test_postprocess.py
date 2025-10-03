@@ -66,9 +66,7 @@ def test_hyphenation_repair_and_section_labeling() -> None:
         TextBlock(page=1, y=300, text="Methods"),
     ]
 
-    repaired = [
-        TextBlock(block.page, block.y, repair.repair(block.text)) for block in blocks
-    ]
+    repaired = [TextBlock(block.page, block.y, repair.repair(block.text)) for block in blocks]
     labeled = labeler.label(repaired)
 
     assert repaired[1].text == "Background"

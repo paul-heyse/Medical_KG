@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 from Medical_KG.entity_linking.ner import Mention, NerPipeline
 
 
@@ -22,7 +21,13 @@ class _StubDoc:
 def test_ner_pipeline_returns_mentions(monkeypatch) -> None:
     def _fake_loader(model: str):
         def _call(text: str) -> _StubDoc:
-            return _StubDoc([_StubSpan(text="myocardial infarction", start_char=3, end_char=25, label_="disease")])
+            return _StubDoc(
+                [
+                    _StubSpan(
+                        text="myocardial infarction", start_char=3, end_char=25, label_="disease"
+                    )
+                ]
+            )
 
         return _call
 
@@ -47,7 +52,9 @@ def test_ner_pipeline_prefers_longest_overlap(monkeypatch) -> None:
             return _StubDoc(
                 [
                     _StubSpan(text="MI", start_char=5, end_char=7, label_="disease"),
-                    _StubSpan(text="myocardial infarction", start_char=5, end_char=25, label_="disease"),
+                    _StubSpan(
+                        text="myocardial infarction", start_char=5, end_char=25, label_="disease"
+                    ),
                 ]
             )
 
@@ -75,4 +82,3 @@ def test_ner_pipeline_skips_negated_mentions(monkeypatch) -> None:
     assert pipeline("no cancer detected") == [
         Mention(text="cancer", start=3, end=9, label="disease")
     ]
-

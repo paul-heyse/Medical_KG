@@ -14,6 +14,7 @@ from Medical_KG.utils.optional_dependencies import HttpxModule, get_httpx_module
 
 HTTPX: HttpxModule = get_httpx_module()
 
+
 @dataclass(slots=True)
 class QwenEmbeddingClient:
     """Client producing deterministic Qwen-style embeddings for tests."""

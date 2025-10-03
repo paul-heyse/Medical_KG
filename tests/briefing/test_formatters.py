@@ -6,9 +6,9 @@ import zipfile
 from io import BytesIO
 
 import pytest
+from pdfminer.high_level import extract_text
 
 from Medical_KG.briefing.formatters import BriefingFormatter
-from pdfminer.high_level import extract_text
 
 
 @pytest.fixture
@@ -70,7 +70,9 @@ def test_to_html_allows_custom_stylesheet(payload: dict[str, object]) -> None:
     assert "doc-1" in html_output
 
 
-def test_to_pdf_creates_textual_canvas(formatter: BriefingFormatter, payload: dict[str, object]) -> None:
+def test_to_pdf_creates_textual_canvas(
+    formatter: BriefingFormatter, payload: dict[str, object]
+) -> None:
     pdf_bytes = formatter.to_pdf(payload)
 
     # Verify key PDF markers rather than raw text contents
@@ -79,7 +81,9 @@ def test_to_pdf_creates_textual_canvas(formatter: BriefingFormatter, payload: di
     assert "Topic Dossier: Lung Cancer" in extracted
 
 
-def test_to_docx_converts_markdown(formatter: BriefingFormatter, payload: dict[str, object]) -> None:
+def test_to_docx_converts_markdown(
+    formatter: BriefingFormatter, payload: dict[str, object]
+) -> None:
     docx_bytes = formatter.to_docx(payload)
 
     with zipfile.ZipFile(io.BytesIO(docx_bytes)) as archive:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -18,7 +17,9 @@ class _StubAdapter(BaseAdapter):
     def __init__(self, context: AdapterContext, *, records: list[dict[str, Any]]) -> None:
         super().__init__(context)
         self._records = list(records)
-        self._fail_once: dict[str, bool] = {record["id"]: record.get("fail_once", False) for record in records}
+        self._fail_once: dict[str, bool] = {
+            record["id"]: record.get("fail_once", False) for record in records
+        }
         self.parsed: list[str] = []
 
     async def fetch(self, *_: Any, resume: bool = False, **__: Any) -> Iterable[dict[str, Any]]:
@@ -71,7 +72,9 @@ def test_pipeline_resume_skips_completed(tmp_path: Path) -> None:
         {"id": "doc-2", "content": "retry", "fail_once": True},
     ]
     adapter = _StubAdapter(AdapterContext(ledger), records=records)
-    pipeline = IngestionPipeline(ledger, registry=_Registry(adapter), client_factory=lambda: _NoopClient())
+    pipeline = IngestionPipeline(
+        ledger, registry=_Registry(adapter), client_factory=lambda: _NoopClient()
+    )
 
     with pytest.raises(RuntimeError):
         pipeline.run("stub")

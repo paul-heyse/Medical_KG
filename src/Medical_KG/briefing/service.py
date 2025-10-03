@@ -1,4 +1,5 @@
 """Service orchestrating briefing output generation."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -184,7 +185,9 @@ class BriefingService:
         raise ValueError(f"Unsupported format: {format}")
 
 
-def _simplify(pico_sections: Mapping[str, Sequence[Mapping[str, object]]]) -> list[dict[str, object]]:
+def _simplify(
+    pico_sections: Mapping[str, Sequence[Mapping[str, object]]],
+) -> list[dict[str, object]]:
     items: list[dict[str, object]] = []
     for section, entries in pico_sections.items():
         for entry in entries:
@@ -195,10 +198,12 @@ def _simplify(pico_sections: Mapping[str, Sequence[Mapping[str, object]]]) -> li
                 citations_list = citations
             else:
                 citations_list = []
-            items.append({
-                "summary": f"{section}: {description}",
-                "citations": citations_list,
-            })
+            items.append(
+                {
+                    "summary": f"{section}: {description}",
+                    "citations": citations_list,
+                }
+            )
     return items
 
 

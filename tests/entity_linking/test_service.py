@@ -4,7 +4,13 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from Medical_KG.entity_linking.candidates import Candidate, CandidateGenerator, DenseClient, DictionaryClient, SparseClient
+from Medical_KG.entity_linking.candidates import (
+    Candidate,
+    CandidateGenerator,
+    DenseClient,
+    DictionaryClient,
+    SparseClient,
+)
 from Medical_KG.entity_linking.decision import DecisionEngine, LinkingDecision
 from Medical_KG.entity_linking.llm import LlmAdjudicator, LlmClient
 from Medical_KG.entity_linking.ner import Mention, NerPipeline
@@ -114,4 +120,3 @@ def test_entity_linking_service_handles_empty_mentions() -> None:
     )
 
     assert asyncio.run(service.link("", "ctx")) == []
-

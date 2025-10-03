@@ -78,7 +78,9 @@ class _FakeTransaction:
         self._pending_relationships = copy.deepcopy(self.driver._relationships)
         self._unique_index = copy.deepcopy(self.driver._unique_index)
 
-    def run(self, statement: str, parameters: Mapping[str, Any] | None = None) -> Sequence[Mapping[str, Any]]:
+    def run(
+        self, statement: str, parameters: Mapping[str, Any] | None = None
+    ) -> Sequence[Mapping[str, Any]]:
         parameters = dict(parameters or {})
         if statement.strip().startswith("MERGE (n:"):
             self._merge_node(statement, parameters)
@@ -152,7 +154,9 @@ class _FakeTransaction:
             raise ValueError(f"Missing end node {end_label}:{end_id}")
         rel_props: Dict[str, Any] = {}
         if "rel_props" in parameters:
-            rel_props.update({k: v for k, v in dict(parameters["rel_props"]).items() if v is not None})
+            rel_props.update(
+                {k: v for k, v in dict(parameters["rel_props"]).items() if v is not None}
+            )
         for prop, param in _SET_PROP.findall(statement):
             value = parameters.get(param)
             if value is not None:
@@ -169,7 +173,12 @@ class _FakeTransaction:
             ),
             None,
         )
-        payload = {"type": rel_type, "start": (start_label, start_id), "end": (end_label, end_id), "properties": rel_props}
+        payload = {
+            "type": rel_type,
+            "start": (start_label, start_id),
+            "end": (end_label, end_id),
+            "properties": rel_props,
+        }
         if existing:
             existing["properties"].update(rel_props)
         else:

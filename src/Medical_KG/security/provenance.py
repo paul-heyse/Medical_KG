@@ -1,4 +1,5 @@
 """PROV provenance tracking."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -70,7 +71,9 @@ class ProvenanceStore:
         bucket.add(parent_id)
 
     def prov_o(self) -> Mapping[str, object]:
-        entities = {assertion: {"prov:wasGeneratedBy": link} for assertion, link in self._links.items()}
+        entities = {
+            assertion: {"prov:wasGeneratedBy": link} for assertion, link in self._links.items()
+        }
         activities = {
             activity_id: {
                 "prov:type": "Extraction",

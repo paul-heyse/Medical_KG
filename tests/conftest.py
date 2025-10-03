@@ -6,13 +6,13 @@ import os
 import shutil
 import sys
 import threading
+import types
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from types import FrameType
-from typing import Any, Callable, Dict, Iterable, Iterator, Mapping, MutableMapping, Sequence, cast
-import types
+from typing import Any, Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence, cast
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 PACKAGE_ROOT = SRC / "Medical_KG"
@@ -37,7 +37,9 @@ except ImportError:  # pragma: no cover - fallback for environments without fast
             self.kwargs = kwargs
             self.routes: list[tuple[str, Callable[..., Any]]] = []
 
-        def post(self, path: str, **_options: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        def post(
+            self, path: str, **_options: Any
+        ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
             def _decorator(func: Callable[..., Any]) -> Callable[..., Any]:
                 self.routes.append((path, func))
                 return func
@@ -133,7 +135,9 @@ if "httpx" not in sys.modules:
                 return self._handler(request)
 
         class _StreamContext:
-            def __init__(self, transport: MockTransport, method: str, url: str, kwargs: dict[str, Any]) -> None:
+            def __init__(
+                self, transport: MockTransport, method: str, url: str, kwargs: dict[str, Any]
+            ) -> None:
                 self._transport = transport
                 self._method = method
                 self._url = url
@@ -210,13 +214,19 @@ from trace import Trace
 import pytest
 
 from Medical_KG.ingestion.ledger import LedgerEntry
-from Medical_KG.retrieval.models import RetrievalRequest, RetrievalResponse, RetrievalResult, RetrieverScores
+from Medical_KG.retrieval.models import (
+    RetrievalRequest,
+    RetrievalResponse,
+    RetrievalResult,
+    RetrieverScores,
+)
 from Medical_KG.retrieval.types import JSONValue, SearchHit, VectorHit
 
 
 @pytest.fixture
 def monkeypatch_fixture(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
     return monkeypatch
+
 
 _TRACE = Trace(count=True, trace=False)
 
@@ -256,7 +266,9 @@ def cleanup_test_artifacts() -> Iterator[None]:
         shutil.rmtree(hypothesis_dir, ignore_errors=True)
 
 
-def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # pragma: no cover - instrumentation only
+def pytest_sessionfinish(
+    session: pytest.Session, exitstatus: int
+) -> None:  # pragma: no cover - instrumentation only
     sys.settrace(None)
     threading.settrace(cast(Any, None))
     if os.environ.get("DISABLE_COVERAGE_TRACE") == "1":
@@ -301,15 +313,12 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # p
 
     overall = total_covered / total_statements if total_statements else 1.0
 
-    report_items = {
-        path: lines
-        for path, lines in missing.items()
-        if "ingestion" in str(path)
-    }
+    report_items = {path: lines for path, lines in missing.items() if "ingestion" in str(path)}
 
     if report_items:
         details = "; ".join(
-            f"{path}:{','.join(str(line) for line in sorted(lines))}" for path, lines in sorted(report_items.items())
+            f"{path}:{','.join(str(line) for line in sorted(lines))}"
+            for path, lines in sorted(report_items.items())
         )
         (ROOT / "coverage_missing.txt").write_text(details, encoding="utf-8")
     else:
@@ -322,8 +331,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # p
     ingestion_missing = {
         path: lines
         for path, lines in missing.items()
-        if adapter_root in (path.resolve().parents)
-        and path.resolve() in executed
+        if adapter_root in (path.resolve().parents) and path.resolve() in executed
     }
     if os.environ.get("SKIP_INGESTION_COVERAGE") == "1":
         ingestion_missing = {}
@@ -332,7 +340,8 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # p
 
     if enforce_coverage and ingestion_missing:
         details = "; ".join(
-            f"{path}:{','.join(str(line) for line in sorted(lines))}" for path, lines in sorted(ingestion_missing.items())
+            f"{path}:{','.join(str(line) for line in sorted(lines))}"
+            for path, lines in sorted(ingestion_missing.items())
         )
         pytest.fail(f"Ingestion modules lack coverage: {details}")
 
@@ -368,7 +377,9 @@ class FakeLedger:
     records: MutableMapping[str, LedgerEntry] = field(default_factory=dict)
     writes: list[LedgerEntry] = field(default_factory=list)
 
-    def record(self, doc_id: str, state: str, metadata: Mapping[str, Any] | None = None) -> LedgerEntry:
+    def record(
+        self, doc_id: str, state: str, metadata: Mapping[str, Any] | None = None
+    ) -> LedgerEntry:
         entry = LedgerEntry(
             doc_id=doc_id,
             state=state,
@@ -420,7 +431,9 @@ def fake_registry() -> FakeRegistry:
 
 
 @pytest.fixture
-def sample_document_factory() -> Callable[[str, str, str, MutableMapping[str, Any] | None, Any], Document]:
+def sample_document_factory() -> (
+    Callable[[str, str, str, MutableMapping[str, Any] | None, Any], Document]
+):
     def _factory(
         doc_id: str = "doc-1",
         source: str = "demo",
@@ -428,7 +441,9 @@ def sample_document_factory() -> Callable[[str, str, str, MutableMapping[str, An
         metadata: MutableMapping[str, Any] | None = None,
         raw: Any | None = None,
     ) -> Document:
-        return Document(doc_id=doc_id, source=source, content=content, metadata=metadata or {}, raw=raw)
+        return Document(
+            doc_id=doc_id, source=source, content=content, metadata=metadata or {}, raw=raw
+        )
 
     return _factory
 
@@ -449,7 +464,9 @@ def httpx_mock_transport(monkeypatch: pytest.MonkeyPatch) -> Callable[[Callable[
             return client
 
         monkeypatch.setattr("Medical_KG.compat.httpx.create_async_client", _create_async_client)
-        monkeypatch.setattr("Medical_KG.ingestion.http_client.create_async_client", _create_async_client)
+        monkeypatch.setattr(
+            "Medical_KG.ingestion.http_client.create_async_client", _create_async_client
+        )
 
         return transport
 
@@ -555,7 +572,9 @@ class FakeNeo4jClient:
     records: Sequence[Mapping[str, Any]]
     statements: list[str] = field(default_factory=list)
 
-    def run(self, statement: str, parameters: Mapping[str, Any] | None = None) -> Sequence[Mapping[str, Any]]:
+    def run(
+        self, statement: str, parameters: Mapping[str, Any] | None = None
+    ) -> Sequence[Mapping[str, Any]]:
         _ = parameters
         self.statements.append(statement)
         return [dict(record) for record in self.records]
@@ -655,7 +674,9 @@ def fake_opensearch_hits() -> Mapping[str, Sequence[SearchHit]]:
 
 
 @pytest.fixture
-def fake_opensearch_client(fake_opensearch_hits: Mapping[str, Sequence[SearchHit]]) -> FakeOpenSearchClient:
+def fake_opensearch_client(
+    fake_opensearch_hits: Mapping[str, Sequence[SearchHit]],
+) -> FakeOpenSearchClient:
     return FakeOpenSearchClient(hits_by_index=fake_opensearch_hits)
 
 
@@ -696,4 +717,6 @@ def expected_retrieval_response() -> RetrievalResponse:
         size=1,
         metadata={"feature_flags": {"rerank_enabled": False}},
     )
+
+
 from Medical_KG.utils.optional_dependencies import get_httpx_module

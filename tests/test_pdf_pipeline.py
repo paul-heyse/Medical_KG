@@ -6,7 +6,13 @@ from pathlib import Path
 import pytest
 
 from Medical_KG.ingestion.ledger import IngestionLedger
-from Medical_KG.pdf import GpuNotAvailableError, MinerUConfig, MinerURunner, PdfDocument, PdfPipeline
+from Medical_KG.pdf import (
+    GpuNotAvailableError,
+    MinerUConfig,
+    MinerURunner,
+    PdfDocument,
+    PdfPipeline,
+)
 from Medical_KG.pdf.gpu import CommandRunner, ensure_gpu
 
 

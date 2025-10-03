@@ -1,4 +1,5 @@
 """Shared fixtures supporting extraction coverage tests."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -137,6 +138,7 @@ def extraction_envelope(
 def multi_chunk(sample_chunk: Chunk) -> Iterable[Chunk]:
     return [
         sample_chunk,
-        Chunk(chunk_id="chunk-002", text=sample_chunk.text, doc_id="doc-123", section="Eligibility"),
+        Chunk(
+            chunk_id="chunk-002", text=sample_chunk.text, doc_id="doc-123", section="Eligibility"
+        ),
     ]
-

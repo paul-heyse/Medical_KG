@@ -5,7 +5,6 @@ from typing import Any
 import pytest
 
 from Medical_KG.kg.writer import KnowledgeGraphWriter, WriteStatement
-
 from tests.kg.fixtures import FakeNeo4jDriver
 
 
@@ -132,11 +131,15 @@ def test_batch_transaction_rolls_back_on_error(writer: KnowledgeGraphWriter) -> 
 def test_property_updates_remove_nulls() -> None:
     driver = FakeNeo4jDriver()
     writer = KnowledgeGraphWriter()
-    writer.write_document({"uri": "doc://update", "id": "doc-update", "title": "Initial", "language": "en"})
+    writer.write_document(
+        {"uri": "doc://update", "id": "doc-update", "title": "Initial", "language": "en"}
+    )
     _execute(writer, driver)
 
     writer = KnowledgeGraphWriter()
-    writer.write_document({"uri": "doc://update", "id": "doc-update", "title": None, "language": "fr"})
+    writer.write_document(
+        {"uri": "doc://update", "id": "doc-update", "title": None, "language": "fr"}
+    )
     _execute(writer, driver)
 
     node = driver.get_node("Document", "doc://update")

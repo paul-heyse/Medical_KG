@@ -1,9 +1,10 @@
 """Quality gates for MinerU output."""
+
 from __future__ import annotations
 
 import string
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Sequence
+from typing import Mapping, Sequence
 
 from .postprocess import TextBlock
 
@@ -53,7 +54,11 @@ class QaGates:
     def tables_valid(self, tables: Sequence[Mapping[str, object]]) -> bool:
         for table in tables:
             rows = table.get("rows")
-            if isinstance(rows, list) and rows and all(isinstance(row, list) and len(row) >= 2 for row in rows):
+            if (
+                isinstance(rows, list)
+                and rows
+                and all(isinstance(row, list) and len(row) >= 2 for row in rows)
+            ):
                 return True
         return False
 
@@ -79,7 +84,9 @@ class QaGates:
                 raise QaGateError("PDF shorter than minimum page requirement")
             if page_count > self._max_pages:
                 raise QaGateError("PDF exceeds maximum page limit")
-        detected_language = language or self.detect_language("\n".join(block.text for block in blocks))
+        detected_language = language or self.detect_language(
+            "\n".join(block.text for block in blocks)
+        )
         if self._allowed_languages and detected_language not in self._allowed_languages:
             raise QaGateError(f"Unsupported language: {detected_language}")
         suppressed = len(blocks) - len({block.text for block in blocks})

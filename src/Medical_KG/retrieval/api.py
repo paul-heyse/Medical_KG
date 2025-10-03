@@ -1,10 +1,12 @@
 """FastAPI bindings for the retrieval service."""
+
 from __future__ import annotations
 
 from dataclasses import asdict
 from typing import Any, Mapping, Sequence
 
 from fastapi import APIRouter
+
 from pydantic import BaseModel, Field, field_validator
 
 from .models import RetrievalRequest, RetrieverTiming
@@ -48,7 +50,9 @@ class RetrieveQuery(BaseModel):
         raise ValueError("filters must be a mapping of string keys")
 
     def to_request(self) -> RetrievalRequest:
-        filters: dict[str, JSONValue] = {key: _coerce_json(value) for key, value in self.filters.items()}
+        filters: dict[str, JSONValue] = {
+            key: _coerce_json(value) for key, value in self.filters.items()
+        }
         return RetrievalRequest(
             query=self.query,
             filters=filters,
@@ -127,9 +131,7 @@ def create_router(service: RetrievalService) -> APIRouter:
         ]
         feature_flags_value = response.metadata.get("feature_flags")
         feature_flags = (
-            dict(feature_flags_value)
-            if isinstance(feature_flags_value, Mapping)
-            else {}
+            dict(feature_flags_value) if isinstance(feature_flags_value, Mapping) else {}
         )
         meta = RetrievalMetaModel(
             intent_detected=response.intent,

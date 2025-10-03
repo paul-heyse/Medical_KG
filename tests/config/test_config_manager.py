@@ -42,19 +42,15 @@ def base_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NEO4J_PROD_PASSWORD", "prod-password")
 
 
-def test_config_loads_with_overrides_and_env(config_dir: Path, base_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_config_loads_with_overrides_and_env(
+    config_dir: Path, base_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("CONFIG_ENV", "dev")
     monkeypatch.setenv("LOG_LEVEL", "warn")
     override = config_dir / "config-override.yaml"
     override.write_text(
         json.dumps(
-            {
-                "retrieval": {
-                    "fusion": {
-                        "weights": {"bm25": 0.5, "splade": 0.2, "dense": 0.3}
-                    }
-                }
-            },
+            {"retrieval": {"fusion": {"weights": {"bm25": 0.5, "splade": 0.2, "dense": 0.3}}}},
             indent=2,
         )
     )
@@ -67,20 +63,16 @@ def test_config_loads_with_overrides_and_env(config_dir: Path, base_env: None, m
     assert manager.version.hash
 
 
-def test_hot_reload_updates_non_breaking_fields(config_dir: Path, base_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_hot_reload_updates_non_breaking_fields(
+    config_dir: Path, base_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("CONFIG_ENV", "dev")
     manager = ConfigManager(base_path=config_dir, env="dev")
     initial_version = manager.version.raw
     override = config_dir / "config-override.yaml"
     override.write_text(
         json.dumps(
-            {
-                "retrieval": {
-                    "fusion": {
-                        "weights": {"bm25": 0.6, "splade": 0.1, "dense": 0.3}
-                    }
-                }
-            },
+            {"retrieval": {"fusion": {"weights": {"bm25": 0.6, "splade": 0.1, "dense": 0.3}}}},
             indent=2,
         )
     )
@@ -92,9 +84,7 @@ def test_hot_reload_updates_non_breaking_fields(config_dir: Path, base_env: None
 def test_hot_reload_rejects_breaking_change(config_dir: Path, base_env: None) -> None:
     manager = ConfigManager(base_path=config_dir, env="dev")
     override = config_dir / "config-override.yaml"
-    override.write_text(
-        json.dumps({"embeddings": {"vllm_api_base": "https://new-host"}}, indent=2)
-    )
+    override.write_text(json.dumps({"embeddings": {"vllm_api_base": "https://new-host"}}, indent=2))
     with pytest.raises(ConfigError) as exc:
         manager.reload()
     assert "Breaking change requires restart" in str(exc.value)
@@ -111,7 +101,9 @@ def test_licensing_guard_blocks_unlicensed_vocab(config_dir: Path, base_env: Non
     assert "requires affiliate license" in str(exc.value)
 
 
-def test_feature_flag_adjusts_fusion_weights(config_dir: Path, base_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_feature_flag_adjusts_fusion_weights(
+    config_dir: Path, base_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("MEDCFG__feature_flags__splade_enabled", "false")
     manager = ConfigManager(base_path=config_dir, env="dev")
     weights = manager.config.effective_fusion_weights()
@@ -154,8 +146,12 @@ def test_mask_secrets_masks_expected_keys() -> None:
     assert masked["list"][0]["refresh_token"] == "***"
 
 
-def test_env_override_parser_supports_json(config_dir: Path, base_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("RETRIEVAL_FUSION_WEIGHTS", json.dumps({"bm25": 0.7, "splade": 0.1, "dense": 0.2}))
+def test_env_override_parser_supports_json(
+    config_dir: Path, base_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(
+        "RETRIEVAL_FUSION_WEIGHTS", json.dumps({"bm25": 0.7, "splade": 0.1, "dense": 0.2})
+    )
     manager = ConfigManager(base_path=config_dir, env="dev")
     weights = manager.config.data()["retrieval"]["fusion"]["weights"]
     assert pytest.approx(weights["bm25"]) == 0.7

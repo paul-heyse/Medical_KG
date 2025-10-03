@@ -20,6 +20,8 @@ def test_document_as_record_round_trip() -> None:
 
 def test_ingestion_result_container() -> None:
     document = Document("doc-2", "demo", "content")
-    result = IngestionResult(document=document, state="auto_done", timestamp=datetime.now(timezone.utc))
+    result = IngestionResult(
+        document=document, state="auto_done", timestamp=datetime.now(timezone.utc)
+    )
     assert result.document.doc_id == "doc-2"
     assert result.state == "auto_done"

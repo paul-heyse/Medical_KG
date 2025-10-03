@@ -15,8 +15,7 @@ class SpanProtocol(Protocol):
 
 class DocProtocol(Protocol):
     @property
-    def ents(self) -> Sequence[SpanProtocol]:
-        ...
+    def ents(self) -> Sequence[SpanProtocol]: ...
 
 
 PipelineProtocol = Callable[[str], DocProtocol]

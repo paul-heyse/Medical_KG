@@ -1,4 +1,5 @@
 """Shared typing helpers for the API layer."""
+
 from __future__ import annotations
 
 from typing import Any, Awaitable, Callable, TypeAlias, TypeVar

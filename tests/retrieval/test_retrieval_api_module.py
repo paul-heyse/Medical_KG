@@ -7,7 +7,13 @@ import pytest
 from fastapi import FastAPI
 
 from Medical_KG.retrieval.api import create_router
-from Medical_KG.retrieval.models import RetrievalRequest, RetrievalResponse, RetrievalResult, RetrieverScores, RetrieverTiming
+from Medical_KG.retrieval.models import (
+    RetrievalRequest,
+    RetrievalResponse,
+    RetrievalResult,
+    RetrieverScores,
+    RetrieverTiming,
+)
 from Medical_KG.retrieval.service import RetrievalService
 
 

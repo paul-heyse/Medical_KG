@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
-
 from Medical_KG.entity_linking.candidates import (
     Candidate,
     CandidateGenerator,
@@ -41,14 +40,20 @@ class _StaticDense(DenseClient):
 
 
 def _candidate(identifier: str, score: float, ontology: str = "rxnorm") -> Candidate:
-    return Candidate(identifier=identifier, ontology=ontology, score=score, label=identifier, metadata={})
+    return Candidate(
+        identifier=identifier, ontology=ontology, score=score, label=identifier, metadata={}
+    )
 
 
-def _generator(dictionary_results: Sequence[Candidate], sparse=None, dense=None) -> CandidateGenerator:
+def _generator(
+    dictionary_results: Sequence[Candidate], sparse=None, dense=None
+) -> CandidateGenerator:
     dictionary = _RecordingDictionary(calls=[], results=dictionary_results)
     sparse_client = _StaticSparse(results=sparse or [])
     dense_client = _StaticDense(results=dense or [])
-    return CandidateGenerator(dictionary=dictionary, sparse=sparse_client, dense=dense_client, cache_size=4)
+    return CandidateGenerator(
+        dictionary=dictionary, sparse=sparse_client, dense=dense_client, cache_size=4
+    )
 
 
 def test_candidate_generator_ranks_by_rrf() -> None:
@@ -104,10 +109,11 @@ def test_candidate_generator_caches_results() -> None:
     )
 
     first = generator.generate(mention, context="ctx")
-    second = generator.generate(Mention(text="aspirin", start=0, end=7, label="drug"), context="ctx")
+    second = generator.generate(
+        Mention(text="aspirin", start=0, end=7, label="drug"), context="ctx"
+    )
 
     assert first == second
     assert len(dictionary.calls) == 2  # first call includes lex + fuzzy entries
     # Second invocation should rely on cache (no additional dictionary queries)
     assert dictionary.calls[-2:] == [("aspirin", False), ("aspirin", True)]
-

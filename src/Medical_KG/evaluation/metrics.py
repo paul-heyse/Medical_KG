@@ -1,9 +1,10 @@
 """Metric computations for retrieval and extraction."""
+
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Sequence
+from typing import Mapping, Sequence
 
 
 @dataclass(frozen=True, slots=True)
@@ -13,7 +14,9 @@ class RetrievalMetrics:
     mrr: float
 
 
-def compute_retrieval_metrics(relevant_ids: Sequence[str], ranked_ids: Sequence[str]) -> RetrievalMetrics:
+def compute_retrieval_metrics(
+    relevant_ids: Sequence[str], ranked_ids: Sequence[str]
+) -> RetrievalMetrics:
     rel_set = set(relevant_ids)
     hits = [idx for idx, doc_id in enumerate(ranked_ids[:10], start=1) if doc_id in rel_set]
     recall = len(hits) / max(len(relevant_ids), 1)

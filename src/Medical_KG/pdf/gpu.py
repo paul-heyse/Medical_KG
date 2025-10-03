@@ -1,4 +1,5 @@
 """GPU enforcement utilities for MinerU pipeline."""
+
 from __future__ import annotations
 
 import os
@@ -12,8 +13,7 @@ class GpuNotAvailableError(RuntimeError):
 
 
 class CommandRunner(Protocol):  # pragma: no cover - interface definition
-    def run(self, command: list[str]) -> subprocess.CompletedProcess[str]:
-        ...
+    def run(self, command: list[str]) -> subprocess.CompletedProcess[str]: ...
 
 
 @dataclass(slots=True)

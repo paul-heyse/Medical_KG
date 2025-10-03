@@ -11,10 +11,18 @@ from Medical_KG.infrastructure import (
 
 def _sample_target() -> DeploymentTarget:
     services = [
-        ServiceConfig(name="api", image="ghcr.io/medkg/api:latest", replicas=2, cpu="750m", memory="2Gi"),
-        ServiceConfig(name="ingest", image="ghcr.io/medkg/ingest:latest", replicas=1, cpu="500m", memory="1Gi"),
+        ServiceConfig(
+            name="api", image="ghcr.io/medkg/api:latest", replicas=2, cpu="750m", memory="2Gi"
+        ),
+        ServiceConfig(
+            name="ingest", image="ghcr.io/medkg/ingest:latest", replicas=1, cpu="500m", memory="1Gi"
+        ),
     ]
-    gpu_profiles = [GPUProfile(name="vllm", label="gpu=a100", taints={"gpu": "true"}, resources={"nvidia.com/gpu": "1"})]
+    gpu_profiles = [
+        GPUProfile(
+            name="vllm", label="gpu=a100", taints={"gpu": "true"}, resources={"nvidia.com/gpu": "1"}
+        )
+    ]
     return DeploymentTarget(name="core", services=services, gpu_profiles=gpu_profiles)
 
 
@@ -33,7 +41,16 @@ def _sample_env() -> EnvironmentConfig:
 def test_kubernetes_manifests_cover_expected_sections() -> None:
     planner = InfrastructurePlanner(target=_sample_target(), environment=_sample_env())
     manifests = planner.kubernetes_manifests()
-    assert set(manifests) == {"deployments", "services", "configmaps", "secrets", "hpas", "pdbs", "ingress", "rbac"}
+    assert set(manifests) == {
+        "deployments",
+        "services",
+        "configmaps",
+        "secrets",
+        "hpas",
+        "pdbs",
+        "ingress",
+        "rbac",
+    }
     assert manifests["deployments"][0]["kind"] == "Deployment"
     rendered = planner.render_yaml(manifests["deployments"][0])
     assert "apiVersion" in rendered
@@ -58,4 +75,3 @@ def test_terraform_modules_reference_gpu_profile() -> None:
     planner = InfrastructurePlanner(target=_sample_target(), environment=_sample_env())
     modules = planner.terraform_modules()
     assert modules["eks"]["gpu_node_groups"] == ["vllm"]
-

@@ -4,7 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from Medical_KG.security import ShaclIssue, compose_shapes, load_shapes, validate_on_write, validate_shacl
+from Medical_KG.security import (
+    ShaclIssue,
+    compose_shapes,
+    load_shapes,
+    validate_on_write,
+    validate_shacl,
+)
 from Medical_KG.security import shacl as shacl_module
 
 
@@ -61,7 +67,11 @@ def test_validate_on_write_success(tmp_path: Path) -> None:
     shape_path = tmp_path / "shape-required.txt"
     shape_path.write_text("required_field", encoding="utf-8")
     shapes = load_shapes([shape_path])
-    graph = {"evidence": [{"id": "e1", "unit_ucum": "mg", "outcome": {"id": "o1"}, "required_field": "value"}]}
+    graph = {
+        "evidence": [
+            {"id": "e1", "unit_ucum": "mg", "outcome": {"id": "o1"}, "required_field": "value"}
+        ]
+    }
     validate_on_write(graph, shapes=shapes)
 
 

@@ -1,9 +1,10 @@
 """Candidate generation for entity linking."""
+
 from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass, replace
-from typing import Iterable, List, Mapping, MutableMapping, Sequence, Tuple, cast
+from typing import List, Mapping, MutableMapping, Sequence, Tuple, cast
 
 from Medical_KG.retrieval.fusion import reciprocal_rank_fusion
 
@@ -20,7 +21,9 @@ class Candidate:
 
 
 class DictionaryClient:
-    def search(self, text: str, *, fuzzy: bool = False) -> Sequence[Candidate]:  # pragma: no cover - interface
+    def search(
+        self, text: str, *, fuzzy: bool = False
+    ) -> Sequence[Candidate]:  # pragma: no cover - interface
         raise NotImplementedError
 
 
@@ -56,7 +59,9 @@ class CandidateGenerator:
         cached = self._cache.get(cache_key)
         if cached is not None:
             # Move key to the end to reflect recent use
-            cast(OrderedDict[Tuple[str, str], Tuple[Candidate, ...]], self._cache).move_to_end(cache_key)
+            cast(OrderedDict[Tuple[str, str], Tuple[Candidate, ...]], self._cache).move_to_end(
+                cache_key
+            )
             return [replace(candidate) for candidate in cached]
 
         lex = list(self._dictionary.search(mention.text, fuzzy=False))
@@ -71,7 +76,11 @@ class CandidateGenerator:
         rrf_scores = reciprocal_rank_fusion(
             {
                 name: [
-                    type("Hit", (), {"chunk_id": c.identifier, "score": c.score, "doc_id": c.ontology})
+                    type(
+                        "Hit",
+                        (),
+                        {"chunk_id": c.identifier, "score": c.score, "doc_id": c.ontology},
+                    )
                     for c in candidates
                 ]
                 for name, candidates in pools.items()

@@ -20,15 +20,25 @@ class ExtractionMetrics:
 class ExtractionEvaluator:
     """Compute aggregate metrics against gold annotations."""
 
-    def evaluate(self, predictions: Sequence[ExtractionBase], gold: Sequence[ExtractionBase]) -> ExtractionMetrics:
+    def evaluate(
+        self, predictions: Sequence[ExtractionBase], gold: Sequence[ExtractionBase]
+    ) -> ExtractionMetrics:
         gold_by_type = self._group_by_type(gold)
         pred_by_type = self._group_by_type(predictions)
 
         pico_completeness = self._pico_completeness(pred_by_type.get(ExtractionType.PICO, []))
-        effect_f1 = self._effect_f1(pred_by_type.get(ExtractionType.EFFECT, []), gold_by_type.get(ExtractionType.EFFECT, []))
-        ae_accuracy = self._ae_accuracy(pred_by_type.get(ExtractionType.ADVERSE_EVENT, []), gold_by_type.get(ExtractionType.ADVERSE_EVENT, []))
+        effect_f1 = self._effect_f1(
+            pred_by_type.get(ExtractionType.EFFECT, []), gold_by_type.get(ExtractionType.EFFECT, [])
+        )
+        ae_accuracy = self._ae_accuracy(
+            pred_by_type.get(ExtractionType.ADVERSE_EVENT, []),
+            gold_by_type.get(ExtractionType.ADVERSE_EVENT, []),
+        )
         dose_accuracy = self._dose_accuracy(pred_by_type.get(ExtractionType.DOSE, []))
-        eligibility_accuracy = self._eligibility_accuracy(pred_by_type.get(ExtractionType.ELIGIBILITY, []), gold_by_type.get(ExtractionType.ELIGIBILITY, []))
+        eligibility_accuracy = self._eligibility_accuracy(
+            pred_by_type.get(ExtractionType.ELIGIBILITY, []),
+            gold_by_type.get(ExtractionType.ELIGIBILITY, []),
+        )
 
         return ExtractionMetrics(
             pico_completeness=pico_completeness,
@@ -38,7 +48,9 @@ class ExtractionEvaluator:
             eligibility_logic_accuracy=eligibility_accuracy,
         )
 
-    def _group_by_type(self, extractions: Iterable[ExtractionBase]) -> dict[ExtractionType, list[ExtractionBase]]:
+    def _group_by_type(
+        self, extractions: Iterable[ExtractionBase]
+    ) -> dict[ExtractionType, list[ExtractionBase]]:
         grouped: dict[ExtractionType, list[ExtractionBase]] = {}
         for extraction in extractions:
             grouped.setdefault(extraction.type, []).append(extraction)
@@ -54,7 +66,9 @@ class ExtractionEvaluator:
                 complete += 1
         return complete / len(extractions)
 
-    def _effect_f1(self, predictions: Sequence[ExtractionBase], gold: Sequence[ExtractionBase]) -> float:
+    def _effect_f1(
+        self, predictions: Sequence[ExtractionBase], gold: Sequence[ExtractionBase]
+    ) -> float:
         if not predictions or not gold:
             return 0.0
         matches = 0
@@ -63,8 +77,16 @@ class ExtractionEvaluator:
                 if (
                     pred.measure_type == target.measure_type
                     and abs(pred.value - target.value) <= 0.01
-                    and (pred.ci_low is None or target.ci_low is None or abs(pred.ci_low - target.ci_low) <= 0.01)
-                    and (pred.ci_high is None or target.ci_high is None or abs(pred.ci_high - target.ci_high) <= 0.01)
+                    and (
+                        pred.ci_low is None
+                        or target.ci_low is None
+                        or abs(pred.ci_low - target.ci_low) <= 0.01
+                    )
+                    and (
+                        pred.ci_high is None
+                        or target.ci_high is None
+                        or abs(pred.ci_high - target.ci_high) <= 0.01
+                    )
                 ):
                     matches += 1
                     break
@@ -74,7 +96,9 @@ class ExtractionEvaluator:
             return 0.0
         return 2 * precision * recall / (precision + recall)
 
-    def _ae_accuracy(self, predictions: Sequence[ExtractionBase], gold: Sequence[ExtractionBase]) -> float:
+    def _ae_accuracy(
+        self, predictions: Sequence[ExtractionBase], gold: Sequence[ExtractionBase]
+    ) -> float:
         if not predictions or not gold:
             return 0.0
         total = min(len(predictions), len(gold))

@@ -1,4 +1,5 @@
 """Rule-based intent routing for retrieval requests."""
+
 from __future__ import annotations
 
 import re

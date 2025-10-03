@@ -5,7 +5,6 @@ from typing import Any
 
 from . import load_json_fixture, load_text_fixture
 
-
 _CLINICAL_STUDY = load_json_fixture("ctgov_study.json")
 _ACCESS_GUDID = load_json_fixture("accessgudid.json")
 _OPENFDA_FAERS = load_json_fixture("openfda_faers.json")

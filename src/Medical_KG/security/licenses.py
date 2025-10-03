@@ -1,4 +1,5 @@
 """Licensing enforcement utilities."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -72,7 +73,9 @@ class LicenseSession:
         grace_end = self._expires_at + timedelta(days=tier.grace_period_days)
         if current <= grace_end:
             return
-        raise PermissionError(f"License for tier {tier.name} expired at {self._expires_at.isoformat()}")
+        raise PermissionError(
+            f"License for tier {tier.name} expired at {self._expires_at.isoformat()}"
+        )
 
     def enforce_feature(self, feature: str, *, now: datetime | None = None) -> None:
         self.check_expiration(now=now)
@@ -105,7 +108,9 @@ class LicenseSession:
 class LicenseRegistry:
     """Loads and validates license entitlements from licenses.yml."""
 
-    def __init__(self, entries: Mapping[str, LicenseEntry], tiers: Mapping[str, LicenseTier]) -> None:
+    def __init__(
+        self, entries: Mapping[str, LicenseEntry], tiers: Mapping[str, LicenseTier]
+    ) -> None:
         self._entries = entries
         self._tiers = tiers
 
@@ -137,7 +142,7 @@ class LicenseRegistry:
             redactions: dict[str, str] = {}
             for vocab_name, value in _mapping(config.get("redactions")).items():
                 value_str = str(value).strip()
-                if value_str.startswith("\"") and value_str.endswith("\""):
+                if value_str.startswith('"') and value_str.endswith('"'):
                     value_str = value_str[1:-1]
                 redactions[vocab_name.upper()] = value_str
             grace = int(config.get("grace_period_days", 0))

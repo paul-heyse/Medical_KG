@@ -52,7 +52,9 @@ def test_policy_execution_and_audit(tmp_path: Path) -> None:
 def test_policy_dry_run(tmp_path: Path) -> None:
     now = datetime.now(timezone.utc)
     pipeline = _pipeline()
-    records = [RetentionRecord(doc_id="old", created_at=now - timedelta(days=200), data={}, tags=())]
+    records = [
+        RetentionRecord(doc_id="old", created_at=now - timedelta(days=200), data={}, tags=())
+    ]
     policy = RetentionPolicy(name="dry", retention_days=30, dry_run=True)
     result = policy.execute(records, pipeline, now=now)
     assert result.deleted == ()

@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import asyncio
 import re
-from dataclasses import replace
 from typing import Mapping, Sequence, cast
 
 import pytest
 
-from Medical_KG.retrieval.models import RetrievalRequest, RetrievalResult
-from Medical_KG.retrieval.service import RetrievalService, RetrieverConfig
 from Medical_KG.retrieval.intent import IntentRule
+from Medical_KG.retrieval.models import RetrievalRequest, RetrievalResult
 from Medical_KG.retrieval.ontology import OntologyExpander
+from Medical_KG.retrieval.service import RetrievalService, RetrieverConfig
 from Medical_KG.retrieval.types import JSONValue, SearchHit, VectorHit
-
 from tests.conftest import (
     FakeOpenSearchClient,
     FakeQwenEmbedder,
@@ -25,7 +22,9 @@ class FakeReranker:
     def __init__(self) -> None:
         self.calls: list[tuple[str, list[str]]] = []
 
-    async def rerank(self, query: str, candidates: Sequence[RetrievalResult]) -> list[RetrievalResult]:
+    async def rerank(
+        self, query: str, candidates: Sequence[RetrievalResult]
+    ) -> list[RetrievalResult]:
         self.calls.append((query, [candidate.chunk_id for candidate in candidates]))
         if not candidates:
             return list(candidates)
@@ -45,7 +44,9 @@ class StubOntology(OntologyExpander):
         return dict(self._expansions.get(query, {}))
 
 
-def make_search_hits(data: Mapping[str, Sequence[Mapping[str, object]]]) -> Mapping[str, Sequence[SearchHit]]:
+def make_search_hits(
+    data: Mapping[str, Sequence[Mapping[str, object]]],
+) -> Mapping[str, Sequence[SearchHit]]:
     return {index: [cast(SearchHit, dict(hit)) for hit in hits] for index, hits in data.items()}
 
 
@@ -81,7 +82,10 @@ def retrieval_config(fake_opensearch_client: FakeOpenSearchClient) -> RetrieverC
         embedding_cache_seconds=5,
         expansion_cache_seconds=5,
         slo_ms=1500.0,
-        multi_granularity={"enabled": True, "indexes": {"chunk": "bm25-index", "graph": "graph-index"}},
+        multi_granularity={
+            "enabled": True,
+            "indexes": {"chunk": "bm25-index", "graph": "graph-index"},
+        },
     )
 
 
@@ -318,7 +322,9 @@ def test_splade_and_dense_skip_invalid_hits(
     fake_splade_encoder: FakeSpladeEncoder,
     retrieval_rules: list[IntentRule],
 ) -> None:
-    opensearch = FakeOpenSearchClient(hits_by_index=make_search_hits({"splade-index": [{"doc_id": "doc"}]}))
+    opensearch = FakeOpenSearchClient(
+        hits_by_index=make_search_hits({"splade-index": [{"doc_id": "doc"}]})
+    )
     vector = FakeVectorClient(hits=make_vector_hits([{"doc_id": "doc"}]))
     service = RetrievalService(
         opensearch=opensearch,

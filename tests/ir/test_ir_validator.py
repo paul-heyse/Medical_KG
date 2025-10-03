@@ -340,5 +340,3 @@ def test_ir_validator_span_map_monotonicity() -> None:
     ]
     with pytest.raises(ValidationError, match="monotonic"):
         validator._validate_span_map(span_map)  # type: ignore[arg-type]
-
-

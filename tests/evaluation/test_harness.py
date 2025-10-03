@@ -24,5 +24,3 @@ def test_hallucination_detection() -> None:
     harness = EvaluationHarness(EvaluationSettings(hallucination_threshold=0.0))
     report = harness.run(gold, predictions)
     assert harness.smoke_check(report), "Should flag hallucination when citations missing"
-
-

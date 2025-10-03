@@ -1,4 +1,5 @@
 """Briefing output generation utilities."""
+
 from .api import router
 from .models import (
     AdverseEvent,
@@ -14,7 +15,6 @@ from .models import (
 )
 from .repository import InMemoryBriefingRepository
 from .service import BriefingService, BriefingSettings
-from .repository import InMemoryBriefingRepository
 
 __all__ = [
     "router",

@@ -33,11 +33,15 @@ class DeadLetterQueue:
 class KgValidator:
     """Performs lightweight SHACL-style validations on KG nodes and relationships."""
 
-    def __init__(self, *, ucum_codes: Iterable[str] | None = None, dead_letter: DeadLetterQueue | None = None) -> None:
+    def __init__(
+        self, *, ucum_codes: Iterable[str] | None = None, dead_letter: DeadLetterQueue | None = None
+    ) -> None:
         self.ucum_codes = set(ucum_codes or {"1", "mg", "g", "kg", "mL"})
         self.dead_letter = dead_letter or DeadLetterQueue()
 
-    def validate_batch(self, nodes: Iterable[Mapping[str, Any]], relationships: Iterable[Mapping[str, Any]]) -> DeadLetterQueue:
+    def validate_batch(
+        self, nodes: Iterable[Mapping[str, Any]], relationships: Iterable[Mapping[str, Any]]
+    ) -> DeadLetterQueue:
         outcomes_by_id: dict[str, Mapping[str, Any]] = {}
         evidence_by_id: dict[str, Mapping[str, Any]] = {}
         identity_map: dict[tuple[str, str], str] = {}
@@ -69,7 +73,9 @@ class KgValidator:
         self._validate_code_presence(evidence_by_id, outcomes_by_id, relationships)
 
         if self.dead_letter.entries:
-            raise KgValidationError(f"Knowledge graph validation produced {len(self.dead_letter.entries)} issue(s)")
+            raise KgValidationError(
+                f"Knowledge graph validation produced {len(self.dead_letter.entries)} issue(s)"
+            )
         return self.dead_letter
 
     def validate_node(self, node: Mapping[str, Any]) -> None:
@@ -150,7 +156,9 @@ class KgValidator:
         evidence_measure_links: dict[str, str] = {}
         for relationship in relationships:
             if relationship.get("type") == "MEASURES":
-                evidence_measure_links[str(relationship.get("start_id"))] = str(relationship.get("end_id"))
+                evidence_measure_links[str(relationship.get("start_id"))] = str(
+                    relationship.get("end_id")
+                )
 
         for evidence_id, node in evidence_nodes.items():
             outcome_loinc = node.get("outcome_loinc")

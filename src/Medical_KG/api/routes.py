@@ -5,12 +5,10 @@ from __future__ import annotations
 import hashlib
 import time
 from datetime import datetime, timezone
-from typing import Callable
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 
 from Medical_KG.api.auth import Authenticator, Principal, build_default_authenticator
-from Medical_KG.api.types import DependencyCallable
 from Medical_KG.api.models import (
     ChunkResponse,
     ExtractionRequest,
@@ -25,17 +23,17 @@ from Medical_KG.api.models import (
     RetrieveResult,
     VersionResponse,
 )
-from Medical_KG.extraction.models import ExtractionType
-from Medical_KG.extraction.models import ExtractionEnvelope
+from Medical_KG.api.types import DependencyCallable
+from Medical_KG.extraction.models import ExtractionEnvelope, ExtractionType
 from Medical_KG.extraction.service import Chunk as ExtractionChunk
 from Medical_KG.extraction.service import ClinicalExtractionService
 from Medical_KG.facets.models import AdverseEventFacet, DoseFacet, EndpointFacet, FacetModel
 from Medical_KG.facets.service import Chunk as FacetChunk
 from Medical_KG.facets.service import FacetService
+from Medical_KG.kg.service import KgWriteFailure, KgWriteService
 from Medical_KG.services.chunks import ChunkRepository
 from Medical_KG.services.retrieval import RetrievalResult as RetrievalResultModel
 from Medical_KG.services.retrieval import RetrievalService
-from Medical_KG.kg.service import KgWriteFailure, KgWriteService
 
 
 class IdempotencyConflict(RuntimeError):

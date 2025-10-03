@@ -1,4 +1,5 @@
 """High-level PDF pipeline orchestration."""
+
 from __future__ import annotations
 
 import json
@@ -10,7 +11,7 @@ from typing import Mapping, Sequence
 from Medical_KG.ingestion.ledger import IngestionLedger
 
 from .gpu import ensure_gpu
-from .mineru import MinerURunResult, MinerURunner
+from .mineru import MinerURunner, MinerURunResult
 from .postprocess import (
     EquationNormaliser,
     FigureCaptionExtractor,
@@ -32,7 +33,9 @@ class PdfDocument:
 
 
 class ArtifactStore:
-    def persist(self, doc_key: str, artifacts: Mapping[str, Path]) -> Mapping[str, str]:  # pragma: no cover - interface
+    def persist(
+        self, doc_key: str, artifacts: Mapping[str, Path]
+    ) -> Mapping[str, str]:  # pragma: no cover - interface
         raise NotImplementedError
 
 
@@ -74,7 +77,9 @@ class PdfPipeline:
                     payload = json.loads(candidate.read_text(encoding="utf-8"))
                 except json.JSONDecodeError as exc:  # pragma: no cover - defensive
                     raise QaGateError(f"Invalid MinerU blocks output: {exc}") from exc
-                blocks_data = payload.get("blocks", payload) if isinstance(payload, dict) else payload
+                blocks_data = (
+                    payload.get("blocks", payload) if isinstance(payload, dict) else payload
+                )
                 blocks: list[TextBlock] = []
                 for entry in blocks_data:
                     text = str(entry.get("text", "")).strip()

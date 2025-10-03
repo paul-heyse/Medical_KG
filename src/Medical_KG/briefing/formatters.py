@@ -1,10 +1,11 @@
 """Formatting helpers for dossier exports."""
+
 from __future__ import annotations
 
 import io
 import json
 from textwrap import indent
-from typing import Iterable, Mapping, Sequence
+from typing import Mapping, Sequence
 from xml.sax.saxutils import escape
 from zipfile import ZipFile
 
@@ -146,9 +147,7 @@ def _markdown_to_document_xml(markdown: str) -> str:
     paragraphs: list[str] = []
     for line in markdown.splitlines():
         text = escape(line or " ")
-        paragraphs.append(
-            "<w:p><w:r><w:t xml:space='preserve'>{}</w:t></w:r></w:p>".format(text)
-        )
+        paragraphs.append("<w:p><w:r><w:t xml:space='preserve'>{}</w:t></w:r></w:p>".format(text))
     content = "".join(paragraphs)
     return _DOCUMENT_TEMPLATE.format(content=content)
 

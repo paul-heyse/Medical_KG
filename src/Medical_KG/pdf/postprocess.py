@@ -1,10 +1,11 @@
 """Medical-specific post-processing on MinerU output."""
+
 from __future__ import annotations
 
 import re
 from collections import Counter
 from dataclasses import dataclass
-from typing import Iterable, List, Mapping, MutableMapping, Sequence
+from typing import List, MutableMapping, Sequence
 
 
 @dataclass(slots=True)
@@ -31,13 +32,17 @@ class TwoColumnReflow:
                 left.append(block)
             else:
                 right.append(block)
-        ordered = sorted(left, key=lambda b: (b.page, b.y)) + sorted(right, key=lambda b: (b.page, b.y))
+        ordered = sorted(left, key=lambda b: (b.page, b.y)) + sorted(
+            right, key=lambda b: (b.page, b.y)
+        )
         return ordered
 
 
 class HeaderFooterSuppressor:
     def suppress(self, blocks: Sequence[TextBlock]) -> List[TextBlock]:
-        occurrences: MutableMapping[str, int] = Counter(block.text.strip() for block in blocks if block.text.strip())
+        occurrences: MutableMapping[str, int] = Counter(
+            block.text.strip() for block in blocks if block.text.strip()
+        )
         threshold = max(1, int(0.6 * len({block.page for block in blocks})))
         filtered = [block for block in blocks if occurrences[block.text.strip()] <= threshold]
         return filtered
@@ -76,9 +81,13 @@ class SectionLabeler:
             heading = block.text.lower().strip()
             if heading in self.SECTIONS:
                 current = self.SECTIONS[heading]
-                labeled.append(TextBlock(page=block.page, y=block.y, text=block.text, label=current))
+                labeled.append(
+                    TextBlock(page=block.page, y=block.y, text=block.text, label=current)
+                )
             else:
-                labeled.append(TextBlock(page=block.page, y=block.y, text=block.text, label=current))
+                labeled.append(
+                    TextBlock(page=block.page, y=block.y, text=block.text, label=current)
+                )
         return labeled
 
 

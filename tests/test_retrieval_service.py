@@ -2,27 +2,28 @@ from __future__ import annotations
 
 import asyncio
 import re
-
 from typing import Iterable
 
 from Medical_KG.retrieval import (
     ConceptCatalogClient,
     ConstantEmbeddingClient,
-    IntentRule,
     InMemorySearch,
     InMemorySearchHit,
     InMemoryVector,
+    IntentRule,
     OntologyExpander,
     OntologyTerm,
     PassthroughEncoder,
+    RetrievalRequest,
     RetrievalService,
     RetrieverConfig,
-    RetrievalRequest,
 )
 
 
 class StubCatalog(ConceptCatalogClient):
-    def synonyms(self, identifier: str) -> Iterable[OntologyTerm]:  # pragma: no cover - used in tests
+    def synonyms(
+        self, identifier: str
+    ) -> Iterable[OntologyTerm]:  # pragma: no cover - used in tests
         if identifier.lower().startswith("nct"):
             yield OntologyTerm(term=identifier.upper(), weight=1.0)
 

@@ -1,4 +1,5 @@
 """Ontology-aware query expansion helpers."""
+
 from __future__ import annotations
 
 import re
@@ -38,7 +39,9 @@ class OntologyExpander:
             for match in self._ID_PATTERN.finditer(query):
                 identifier = match.group(1).strip()
                 for synonym in self._catalog.synonyms(identifier):
-                    expansions[synonym.term] = max(expansions.get(synonym.term, 0.0), synonym.weight)
+                    expansions[synonym.term] = max(
+                        expansions.get(synonym.term, 0.0), synonym.weight
+                    )
         normalized = re.sub(r"[^a-z0-9\s]", " ", query.lower())
         tokens = {token for token in normalized.split() if len(token) > 3}
         if self._catalog:

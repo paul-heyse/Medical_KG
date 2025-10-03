@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
-from typing import Mapping, Sequence, Any
+from typing import Any, Mapping, Sequence
 
 from Medical_KG.entity_linking import (
     Candidate,

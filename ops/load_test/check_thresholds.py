@@ -14,7 +14,6 @@ from bs4 import BeautifulSoup
 
 import yaml
 
-
 # NOTE: These dataclasses are also imported by pytest test modules. When tests load this
 # module via importlib, dataclasses complains if __module__ is None (Python 3.12+). To
 # guard against that, ensure we register the module name explicitly before defining the
@@ -101,7 +100,9 @@ def _parse_html(path: Path) -> Dict[str, MetricSnapshot]:
     if table is None:
         raise ValueError("Unable to locate requests table in HTML report")
 
-    headers = [normalize_header(th.get_text(strip=True)) for th in table.find("thead").find_all("th")]
+    headers = [
+        normalize_header(th.get_text(strip=True)) for th in table.find("thead").find_all("th")
+    ]
 
     snapshots: Dict[str, MetricSnapshot] = {}
     for row in table.find("tbody").find_all("tr"):
@@ -160,7 +161,9 @@ def _row_to_snapshot(data: Mapping[str, Any]) -> MetricSnapshot:
 
     requests = to_int(data.get("requests"))
     failures = to_int(data.get("failures") or data.get("fails"))
-    median_ms = to_float(data.get("median_response_time") or data.get("median") or data.get("50pct"))
+    median_ms = to_float(
+        data.get("median_response_time") or data.get("median") or data.get("50pct")
+    )
     p95_ms = to_float(data.get("95pct") or data.get("95"))
     p99_ms = to_float(data.get("99pct") or data.get("99"))
     rps = to_float(data.get("requests_per_s") or data.get("requests_s") or data.get("rps"))
@@ -235,10 +238,18 @@ def evaluate(
         return merged
 
     def combined_error_rate(value: Any | None) -> float | None:
-        return float(value) if value is not None else (float(default_error_rate) if default_error_rate is not None else None)
+        return (
+            float(value)
+            if value is not None
+            else (float(default_error_rate) if default_error_rate is not None else None)
+        )
 
     def combined_rps(value: Any | None) -> float | None:
-        return float(value) if value is not None else (float(default_rps) if default_rps is not None else None)
+        return (
+            float(value)
+            if value is not None
+            else (float(default_rps) if default_rps is not None else None)
+        )
 
     def run_checks(target: str, snapshot: MetricSnapshot | None, spec: Mapping[str, Any]) -> None:
         latency_spec = combined_latency(spec.get("latency_ms"))
@@ -260,7 +271,11 @@ def evaluate(
                     comparator=comparator,
                     threshold=threshold,
                     passed=passed,
-                    detail="metric missing" if actual is None else f"actual={actual:.2f}, threshold={threshold:.2f}",
+                    detail=(
+                        "metric missing"
+                        if actual is None
+                        else f"actual={actual:.2f}, threshold={threshold:.2f}"
+                    ),
                 )
             )
 
@@ -327,7 +342,9 @@ def main() -> int:
     for check in checks:
         status = "PASS" if check.passed else "FAIL"
         actual_repr = "n/a" if check.actual is None else f"{check.actual:.2f}"
-        print(f"[{status}] {check.target} :: {check.metric} ({actual_repr} {check.comparator} {check.threshold:.2f})")
+        print(
+            f"[{status}] {check.target} :: {check.metric} ({actual_repr} {check.comparator} {check.threshold:.2f})"
+        )
         if not check.passed and check.actual is None:
             print("    detail: metric missing in report")
 

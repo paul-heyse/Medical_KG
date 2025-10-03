@@ -1,4 +1,5 @@
 """Scope and role-based access control utilities."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -71,7 +72,9 @@ class RBACEngine:
         if required_scope and required_scope not in scopes:
             raise ScopeError(f"Missing scope {required_scope}")
 
-    def _expand_role(self, role_name: str, allowed: set[str], denied: set[str], scopes: set[str]) -> None:
+    def _expand_role(
+        self, role_name: str, allowed: set[str], denied: set[str], scopes: set[str]
+    ) -> None:
         role = self._roles.get(role_name)
         if role is None:
             raise KeyError(f"Unknown role {role_name}")

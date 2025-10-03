@@ -48,7 +48,7 @@ class ChunkSearchIndexer:
                 "similarity": {"default": {"type": "BM25"}},
                 "analysis": {
                     "analyzer": {"chunk_bm25": {"tokenizer": "standard", "filter": ["lowercase"]}}
-                }
+                },
             },
             "mappings": {
                 "properties": {
@@ -144,7 +144,6 @@ class ChunkSearchIndexer:
         if not lines:
             return None
         return "\n".join(lines)
-
 
 
 @dataclass(slots=True)

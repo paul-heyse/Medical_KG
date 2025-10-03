@@ -21,4 +21,5 @@ def load_bytes_fixture(name: str) -> bytes:
     path = _FIXTURE_ROOT / name
     return path.read_bytes()
 
+
 __all__ = ["load_json_fixture", "load_text_fixture", "load_bytes_fixture"]

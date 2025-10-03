@@ -63,6 +63,7 @@ def test_collect_gpu_stats(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_monitor_health_emits_alert(monkeypatch: pytest.MonkeyPatch) -> None:
     service = FakeService()
+
     class Failing(GPUValidator):
         def validate(self) -> None:  # type: ignore[override]
             raise GPURequirementError("not available")

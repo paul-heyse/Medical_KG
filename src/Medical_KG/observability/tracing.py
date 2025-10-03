@@ -10,14 +10,19 @@ from opentelemetry import trace  # type: ignore[import-not-found]
 from opentelemetry.instrumentation.fastapi import (  # type: ignore[import-not-found]
     FastAPIInstrumentor,
 )
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor  # type: ignore[import-not-found]
+from opentelemetry.instrumentation.httpx import (
+    HTTPXClientInstrumentor,  # type: ignore[import-not-found]
+)
 from opentelemetry.sdk.resources import Resource  # type: ignore[import-not-found]
 from opentelemetry.sdk.trace import TracerProvider  # type: ignore[import-not-found]
 from opentelemetry.sdk.trace.export import (  # type: ignore[import-not-found]
     BatchSpanProcessor,
     ConsoleSpanExporter,
 )
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased  # type: ignore[import-not-found]
+from opentelemetry.sdk.trace.sampling import (  # type: ignore[import-not-found]
+    ParentBased,
+    TraceIdRatioBased,
+)
 
 try:  # pragma: no cover - optional dependency
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import (  # type: ignore[import-not-found]
@@ -44,7 +49,9 @@ def setup_tracing(app: FastAPI | None = None) -> None:
     service_name = os.getenv("MEDKG_SERVICE_NAME", "medical-kg-api")
     sample_rate = float(os.getenv("MEDKG_TRACE_SAMPLE_RATE", "0.1"))
     sampler = ParentBased(TraceIdRatioBased(max(0.0, min(sample_rate, 1.0))))
-    provider = TracerProvider(resource=Resource.create({"service.name": service_name}), sampler=sampler)
+    provider = TracerProvider(
+        resource=Resource.create({"service.name": service_name}), sampler=sampler
+    )
     exporter = _build_exporter()
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
@@ -63,7 +70,9 @@ def _build_exporter():
     headers = os.getenv("OTEL_EXPORTER_OTLP_HEADERS")
     if endpoint:
         if OTLPSpanExporter is None:
-            _logger.warning("OTLP endpoint configured but opentelemetry-exporter-otlp is not installed")
+            _logger.warning(
+                "OTLP endpoint configured but opentelemetry-exporter-otlp is not installed"
+            )
         else:
             options: dict[str, str] = {}
             if headers:

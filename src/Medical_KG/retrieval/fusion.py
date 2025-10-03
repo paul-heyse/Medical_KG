@@ -1,4 +1,5 @@
 """Score fusion helpers for retrieval ensembles."""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -18,10 +19,7 @@ def min_max_normalize(results: Iterable[RetrievalResult]) -> dict[str, float]:
     max_score = max(scores.values())
     if max_score == min_score:
         return {key: 1.0 for key in scores}
-    return {
-        key: (value - min_score) / (max_score - min_score)
-        for key, value in scores.items()
-    }
+    return {key: (value - min_score) / (max_score - min_score) for key, value in scores.items()}
 
 
 def weighted_fusion(

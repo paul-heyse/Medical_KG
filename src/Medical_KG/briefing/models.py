@@ -1,4 +1,5 @@
 """Domain models supporting briefing output synthesis."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -141,4 +142,3 @@ class TopicBundle:
         ):
             for item in iterable:
                 yield from getattr(item, "citations", [])
-

@@ -1,4 +1,5 @@
 """Rule-based clinical extraction implementation used for tests."""
+
 from __future__ import annotations
 
 import hashlib
@@ -16,9 +17,9 @@ from .models import (
     EligibilityCriterion,
     EligibilityExtraction,
     EligibilityLogic,
+    ExtractionBase,
     ExtractionEnvelope,
     ExtractionType,
-    ExtractionBase,
     PICOExtraction,
 )
 from .normalizers import normalise_extractions
@@ -41,7 +42,9 @@ def _span(text: str, phrase: str) -> EvidenceSpan | None:
     index = text.lower().find(phrase.lower())
     if index == -1:
         return None
-    return EvidenceSpan(start=index, end=index + len(phrase), quote=text[index : index + len(phrase)])
+    return EvidenceSpan(
+        start=index, end=index + len(phrase), quote=text[index : index + len(phrase)]
+    )
 
 
 def _ensure_span(span: EvidenceSpan | None, text: str) -> list[EvidenceSpan]:
@@ -219,7 +222,9 @@ class ClinicalExtractionService:
             chunk_ids.append(chunk.chunk_id)
             payload.extend(self.extract(chunk))
         schema_hash = hashlib.sha256(
-            "::".join(sorted(extraction_type.value for extraction_type, _ in self._extractors)).encode()
+            "::".join(
+                sorted(extraction_type.value for extraction_type, _ in self._extractors)
+            ).encode()
         ).hexdigest()
         prompt_hash = self._prompts.prompt_hash()
         extracted_at = datetime.now(timezone.utc)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any, cast
+from typing import cast
 
 from .types import JsonValue
 
@@ -80,10 +80,16 @@ class Concept:
         self.iri = self._validate_iri(self.iri)
         self.label = self._require(self.label, "label")
         self.preferred_term = self._require(self.preferred_term, "preferred_term")
-        self.definition = self.definition.strip() if isinstance(self.definition, str) else self.definition
-        self.synonyms = [syn if isinstance(syn, Synonym) else Synonym(**syn) for syn in self.synonyms]
+        self.definition = (
+            self.definition.strip() if isinstance(self.definition, str) else self.definition
+        )
+        self.synonyms = [
+            syn if isinstance(syn, Synonym) else Synonym(**syn) for syn in self.synonyms
+        ]
         self.codes = {str(system): str(code) for system, code in self.codes.items()}
-        self.xrefs = {system: [str(value) for value in values] for system, values in self.xrefs.items()}
+        self.xrefs = {
+            system: [str(value) for value in values] for system, values in self.xrefs.items()
+        }
         self.parents = [str(parent) for parent in self.parents]
         self.ancestors = [str(ancestor) for ancestor in self.ancestors]
         self.same_as = [str(iri) for iri in self.same_as]

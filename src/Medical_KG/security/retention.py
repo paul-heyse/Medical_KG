@@ -1,4 +1,5 @@
 """Data retention and purge pipeline."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -113,5 +114,6 @@ class RetentionPolicy:
     def next_run(self, *, after: datetime | None = None) -> datetime:
         base = after or datetime.now(timezone.utc)
         return base + timedelta(minutes=self.interval_minutes)
+
 
 __all__.extend(["RetentionPolicy", "RetentionRecord", "RetentionResult"])

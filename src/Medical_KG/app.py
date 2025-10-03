@@ -2,22 +2,22 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Awaitable, Callable, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Annotated, Awaitable, Callable, cast
 from uuid import uuid4
 
 from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from Medical_KG.api.routes import ApiRouter
+from Medical_KG.api.types import FastAPIApp
 from Medical_KG.briefing import router as briefing_router
 from Medical_KG.config.manager import ConfigError, ConfigManager
 from Medical_KG.observability import configure_logging, setup_tracing
 from Medical_KG.retrieval import RetrievalService, create_router
-from Medical_KG.api.types import FastAPIApp
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    def _FastAPIFactory(*args: object, **kwargs: object) -> FastAPIApp:
-        ...
+
+    def _FastAPIFactory(*args: object, **kwargs: object) -> FastAPIApp: ...
 
 else:  # pragma: no cover - runtime import
     from fastapi import FastAPI as _FastAPIFactory
@@ -65,15 +65,15 @@ def create_app(
         return response
 
     reload_decorator = cast(
-        Callable[[Callable[..., Awaitable[dict[str, str]]]], Callable[..., Awaitable[dict[str, str]]]],
+        Callable[
+            [Callable[..., Awaitable[dict[str, str]]]], Callable[..., Awaitable[dict[str, str]]]
+        ],
         app.post("/admin/reload", tags=["admin"], summary="Hot reload configuration"),
     )
 
     @reload_decorator
     async def reload_config(
-        credentials: Annotated[
-            HTTPAuthorizationCredentials | None, Depends(_security)
-        ],
+        credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_security)],
     ) -> dict[str, str]:
         if credentials is None:
             raise HTTPException(

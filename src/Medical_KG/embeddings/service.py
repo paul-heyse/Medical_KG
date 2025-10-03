@@ -12,7 +12,6 @@ from .metrics import EMBEDDING_ERRORS, EMBEDDING_LATENCY, EMBEDDING_REQUESTS
 from .qwen import QwenEmbeddingClient
 from .splade import SPLADEExpander
 
-
 LOGGER = logging.getLogger(__name__)
 
 

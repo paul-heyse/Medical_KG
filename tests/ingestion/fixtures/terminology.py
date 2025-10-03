@@ -5,7 +5,6 @@ from typing import Any
 
 from . import load_json_fixture
 
-
 _MESH = load_json_fixture("mesh_descriptor.json")
 _UMLS = load_json_fixture("umls_cui.json")
 _LOINC = load_json_fixture("loinc_lookup.json")

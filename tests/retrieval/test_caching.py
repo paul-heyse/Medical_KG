@@ -5,12 +5,11 @@ from typing import Mapping, Sequence
 import pytest
 
 from Medical_KG.retrieval.caching import TTLCache
-from Medical_KG.retrieval.models import RetrievalRequest
-from Medical_KG.retrieval.service import RetrievalService, RetrieverConfig
 from Medical_KG.retrieval.intent import IntentRule
+from Medical_KG.retrieval.models import RetrievalRequest
 from Medical_KG.retrieval.ontology import OntologyExpander
+from Medical_KG.retrieval.service import RetrievalService, RetrieverConfig
 from Medical_KG.retrieval.types import SearchHit, VectorHit
-
 from tests.conftest import (
     FakeOpenSearchClient,
     FakeQwenEmbedder,
@@ -96,7 +95,9 @@ def test_ttl_cache_invalidation() -> None:
 
 
 @pytest.mark.asyncio
-async def test_query_cache_hits(cache_service: RetrievalService, fake_opensearch_client: FakeOpenSearchClient) -> None:
+async def test_query_cache_hits(
+    cache_service: RetrievalService, fake_opensearch_client: FakeOpenSearchClient
+) -> None:
     request = RetrievalRequest(query="pembrolizumab")
     first = await cache_service.retrieve(request)
     second = await cache_service.retrieve(request)
@@ -105,7 +106,9 @@ async def test_query_cache_hits(cache_service: RetrievalService, fake_opensearch
 
 
 @pytest.mark.asyncio
-async def test_cache_miss_after_invalidation(cache_service: RetrievalService, fake_opensearch_client: FakeOpenSearchClient) -> None:
+async def test_cache_miss_after_invalidation(
+    cache_service: RetrievalService, fake_opensearch_client: FakeOpenSearchClient
+) -> None:
     request = RetrievalRequest(query="pembrolizumab")
     await cache_service.retrieve(request)
     key = cache_service._cache_key(request)

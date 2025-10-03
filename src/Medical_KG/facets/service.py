@@ -7,11 +7,10 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
-from pydantic import ValidationError
-
+from Medical_KG.facets.dedup import deduplicate_facets
 from Medical_KG.facets.generator import (
-    GenerationRequest,
     FacetGenerationError,
+    GenerationRequest,
     generate_facets,
     load_facets,
     serialize_facets,
@@ -19,7 +18,7 @@ from Medical_KG.facets.generator import (
 from Medical_KG.facets.models import FacetIndexRecord, FacetModel
 from Medical_KG.facets.router import FacetRouter
 from Medical_KG.facets.validator import FacetValidationError, FacetValidator
-from Medical_KG.facets.dedup import deduplicate_facets
+from pydantic import ValidationError
 
 
 @dataclass(slots=True)
@@ -102,9 +101,7 @@ class FacetService:
     def generate_for_chunk(self, chunk: Chunk) -> list[FacetModel]:
         router = FacetRouter(table_headers=chunk.table_headers)
         facet_types = router.detect(chunk.text, section=chunk.section)
-        request = GenerationRequest(
-            chunk_id=chunk.chunk_id, text=chunk.text, section=chunk.section
-        )
+        request = GenerationRequest(chunk_id=chunk.chunk_id, text=chunk.text, section=chunk.section)
         try:
             facets = generate_facets(request, facet_types)
             validated = [self._validator.validate(facet, text=chunk.text) for facet in facets]

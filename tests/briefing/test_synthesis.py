@@ -25,7 +25,9 @@ def sample_bundle() -> TopicBundle:
     evidence_variables = (
         EvidenceVariable(kind="population", description="Adults", citations=(citation_a,)),
         EvidenceVariable(kind="outcome", description="Overall survival", citations=(citation_b,)),
-        EvidenceVariable(kind="outcome", description="Relapse-free survival", citations=(citation_a,)),
+        EvidenceVariable(
+            kind="outcome", description="Relapse-free survival", citations=(citation_a,)
+        ),
     )
     evidence = (
         Evidence(

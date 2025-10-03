@@ -1,4 +1,5 @@
 """Simple rule-based facet routing implementation."""
+
 from __future__ import annotations
 
 import re
@@ -22,7 +23,9 @@ SECTION_TO_FACET: dict[str, FacetType] = {
 ENDPOINT_TERMS = re.compile(r"\b(HR|RR|OR|CI|hazard ratio|risk ratio|odds ratio)\b", re.I)
 AE_TERMS = re.compile(r"\b(grade\s*[1-5]|adverse event|toxicity|serious)\b", re.I)
 DOSE_TERMS = re.compile(r"\b(mg|mcg|tablet|capsule|po|iv|b.i.d|bid|q\d+h)\b", re.I)
-PICO_TERMS = re.compile(r"\b(population|intervention|comparator|outcome|randomized|trial|patients?)\b", re.I)
+PICO_TERMS = re.compile(
+    r"\b(population|intervention|comparator|outcome|randomized|trial|patients?)\b", re.I
+)
 
 
 class FacetRouter:
@@ -81,7 +84,9 @@ class FacetRouter:
         routing: dict[int, list[FacetType]] = {}
         for idx, (text, metadata) in enumerate(chunks):
             table_headers_value = metadata.get("table_headers")
-            if isinstance(table_headers_value, Sequence) and not isinstance(table_headers_value, str):
+            if isinstance(table_headers_value, Sequence) and not isinstance(
+                table_headers_value, str
+            ):
                 headers = list(table_headers_value)
             elif isinstance(table_headers_value, str):
                 headers = [table_headers_value]

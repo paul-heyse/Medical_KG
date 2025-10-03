@@ -1,10 +1,11 @@
 """Entity linking package."""
-from .detectors import DeterministicDetectors, IdentifierCandidate
-from .ner import NerPipeline, Mention
-from .candidates import CandidateGenerator, Candidate, DictionaryClient, SparseClient, DenseClient
-from .llm import LlmAdjudicator, LlmClient, AdjudicationResult
+
+from .candidates import Candidate, CandidateGenerator, DenseClient, DictionaryClient, SparseClient
 from .decision import DecisionEngine, LinkingDecision
-from .service import EntityLinkingService, LinkingResult, KnowledgeGraphWriter
+from .detectors import DeterministicDetectors, IdentifierCandidate
+from .llm import AdjudicationResult, LlmAdjudicator, LlmClient
+from .ner import Mention, NerPipeline
+from .service import EntityLinkingService, KnowledgeGraphWriter, LinkingResult
 
 __all__ = [
     "DeterministicDetectors",

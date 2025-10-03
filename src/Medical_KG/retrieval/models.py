@@ -1,4 +1,5 @@
 """Core dataclasses and type helpers for retrieval orchestration."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

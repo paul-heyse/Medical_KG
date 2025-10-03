@@ -1,4 +1,5 @@
 """High-level retrieval orchestration combining multiple retrievers."""
+
 from __future__ import annotations
 
 import hashlib
@@ -199,7 +200,9 @@ class RetrievalService:
                 chunk_id=chunk_id,
                 doc_id=doc_id,
                 text=str(hit.get("text", "")),
-                title_path=hit.get("title_path") if isinstance(hit.get("title_path"), str) else None,
+                title_path=(
+                    hit.get("title_path") if isinstance(hit.get("title_path"), str) else None
+                ),
                 section=hit.get("section") if isinstance(hit.get("section"), str) else None,
                 score=score,
                 scores=RetrieverScores(splade=score),
@@ -212,7 +215,9 @@ class RetrievalService:
 
     def _dense(self, query: str, context: RetrieverContext) -> list[RetrievalResult]:
         embedding = self._embed(query)
-        hits = self._vector.query(index=self._config.dense_index, embedding=embedding, top_k=context.top_k)
+        hits = self._vector.query(
+            index=self._config.dense_index, embedding=embedding, top_k=context.top_k
+        )
         results: list[RetrievalResult] = []
         for hit in hits:
             chunk_id = hit.get("chunk_id")
@@ -228,7 +233,9 @@ class RetrievalService:
                 chunk_id=chunk_id,
                 doc_id=doc_id,
                 text=str(hit.get("text", "")),
-                title_path=hit.get("title_path") if isinstance(hit.get("title_path"), str) else None,
+                title_path=(
+                    hit.get("title_path") if isinstance(hit.get("title_path"), str) else None
+                ),
                 section=hit.get("section") if isinstance(hit.get("section"), str) else None,
                 score=score,
                 scores=RetrieverScores(dense=score),
@@ -319,7 +326,9 @@ class RetrievalService:
         }
         fused_scores: FusionScores = weighted_fusion(pools, context.weights)
         if not fused_scores:
-            fused_scores = reciprocal_rank_fusion({k: list(v) for k, v in pools.items()}, k=context.rrf_k)
+            fused_scores = reciprocal_rank_fusion(
+                {k: list(v) for k, v in pools.items()}, k=context.rrf_k
+            )
         fused_results: dict[str, RetrievalResult] = {}
         for collection in pools.values():
             for result in collection:

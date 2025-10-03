@@ -13,8 +13,7 @@ R = TypeVar("R")
 class HttpUserProtocol(Protocol):
     wait_time: Callable[..., float]
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        ...
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
 
 
 WaitTimeFactory = Callable[[float, float], Callable[[], float]]

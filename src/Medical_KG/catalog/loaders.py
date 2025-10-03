@@ -200,14 +200,8 @@ class SnomedCTLoader(ConceptLoader):
             definition = record.get("definition")
             synonym_values = record.get("synonyms") or []
             synonyms = [(syn, SynonymType.EXACT) for syn in synonym_values]
-            parents = [
-                f"http://snomed.info/id/{pid}"
-                for pid in (record.get("parents") or [])
-            ]
-            ancestors = [
-                f"http://snomed.info/id/{aid}"
-                for aid in (record.get("ancestors") or [])
-            ]
+            parents = [f"http://snomed.info/id/{pid}" for pid in (record.get("parents") or [])]
+            ancestors = [f"http://snomed.info/id/{aid}" for aid in (record.get("ancestors") or [])]
             xrefs = {"icd10": [str(code) for code in (record.get("icd10") or [])]}
             attributes = {"active": bool(record.get("active", True))}
             status = "active" if attributes["active"] else "retired"
@@ -234,9 +228,7 @@ class ICD11Loader(ConceptLoader):
     family = ConceptFamily.CONDITION
     license_bucket = "permissive"
 
-    def __init__(
-        self, entries: Sequence[ICD11Entry], *, release_version: str = "2025"
-    ) -> None:
+    def __init__(self, entries: Sequence[ICD11Entry], *, release_version: str = "2025") -> None:
         super().__init__(release_version=release_version)
         self._entries = list(entries)
 
@@ -275,9 +267,7 @@ class MONDOLoader(ConceptLoader):
     family = ConceptFamily.CONDITION
     license_bucket = "open"
 
-    def __init__(
-        self, nodes: Sequence[MONDONode], *, release_version: str = "2025-02"
-    ) -> None:
+    def __init__(self, nodes: Sequence[MONDONode], *, release_version: str = "2025-02") -> None:
         super().__init__(release_version=release_version)
         self._nodes = list(nodes)
 
@@ -309,9 +299,7 @@ class HPOLoader(ConceptLoader):
     family = ConceptFamily.PHENOTYPE
     license_bucket = "open"
 
-    def __init__(
-        self, items: Sequence[HPONode], *, release_version: str = "2025-02-01"
-    ) -> None:
+    def __init__(self, items: Sequence[HPONode], *, release_version: str = "2025-02-01") -> None:
         super().__init__(release_version=release_version)
         self._items = list(items)
 
@@ -342,9 +330,7 @@ class LOINCLoader(ConceptLoader):
     family = ConceptFamily.LAB
     license_bucket = "permissive"
 
-    def __init__(
-        self, rows: Sequence[LOINCRow], *, release_version: str = "2.77"
-    ) -> None:
+    def __init__(self, rows: Sequence[LOINCRow], *, release_version: str = "2.77") -> None:
         super().__init__(release_version=release_version)
         self._rows = list(rows)
 
@@ -451,9 +437,7 @@ class MedDRALoader(ConceptLoader):
     family = ConceptFamily.ADVERSE_EVENT
     license_bucket = "proprietary"
 
-    def __init__(
-        self, rows: Sequence[MedDRARow], *, release_version: str = "27.1"
-    ) -> None:
+    def __init__(self, rows: Sequence[MedDRARow], *, release_version: str = "27.1") -> None:
         super().__init__(release_version=release_version)
         self._rows = list(rows)
 
@@ -466,9 +450,7 @@ class MedDRALoader(ConceptLoader):
             definition = row.get("definition")
             synonyms = [(syn, SynonymType.RELATED) for syn in (row.get("llt") or [])]
             attributes = {"soc": row.get("soc"), "level": level}
-            parents = [
-                f"https://meddra.org/meddra/{p}" for p in (row.get("parents") or [])
-            ]
+            parents = [f"https://meddra.org/meddra/{p}" for p in (row.get("parents") or [])]
             yield self._build(
                 iri=iri,
                 label=label,
@@ -488,9 +470,7 @@ class CTCAELoader(ConceptLoader):
     family = ConceptFamily.ADVERSE_EVENT
     license_bucket = "open"
 
-    def __init__(
-        self, grades: Sequence[CTCAERow], *, release_version: str = "5.0"
-    ) -> None:
+    def __init__(self, grades: Sequence[CTCAERow], *, release_version: str = "5.0") -> None:
         super().__init__(release_version=release_version)
         self._grades = list(grades)
 

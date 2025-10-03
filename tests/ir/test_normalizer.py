@@ -23,8 +23,12 @@ def test_clinical_trials_builder_creates_blocks(tmp_path: Path) -> None:
         "status": "Completed",
         "eligibility": "Adults with sepsis",
     }
-    document = builder.build_from_study(doc_id="study#1", uri="https://clinicaltrials.gov/study#1", study=study)
-    assert any(isinstance(block, Block) and block.section == "eligibility" for block in document.blocks)
+    document = builder.build_from_study(
+        doc_id="study#1", uri="https://clinicaltrials.gov/study#1", study=study
+    )
+    assert any(
+        isinstance(block, Block) and block.section == "eligibility" for block in document.blocks
+    )
     validator = IRValidator()
     validator.validate_document(document)
     storage = IrStorage(tmp_path)

@@ -15,7 +15,6 @@ from .models import (
     PICOExtraction,
 )
 from .parsers import (
-    normalise_number,
     parse_age_logic,
     parse_confidence_interval,
     parse_count,
@@ -61,7 +60,9 @@ def normalise_effect(extraction: EffectExtraction, *, text: str) -> EffectExtrac
     return extraction
 
 
-def normalise_adverse_event(extraction: AdverseEventExtraction, *, text: str) -> AdverseEventExtraction:
+def normalise_adverse_event(
+    extraction: AdverseEventExtraction, *, text: str
+) -> AdverseEventExtraction:
     if extraction.codes:
         extraction.codes = [code for code in extraction.codes if (code.confidence or 0) >= 0.5]
     if not extraction.codes:
@@ -152,7 +153,9 @@ def normalise_extraction(extraction: ExtractionBase, *, text: str) -> Extraction
     return extraction
 
 
-def normalise_extractions(extractions: Iterable[ExtractionBase], *, text: str) -> list[ExtractionBase]:
+def normalise_extractions(
+    extractions: Iterable[ExtractionBase], *, text: str
+) -> list[ExtractionBase]:
     return [normalise_extraction(extraction, text=text) for extraction in extractions]
 
 

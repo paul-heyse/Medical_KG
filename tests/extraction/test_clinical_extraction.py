@@ -7,7 +7,7 @@ from Medical_KG.extraction import (
     PromptLibrary,
     build_kg_statements,
 )
-from Medical_KG.extraction.models import ExtractionType, EffectExtraction, EvidenceSpan
+from Medical_KG.extraction.models import EffectExtraction, EvidenceSpan, ExtractionType
 from Medical_KG.extraction.service import Chunk
 
 

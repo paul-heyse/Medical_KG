@@ -119,7 +119,12 @@ class KnowledgeGraphWriter:
         self._statements.append(
             WriteStatement(
                 cypher=cypher,
-                parameters={"scheme": scheme, "value": value, "doc_uri": document_uri, "props": dict(payload)},
+                parameters={
+                    "scheme": scheme,
+                    "value": value,
+                    "doc_uri": document_uri,
+                    "props": dict(payload),
+                },
             )
         )
 
@@ -131,7 +136,9 @@ class KnowledgeGraphWriter:
                 "MERGE (d)-[:DESCRIBES]->(s)"
             )
             self._statements.append(
-                WriteStatement(cypher=cypher, parameters={"doc_uri": document_uri, "nct_id": payload["nct_id"]})
+                WriteStatement(
+                    cypher=cypher, parameters={"doc_uri": document_uri, "nct_id": payload["nct_id"]}
+                )
             )
 
     def write_arm(self, payload: Mapping[str, Any], *, study_nct_id: str) -> None:
@@ -175,7 +182,9 @@ class KnowledgeGraphWriter:
                 "MERGE (s)-[:HAS_OUTCOME]->(o)"
             )
             self._statements.append(
-                WriteStatement(cypher=cypher, parameters={"nct_id": study_nct_id, "outcome_id": payload["id"]})
+                WriteStatement(
+                    cypher=cypher, parameters={"nct_id": study_nct_id, "outcome_id": payload["id"]}
+                )
             )
 
     def write_evidence_variable(
@@ -192,11 +201,16 @@ class KnowledgeGraphWriter:
                 "MERGE (d)-[:REPORTS]->(ev)"
             )
             self._statements.append(
-                WriteStatement(cypher=cypher, parameters={"doc_uri": document_uri, "ev_id": payload["id"]})
+                WriteStatement(
+                    cypher=cypher, parameters={"doc_uri": document_uri, "ev_id": payload["id"]}
+                )
             )
         if extraction_activity_id:
             self.link_generated_by(
-                "EvidenceVariable", payload["id"], extraction_activity_id, relationship="WAS_GENERATED_BY_VAR"
+                "EvidenceVariable",
+                payload["id"],
+                extraction_activity_id,
+                relationship="WAS_GENERATED_BY_VAR",
             )
 
     def write_evidence(
@@ -215,10 +229,13 @@ class KnowledgeGraphWriter:
             WriteStatement(
                 cypher=(
                     "MATCH (e:Evidence {id: $evidence_id}) MATCH (o:Outcome {id: $outcome_id}) "
-                    "MERGE (e)-[r:MEASURES]->(o)"
-                    + (" SET r += $rel_props" if rel_props else "")
+                    "MERGE (e)-[r:MEASURES]->(o)" + (" SET r += $rel_props" if rel_props else "")
                 ),
-                parameters={"evidence_id": payload["id"], "outcome_id": outcome_id, "rel_props": rel_props},
+                parameters={
+                    "evidence_id": payload["id"],
+                    "outcome_id": outcome_id,
+                    "rel_props": rel_props,
+                },
             )
         )
         self._statements.append(
@@ -257,10 +274,13 @@ class KnowledgeGraphWriter:
                 rel_props[field] = payload[field]
         cypher = (
             "MATCH (s:Study {nct_id: $nct_id}) MATCH (ae:AdverseEvent {id: $ae_id}) "
-            "MERGE (s)-[r:HAS_AE]->(ae)"
-            + (" SET r += $rel_props" if rel_props else "")
+            "MERGE (s)-[r:HAS_AE]->(ae)" + (" SET r += $rel_props" if rel_props else "")
         )
-        params: Dict[str, Any] = {"nct_id": study_nct_id, "ae_id": payload["id"], "rel_props": rel_props}
+        params: Dict[str, Any] = {
+            "nct_id": study_nct_id,
+            "ae_id": payload["id"],
+            "rel_props": rel_props,
+        }
         self._statements.append(WriteStatement(cypher=cypher, parameters=params))
         if arm_id:
             cypher_arm = (
@@ -268,10 +288,14 @@ class KnowledgeGraphWriter:
                 "MERGE (a)-[:HAS_AE]->(ae)"
             )
             self._statements.append(
-                WriteStatement(cypher=cypher_arm, parameters={"arm_id": arm_id, "ae_id": payload["id"]})
+                WriteStatement(
+                    cypher=cypher_arm, parameters={"arm_id": arm_id, "ae_id": payload["id"]}
+                )
             )
 
-    def write_eligibility_constraint(self, payload: Mapping[str, Any], *, study_nct_id: str) -> None:
+    def write_eligibility_constraint(
+        self, payload: Mapping[str, Any], *, study_nct_id: str
+    ) -> None:
         self._merge_node("EligibilityConstraint", payload)
         cypher = (
             "MATCH (s:Study {nct_id: $nct_id}) MATCH (e:EligibilityConstraint {id: $constraint_id}) "
@@ -337,4 +361,3 @@ class KnowledgeGraphWriter:
                 },
             )
         )
-

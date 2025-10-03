@@ -15,30 +15,57 @@ from typing import Any, Dict, Iterable, Mapping, Sequence
 
 from Medical_KG.briefing.models import (
     AdverseEvent as BriefingAdverseEvent,
+)
+from Medical_KG.briefing.models import (
     Citation as BriefingCitation,
+)
+from Medical_KG.briefing.models import (
     Dose as BriefingDose,
+)
+from Medical_KG.briefing.models import (
     EligibilityConstraint as BriefingEligibility,
+)
+from Medical_KG.briefing.models import (
     Evidence as BriefingEvidence,
+)
+from Medical_KG.briefing.models import (
     EvidenceVariable as BriefingEvidenceVariable,
+)
+from Medical_KG.briefing.models import (
     GuidelineRecommendation as BriefingGuideline,
+)
+from Medical_KG.briefing.models import (
     Study as BriefingStudy,
+)
+from Medical_KG.briefing.models import (
     Topic as BriefingTopic,
+)
+from Medical_KG.briefing.models import (
     TopicBundle as BriefingBundle,
 )
 from Medical_KG.briefing.repository import InMemoryBriefingRepository
 from Medical_KG.briefing.service import BriefingService, BriefingSettings
-from Medical_KG.chunking.chunker import Chunk as SemanticChunk, SemanticChunker
+from Medical_KG.chunking.chunker import Chunk as SemanticChunk
+from Medical_KG.chunking.chunker import SemanticChunker
 from Medical_KG.chunking.document import Document, Section
 from Medical_KG.chunking.profiles import get_profile
 from Medical_KG.embeddings.qwen import QwenEmbeddingClient
 from Medical_KG.embeddings.service import EmbeddingService, SPLADEExpander
-from Medical_KG.entity_linking.candidates import Candidate, CandidateGenerator, DictionaryClient, DenseClient, SparseClient
+from Medical_KG.entity_linking.candidates import (
+    Candidate,
+    CandidateGenerator,
+    DenseClient,
+    DictionaryClient,
+    SparseClient,
+)
 from Medical_KG.entity_linking.decision import DecisionEngine
 from Medical_KG.entity_linking.llm import LlmAdjudicator, LlmClient
 from Medical_KG.entity_linking.ner import Mention
 from Medical_KG.entity_linking.service import EntityLinkingService
-from Medical_KG.extraction.service import ClinicalExtractionService, Chunk as ExtractionChunk
-from Medical_KG.facets.service import Chunk as FacetChunk, FacetService
+from Medical_KG.extraction.service import Chunk as ExtractionChunk
+from Medical_KG.extraction.service import ClinicalExtractionService
+from Medical_KG.facets.service import Chunk as FacetChunk
+from Medical_KG.facets.service import FacetService
 from Medical_KG.kg.service import KgWriteFailure, KgWriteService
 from Medical_KG.services.retrieval import RetrievalService
 
@@ -85,7 +112,11 @@ class DocumentFixture:
         if not self.sections:
             fallback = Section(name="Body", start=0, end=len(self.text))
             return Document(doc_id=self.doc_id, text=self.text, sections=[fallback])
-        return Document(doc_id=self.doc_id, text=self.text, sections=[section.to_section() for section in self.sections])
+        return Document(
+            doc_id=self.doc_id,
+            text=self.text,
+            sections=[section.to_section() for section in self.sections],
+        )
 
 
 @dataclass(slots=True)
@@ -186,7 +217,9 @@ class BriefingFixture:
                 grade=(int(item["grade"]) if item.get("grade") is not None else None),
                 rate=(float(item["rate"]) if item.get("rate") is not None else None),
                 numerator=(int(item["numerator"]) if item.get("numerator") is not None else None),
-                denominator=(int(item["denominator"]) if item.get("denominator") is not None else None),
+                denominator=(
+                    int(item["denominator"]) if item.get("denominator") is not None else None
+                ),
                 citations=tuple(_citations(item.get("citations", []))),
             )
 
@@ -226,7 +259,9 @@ class BriefingFixture:
             )
             for item in self.bundle.get("studies", [])
         ]
-        evidence_variables = [_evidence_variable(item) for item in self.bundle.get("evidence_variables", [])]
+        evidence_variables = [
+            _evidence_variable(item) for item in self.bundle.get("evidence_variables", [])
+        ]
         evidence = [_evidence(item) for item in self.bundle.get("evidence", [])]
         adverse_events = [_adverse_event(item) for item in self.bundle.get("adverse_events", [])]
         doses = [_dose(item) for item in self.bundle.get("doses", [])]
@@ -264,7 +299,9 @@ class FixtureData:
             ingest_spl=[str(item) for item in data.get("ingest", {}).get("spl_setids", [])],
             ingest_nct=[str(item) for item in data.get("ingest", {}).get("nct_ids", [])],
             documents=[DocumentFixture.from_dict(item) for item in data.get("documents", [])],
-            retrieval_queries=[RetrievalQueryFixture.from_dict(item) for item in data.get("retrieval_queries", [])],
+            retrieval_queries=[
+                RetrievalQueryFixture.from_dict(item) for item in data.get("retrieval_queries", [])
+            ],
             entity_linking=EntityLinkingFixture.from_dict(data.get("entity_linking", {})),
             kg_payload=data.get("kg_payload", {}),
             briefing=BriefingFixture.from_dict(data.get("briefing", {})),
@@ -348,7 +385,9 @@ class StaticLlmClient(LlmClient):
         self._ontology = ontology
         self._score = score
 
-    async def complete(self, *, prompt: str, payload: Mapping[str, Any]) -> Mapping[str, Any]:  # noqa: D401
+    async def complete(
+        self, *, prompt: str, payload: Mapping[str, Any]
+    ) -> Mapping[str, Any]:  # noqa: D401
         return {
             "chosen_id": self._chosen_id,
             "ontology": self._ontology,
@@ -456,7 +495,9 @@ class E2EVerifier:
         passed = len(chunks) >= self.fixtures.min_chunk_count
         details = {"chunk_count": len(chunks)}
         passed, error = self._apply_budget(step, passed, duration)
-        return VerificationResult(step=step, passed=passed, duration_seconds=duration, details=details, error=error)
+        return VerificationResult(
+            step=step, passed=passed, duration_seconds=duration, details=details, error=error
+        )
 
     def verify_facet_generation(self) -> VerificationResult:
         step = "Facet Generation"
@@ -497,7 +538,9 @@ class E2EVerifier:
             "sparse_terms_per_second": round(metrics.sparse_terms_per_second, 2),
         }
         passed, error = self._apply_budget(step, passed, duration)
-        return VerificationResult(step=step, passed=passed, duration_seconds=duration, details=details, error=error)
+        return VerificationResult(
+            step=step, passed=passed, duration_seconds=duration, details=details, error=error
+        )
 
     def verify_indexing(self) -> VerificationResult:
         step = "Indexing"
@@ -536,7 +579,9 @@ class E2EVerifier:
         passed = satisfied == len(self.fixtures.retrieval_queries)
         details = {"queries": len(self.fixtures.retrieval_queries), "satisfied": satisfied}
         passed, error = self._apply_budget(step, passed, duration)
-        return VerificationResult(step=step, passed=passed, duration_seconds=duration, details=details, error=error)
+        return VerificationResult(
+            step=step, passed=passed, duration_seconds=duration, details=details, error=error
+        )
 
     def verify_entity_linking(self) -> VerificationResult:
         step = "Entity Linking"
@@ -564,21 +609,30 @@ class E2EVerifier:
             sparse=StaticSparse(candidate),
             dense=StaticDense(candidate),
         )
-        adjudicator = LlmAdjudicator(StaticLlmClient(chosen_id=fixture.expected_id, ontology=fixture.ontology, score=0.95))
+        adjudicator = LlmAdjudicator(
+            StaticLlmClient(chosen_id=fixture.expected_id, ontology=fixture.ontology, score=0.95)
+        )
         decision = DecisionEngine()
-        service = EntityLinkingService(ner=FixtureNer(mention), generator=generator, adjudicator=adjudicator, decision=decision)
+        service = EntityLinkingService(
+            ner=FixtureNer(mention), generator=generator, adjudicator=adjudicator, decision=decision
+        )
         results = asyncio.run(service.link(fixture.text, fixture.context))
         duration = time.time() - start
         accepted = [result for result in results if result.decision.accepted]
         passed = bool(accepted) and accepted[0].decision.candidate.identifier == fixture.expected_id
         details = {"mentions": len(results), "accepted": len(accepted)}
         passed, error = self._apply_budget(step, passed, duration)
-        return VerificationResult(step=step, passed=passed, duration_seconds=duration, details=details, error=error)
+        return VerificationResult(
+            step=step, passed=passed, duration_seconds=duration, details=details, error=error
+        )
 
     def verify_extraction(self) -> VerificationResult:
         step = "Clinical Extraction"
         start = time.time()
-        chunks = [ExtractionChunk(chunk_id=chunk.chunk_id, text=chunk.text) for chunk in self._semantic_chunks]
+        chunks = [
+            ExtractionChunk(chunk_id=chunk.chunk_id, text=chunk.text)
+            for chunk in self._semantic_chunks
+        ]
         envelope = self._extraction_service.extract_many(chunks)
         duration = time.time() - start
         passed = len(envelope.payload) >= len(self._semantic_chunks)
@@ -587,7 +641,9 @@ class E2EVerifier:
             "extraction_count": len(envelope.payload),
         }
         passed, error = self._apply_budget(step, passed, duration)
-        return VerificationResult(step=step, passed=passed, duration_seconds=duration, details=details, error=error)
+        return VerificationResult(
+            step=step, passed=passed, duration_seconds=duration, details=details, error=error
+        )
 
     def verify_kg_write(self) -> VerificationResult:
         step = "KG Write"
@@ -608,7 +664,9 @@ class E2EVerifier:
         passed, budget_error = self._apply_budget(step, passed, duration)
         if budget_error and not error:
             error = budget_error
-        return VerificationResult(step=step, passed=passed, duration_seconds=duration, details=details, error=error)
+        return VerificationResult(
+            step=step, passed=passed, duration_seconds=duration, details=details, error=error
+        )
 
     def verify_briefing_generation(self) -> VerificationResult:
         step = "Briefing Generation"
@@ -625,15 +683,23 @@ class E2EVerifier:
         passed = len(content) >= fixture.min_length and len(citations) >= fixture.min_citations
         details = {"content_length": len(content), "citation_count": len(citations)}
         passed, error = self._apply_budget(step, passed, duration)
-        return VerificationResult(step=step, passed=passed, duration_seconds=duration, details=details, error=error)
+        return VerificationResult(
+            step=step, passed=passed, duration_seconds=duration, details=details, error=error
+        )
 
     def verify_e2e_latency(self) -> VerificationResult:
         step = "E2E Latency"
         duration = time.time() - self.start_time
         passed = duration <= self.budget.total_seconds
         details = {"total_duration": round(duration, 2)}
-        error = None if passed else f"Total duration {duration:.2f}s exceeded budget {self.budget.total_seconds:.2f}s"
-        return VerificationResult(step=step, passed=passed, duration_seconds=duration, details=details, error=error)
+        error = (
+            None
+            if passed
+            else f"Total duration {duration:.2f}s exceeded budget {self.budget.total_seconds:.2f}s"
+        )
+        return VerificationResult(
+            step=step, passed=passed, duration_seconds=duration, details=details, error=error
+        )
 
     # ------------------------------------------------------------------
     # Helpers

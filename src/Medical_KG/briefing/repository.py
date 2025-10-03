@@ -1,4 +1,5 @@
 """Repository abstractions for briefing outputs."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -6,11 +7,6 @@ from typing import Iterable, Mapping, Protocol, Sequence
 
 from .models import (
     AdverseEvent,
-    Dose,
-    EligibilityConstraint,
-    Evidence,
-    EvidenceVariable,
-    GuidelineRecommendation,
     Study,
     Topic,
     TopicBundle,
@@ -20,8 +16,7 @@ from .models import (
 class BriefingRepository(Protocol):
     """Interface for fetching topic-aligned graph entities."""
 
-    def load_topic_bundle(self, topic: Topic) -> TopicBundle:
-        ...
+    def load_topic_bundle(self, topic: Topic) -> TopicBundle: ...
 
 
 @dataclass
@@ -44,7 +39,9 @@ class InMemoryBriefingRepository:
 class DelegatedBriefingRepository:
     """Repository that proxies to another repository while applying read-only filters."""
 
-    def __init__(self, backend: BriefingRepository, *, vocabulary_filters: Mapping[str, bool] | None = None) -> None:
+    def __init__(
+        self, backend: BriefingRepository, *, vocabulary_filters: Mapping[str, bool] | None = None
+    ) -> None:
         self._backend = backend
         self._filters = {k.lower(): bool(v) for k, v in (vocabulary_filters or {}).items()}
 

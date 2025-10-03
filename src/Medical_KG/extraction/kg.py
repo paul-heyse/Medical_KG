@@ -95,7 +95,11 @@ def build_kg_statements(
         elif extraction.type == ExtractionType.DOSE:
             payload = {
                 "id": base_id,
-                "label": extraction.drug.label if extraction.drug else extraction.drug_codes[0].display if extraction.drug_codes else None,
+                "label": (
+                    extraction.drug.label
+                    if extraction.drug
+                    else extraction.drug_codes[0].display if extraction.drug_codes else None
+                ),
                 "dose": {
                     "amount": extraction.amount,
                     "unit": extraction.unit,
@@ -109,7 +113,12 @@ def build_kg_statements(
             payload = {
                 "id": base_id,
                 "type": extraction.category,
-                "logic_json": json.dumps([criterion.logic.model_dump() if criterion.logic else {} for criterion in extraction.criteria]),
+                "logic_json": json.dumps(
+                    [
+                        criterion.logic.model_dump() if criterion.logic else {}
+                        for criterion in extraction.criteria
+                    ]
+                ),
                 "human_text": "\n".join(criterion.text for criterion in extraction.criteria),
                 "spans_json": _span_json(extraction),
             }

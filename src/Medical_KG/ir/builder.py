@@ -6,6 +6,7 @@ from typing import Any, List, Tuple
 
 try:  # pragma: no cover - optional dependency
     from bs4 import BeautifulSoup
+
     BS4_AVAILABLE = True
 except ModuleNotFoundError:  # pragma: no cover - fallback to stdlib parser
     BS4_AVAILABLE = False
@@ -101,7 +102,9 @@ class ClinicalTrialsBuilder(IrBuilder):
             if not value:
                 continue
             text = value if isinstance(value, str) else "\n".join(str(v) for v in value)
-            sections.append(("heading" if field == "title" else "paragraph", text, section, {"raw": value}))
+            sections.append(
+                ("heading" if field == "title" else "paragraph", text, section, {"raw": value})
+            )
 
         combined_text = "\n\n".join(section[1] for section in sections) if sections else ""
         document = super().build(
@@ -127,14 +130,18 @@ class ClinicalTrialsBuilder(IrBuilder):
             caption = "Primary Outcomes"
             start = len(document.text)
             end = start + len(caption)
-            document.add_table(Table(caption=caption, headers=headers, rows=rows, start=start, end=end, meta={}))
+            document.add_table(
+                Table(caption=caption, headers=headers, rows=rows, start=start, end=end, meta={})
+            )
         return document
 
 
 class PmcBuilder(IrBuilder):
     """Builds IR documents from PMC article payloads."""
 
-    def build_from_article(self, *, doc_id: str, uri: str, article: Mapping[str, Any]) -> DocumentIR:
+    def build_from_article(
+        self, *, doc_id: str, uri: str, article: Mapping[str, Any]
+    ) -> DocumentIR:
         abstract = article.get("abstract", "") or ""
         sections_payload = article.get("sections", [])
         parts = [abstract] if abstract else []
@@ -144,7 +151,9 @@ class PmcBuilder(IrBuilder):
             "provenance": article.get("provenance", {}),
             "span_map": article.get("span_map", []),
         }
-        document = super().build(doc_id=doc_id, source="pmc", uri=uri, text=combined_text, metadata=metadata)
+        document = super().build(
+            doc_id=doc_id, source="pmc", uri=uri, text=combined_text, metadata=metadata
+        )
         sections: list[tuple[str, str, str | None, dict[str, Any]]] = []
         if abstract:
             sections.append(("paragraph", abstract, "abstract", {"heading": "Abstract"}))
@@ -152,7 +161,9 @@ class PmcBuilder(IrBuilder):
             heading = block.get("heading", "")
             block_text = block.get("text", "")
             section = section_from_heading(heading) if heading else "body"
-            sections.append(("heading" if heading else "paragraph", block_text, section, {"heading": heading}))
+            sections.append(
+                ("heading" if heading else "paragraph", block_text, section, {"heading": heading})
+            )
         self._add_blocks(document, sections, separator="\n\n")
 
         for table_payload in article.get("tables", []):
@@ -161,7 +172,9 @@ class PmcBuilder(IrBuilder):
             rows = [[str(cell) for cell in row] for row in table_payload.get("rows", [])]
             start = len(document.text)
             end = start + len(caption)
-            document.add_table(Table(caption=caption, headers=headers, rows=rows, start=start, end=end, meta={}))
+            document.add_table(
+                Table(caption=caption, headers=headers, rows=rows, start=start, end=end, meta={})
+            )
         return document
 
 
@@ -192,14 +205,18 @@ class DailyMedBuilder(IrBuilder):
             caption = "Ingredients"
             start = len(document.text)
             end = start + len(caption)
-            document.add_table(Table(caption=caption, headers=headers, rows=rows, start=start, end=end, meta={}))
+            document.add_table(
+                Table(caption=caption, headers=headers, rows=rows, start=start, end=end, meta={})
+            )
         return document
 
 
 class MinerUBuilder(IrBuilder):
     """Builds IR documents from MinerU artifact bundles."""
 
-    def build_from_artifacts(self, *, doc_id: str, uri: str, artifacts: Mapping[str, Any]) -> DocumentIR:
+    def build_from_artifacts(
+        self, *, doc_id: str, uri: str, artifacts: Mapping[str, Any]
+    ) -> DocumentIR:
         markdown = artifacts.get("markdown", "")
         document = super().build(
             doc_id=doc_id,
@@ -283,7 +300,11 @@ class _FallbackGuidelineParser(HTMLParser):
         elif tag == "tr" and self._current_table is not None:
             self._current_row = []
             self._row_is_header = False
-        elif tag in {"th", "td"} and self._current_table is not None and self._current_row is not None:
+        elif (
+            tag in {"th", "td"}
+            and self._current_table is not None
+            and self._current_row is not None
+        ):
             self._buffer = []
             if tag == "th":
                 self._row_is_header = True
@@ -294,7 +315,9 @@ class _FallbackGuidelineParser(HTMLParser):
             text = "".join(self._buffer).strip()
             if text:
                 section = (
-                    tag if tag in {"h1", "h2", "h3"} else ("list_item" if tag == "li" else "paragraph")
+                    tag
+                    if tag in {"h1", "h2", "h3"}
+                    else ("list_item" if tag == "li" else "paragraph")
                 )
                 block_type = "heading" if tag in {"h1", "h2", "h3"} else section
                 self.blocks.append((block_type, text, section, {"tag": tag}))
@@ -303,7 +326,11 @@ class _FallbackGuidelineParser(HTMLParser):
         elif tag == "table" and self._current_table is not None:
             self.tables.append(self._current_table)
             self._current_table = None
-        elif tag in {"th", "td"} and self._current_table is not None and self._current_row is not None:
+        elif (
+            tag in {"th", "td"}
+            and self._current_table is not None
+            and self._current_row is not None
+        ):
             text = "".join(self._buffer).strip()
             self._current_row.append(text)
             self._buffer = []
@@ -319,7 +346,11 @@ class _FallbackGuidelineParser(HTMLParser):
             self._capturing_caption = False
 
     def handle_data(self, data: str) -> None:
-        if self._current_tag is not None or self._current_row is not None or self._capturing_caption:
+        if (
+            self._current_tag is not None
+            or self._current_row is not None
+            or self._capturing_caption
+        ):
             self._buffer.append(data)
 
     def close(self) -> None:  # pragma: no cover - HTMLParser base close is noop
@@ -332,9 +363,9 @@ class _FallbackGuidelineParser(HTMLParser):
         text = "".join(self._buffer).strip()
         if text:
             section = (
-                self._current_tag if self._current_tag in {"h1", "h2", "h3"} else (
-                    "list_item" if self._current_tag == "li" else "paragraph"
-                )
+                self._current_tag
+                if self._current_tag in {"h1", "h2", "h3"}
+                else ("list_item" if self._current_tag == "li" else "paragraph")
             )
             block_type = "heading" if self._current_tag in {"h1", "h2", "h3"} else section
             self.blocks.append((block_type, text, section, {"tag": self._current_tag}))
@@ -351,6 +382,7 @@ class GuidelineBuilder(IrBuilder):
     ]:
         if BS4_AVAILABLE:
             from bs4 import BeautifulSoup as BS
+
             soup = BS(html, "html.parser")
             blocks: list[tuple[str, str, str | None, dict[str, Any]]] = []
             for element in soup.find_all(["h1", "h2", "h3", "p", "li"]):
@@ -372,7 +404,9 @@ class GuidelineBuilder(IrBuilder):
                 headers: list[str] = []
                 header_row = table_tag.find("tr")
                 if header_row:
-                    headers = [cell.get_text(strip=True) for cell in header_row.find_all(["th", "td"])]
+                    headers = [
+                        cell.get_text(strip=True) for cell in header_row.find_all(["th", "td"])
+                    ]
                 rows: list[list[str]] = []
                 for row in table_tag.find_all("tr")[1:]:
                     rows.append([cell.get_text(strip=True) for cell in row.find_all(["th", "td"])])
@@ -409,5 +443,7 @@ class GuidelineBuilder(IrBuilder):
             rows = [[str(cell) for cell in row] for row in table_payload.get("rows", [])]
             start = len(document.text)
             end = start + len(caption)
-            document.add_table(Table(caption=caption, headers=headers, rows=rows, start=start, end=end, meta={}))
+            document.add_table(
+                Table(caption=caption, headers=headers, rows=rows, start=start, end=end, meta={})
+            )
         return document

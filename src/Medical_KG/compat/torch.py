@@ -7,8 +7,7 @@ from typing import Protocol, cast
 
 
 class CudaProtocol(Protocol):
-    def is_available(self) -> bool:
-        ...
+    def is_available(self) -> bool: ...
 
 
 class TorchProtocol(Protocol):

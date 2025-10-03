@@ -21,15 +21,8 @@ from typing import (
     cast,
 )
 
-
 if TYPE_CHECKING:  # pragma: no cover - import-time typing help only
-    import httpx
-    import locust
     import prometheus_client
-    import redis.asyncio as redis_async
-    import spacy
-    import tiktoken
-    import torch
 
 
 class TokenEncoder(Protocol):
@@ -143,64 +136,55 @@ class _NoopHistogram:
 class HttpxRequestProtocol(Protocol):
     """Minimal constructor signature for ``httpx.Request`` objects."""
 
-    def __init__(self, method: str, url: str, **kwargs: Any) -> None:
-        ...
+    def __init__(self, method: str, url: str, **kwargs: Any) -> None: ...
 
     @property
-    def url(self) -> Any:
-        ...
+    def url(self) -> Any: ...
 
     @property
-    def method(self) -> str:
-        ...
+    def method(self) -> str: ...
 
 
 class HttpxResponseProtocol(Protocol):
     """Interface consumed by ingestion HTTP utilities."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        ...
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
 
     status_code: int
     elapsed: Any | None
 
-    def json(self) -> Any:
-        ...
+    def json(self) -> Any: ...
 
-    def raise_for_status(self) -> None:
-        ...
+    def raise_for_status(self) -> None: ...
 
     @property
-    def text(self) -> str:
-        ...
+    def text(self) -> str: ...
 
     @property
-    def content(self) -> bytes:
-        ...
+    def content(self) -> bytes: ...
 
     @property
-    def headers(self) -> dict[str, str]:
-        ...
+    def headers(self) -> dict[str, str]: ...
 
 
 class HttpxAsyncBaseTransport(Protocol):
     """Subset of ``httpx.AsyncBaseTransport`` used in tests."""
 
-    async def handle_async_request(self, request: HttpxRequestProtocol) -> HttpxResponseProtocol:
-        ...
+    async def handle_async_request(
+        self, request: HttpxRequestProtocol
+    ) -> HttpxResponseProtocol: ...
 
 
 class HttpxAsyncClient(Protocol):
     """Async client features leveraged by the project."""
 
-    def __init__(self, **kwargs: Any) -> None:
-        ...
+    def __init__(self, **kwargs: Any) -> None: ...
 
-    async def request(self, method: str, url: str, **kwargs: Any) -> HttpxResponseProtocol:
-        ...
+    async def request(self, method: str, url: str, **kwargs: Any) -> HttpxResponseProtocol: ...
 
-    def stream(self, method: str, url: str, **kwargs: Any) -> AsyncContextManager[HttpxResponseProtocol]:
-        ...
+    def stream(
+        self, method: str, url: str, **kwargs: Any
+    ) -> AsyncContextManager[HttpxResponseProtocol]: ...
 
     async def get(
         self,
@@ -208,8 +192,7 @@ class HttpxAsyncClient(Protocol):
         *,
         params: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
-    ) -> HttpxResponseProtocol:
-        ...
+    ) -> HttpxResponseProtocol: ...
 
     async def post(
         self,
@@ -217,48 +200,38 @@ class HttpxAsyncClient(Protocol):
         *,
         json: Any | None = None,
         headers: Mapping[str, str] | None = None,
-    ) -> HttpxResponseProtocol:
-        ...
+    ) -> HttpxResponseProtocol: ...
 
-    async def __aenter__(self) -> "HttpxAsyncClient":
-        ...
+    async def __aenter__(self) -> "HttpxAsyncClient": ...
 
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
         exc: BaseException | None,
         tb: Any,
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 class RedisClientProtocol(Protocol):
     """Async Redis interactions used by caching layers."""
 
-    async def get(self, key: str) -> bytes | None:
-        ...
+    async def get(self, key: str) -> bytes | None: ...
 
-    async def setex(self, key: str, seconds: int, value: bytes) -> bool:
-        ...
+    async def setex(self, key: str, seconds: int, value: bytes) -> bool: ...
 
-    async def delete(self, *keys: str) -> int:
-        ...
+    async def delete(self, *keys: str) -> int: ...
 
-    async def aclose(self) -> None:
-        ...
+    async def aclose(self) -> None: ...
 
 
 class HttpxClient(Protocol):
     """Sync client subset used by embedding clients."""
 
-    def __init__(self, **kwargs: Any) -> None:
-        ...
+    def __init__(self, **kwargs: Any) -> None: ...
 
-    def post(self, url: str, *, json: Any | None = None) -> HttpxResponseProtocol:
-        ...
+    def post(self, url: str, *, json: Any | None = None) -> HttpxResponseProtocol: ...
 
-    def close(self) -> None:
-        ...
+    def close(self) -> None: ...
 
 
 class HttpxModule(Protocol):
@@ -301,7 +274,9 @@ except ModuleNotFoundError:  # pragma: no cover - tests guard against this at ru
 
 
 try:  # pragma: no cover - optional dependency wiring
-    from locust import HttpUser as _LocustHttpUser, between as _locust_between, task as _locust_task  # type: ignore[import-not-found]
+    from locust import HttpUser as _LocustHttpUser  # type: ignore[import-not-found]
+    from locust import between as _locust_between
+    from locust import task as _locust_task
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
     _LocustHttpUser = None
     _locust_between = None

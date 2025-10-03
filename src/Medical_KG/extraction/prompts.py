@@ -9,7 +9,6 @@ from typing import Dict
 
 from .models import ExtractionType
 
-
 GLOBAL_RULES = [
     "Return valid JSON only (no prose).",
     "Extract facts verbatim from the provided chunk; never infer or paraphrase.",

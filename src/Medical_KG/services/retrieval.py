@@ -1,4 +1,5 @@
 """Simplified retrieval service that uses facet metadata for filtering and scoring."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

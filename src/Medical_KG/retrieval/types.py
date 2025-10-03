@@ -1,8 +1,8 @@
 """Typed structures shared across retrieval modules."""
+
 from __future__ import annotations
 
 from typing import Mapping, MutableMapping, Sequence, TypedDict, Union
-
 
 JSONPrimitive = Union[str, int, float, bool, None]
 JSONValue = Union[
@@ -72,5 +72,3 @@ __all__ = [
     "EmbeddingVector",
     "FusionScores",
 ]
-
-

@@ -1,4 +1,5 @@
 """High-level planner for infrastructure artifacts."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -54,10 +55,7 @@ class InfrastructurePlanner:
                 "version": "0.1.0",
             },
             "values": base_values,
-            "overrides": {
-                env: self._env_overrides(env)
-                for env in ("dev", "staging", "prod")
-            },
+            "overrides": {env: self._env_overrides(env) for env in ("dev", "staging", "prod")},
         }
 
     def terraform_modules(self) -> Mapping[str, object]:
@@ -86,14 +84,11 @@ class InfrastructurePlanner:
                 "scrape_interval": "10s",
                 "retention": "30d",
                 "service_monitors": [
-                    {"name": svc.name, "path": svc.metrics_path}
-                    for svc in self.target.services
+                    {"name": svc.name, "path": svc.metrics_path} for svc in self.target.services
                 ],
             },
             "grafana": {
-                "dashboards": [
-                    "retrieval", "gpu", "ingestion", "extraction", "kg", "api"
-                ],
+                "dashboards": ["retrieval", "gpu", "ingestion", "extraction", "kg", "api"],
             },
             "alerting": {
                 "provider": "pagerduty",
@@ -128,10 +123,7 @@ class InfrastructurePlanner:
                             {
                                 "name": service.name,
                                 "image": service.image,
-                                "ports": [
-                                    {"containerPort": port}
-                                    for port in service.ports
-                                ],
+                                "ports": [{"containerPort": port} for port in service.ports],
                                 "env": [
                                     {"name": key, "value": value}
                                     for key, value in service.env.items()
@@ -162,10 +154,7 @@ class InfrastructurePlanner:
             "metadata": {"name": service.name, "namespace": self.environment.namespace},
             "spec": {
                 "selector": {"app": service.name},
-                "ports": [
-                    {"port": port, "targetPort": port}
-                    for port in service.ports
-                ],
+                "ports": [{"port": port, "targetPort": port} for port in service.ports],
                 "type": "ClusterIP",
             },
         }
@@ -201,7 +190,13 @@ class InfrastructurePlanner:
                 "minReplicas": max(1, service.replicas // 2),
                 "maxReplicas": service.replicas * 3,
                 "metrics": [
-                    {"type": "Resource", "resource": {"name": "cpu", "target": {"type": "Utilization", "averageUtilization": 60}}}
+                    {
+                        "type": "Resource",
+                        "resource": {
+                            "name": "cpu",
+                            "target": {"type": "Utilization", "averageUtilization": 60},
+                        },
+                    }
                 ],
             },
         }
@@ -238,7 +233,9 @@ class InfrastructurePlanner:
             "metadata": {"name": "medkg", "namespace": self.environment.namespace},
             "spec": {
                 "ingressClassName": "alb",
-                "tls": [{"hosts": [self.environment.domain], "secretName": self.environment.tls_secret}],
+                "tls": [
+                    {"hosts": [self.environment.domain], "secretName": self.environment.tls_secret}
+                ],
                 "rules": [
                     {
                         "host": self.environment.domain,

@@ -90,7 +90,14 @@ class EvidenceExporter:
         target_reference: str,
     ) -> FhirResource:
         agent = {
-            "type": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/provenance-participant-type", "code": "author"}]},
+            "type": {
+                "coding": [
+                    {
+                        "system": "http://terminology.hl7.org/CodeSystem/provenance-participant-type",
+                        "code": "author",
+                    }
+                ]
+            },
             "who": {"display": extraction_activity.get("model")},
         }
         payload = {
@@ -126,7 +133,9 @@ class FhirGraphMapper:
             "gender": patient.get("gender"),
             "birth_date": patient.get("birthDate"),
             "extensions": patient.get("extension", []),
-            "identifier_values": [identifier.get("value") for identifier in identifiers if identifier.get("value")],
+            "identifier_values": [
+                identifier.get("value") for identifier in identifiers if identifier.get("value")
+            ],
         }
         nodes: list[dict[str, Any]] = [patient_node]
         relationships: list[dict[str, Any]] = []

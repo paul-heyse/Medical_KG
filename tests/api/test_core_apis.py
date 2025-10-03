@@ -10,12 +10,12 @@ import pytest
 class FastAPI(Protocol):  # pragma: no cover - minimal contract for typing
     state: Any
 
+
 from Medical_KG.api.auth import Authenticator
 from Medical_KG.app import create_app
 from Medical_KG.config.manager import SecretResolver
 from Medical_KG.services.chunks import Chunk
 from Medical_KG.utils.optional_dependencies import HttpxModule, get_httpx_module
-
 
 HTTPX: HttpxModule = get_httpx_module()
 ASGITransport = HTTPX.ASGITransport
@@ -77,8 +77,12 @@ def test_generate_facets_and_get_chunk(app: FastAPI) -> None:
     }
 
     async def run() -> None:
-        async with HTTPX.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.post("/facets/generate", json={"chunk_ids": ["chunk-1"]}, headers=headers)
+        async with HTTPX.AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.post(
+                "/facets/generate", json={"chunk_ids": ["chunk-1"]}, headers=headers
+            )
             assert response.status_code == 200
             facets = response.json()["facets_by_chunk"]["chunk-1"]
             assert any(facet["type"] == "pico" for facet in facets)
@@ -103,7 +107,9 @@ def test_idempotency_replay_and_conflict(app: FastAPI) -> None:
     payload: dict[str, object] = {"chunk_ids": ["chunk-1"]}
 
     async def run() -> None:
-        async with HTTPX.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with HTTPX.AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
             first = await client.post("/facets/generate", json=payload, headers=headers)
             assert first.status_code == 200
             replay = await client.post("/facets/generate", json=payload, headers=headers)
@@ -124,7 +130,9 @@ def test_rate_limiting_and_retrieval_headers(app: FastAPI) -> None:
     headers: dict[str, str] = {"X-API-Key": "demo-key"}
 
     async def run() -> None:
-        async with HTTPX.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with HTTPX.AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
             await client.post("/facets/generate", json={"chunk_ids": ["chunk-1"]}, headers=headers)
             response = await client.get("/chunks/chunk-1", headers=headers)
             assert response.status_code == 200
@@ -167,9 +175,7 @@ def test_kg_write_happy_path_and_validation_error(app: FastAPI) -> None:
                 },
             },
         ],
-        "relationships": [
-            {"type": "MEASURES", "start_id": "evidence-1", "end_id": "outcome-1"}
-        ],
+        "relationships": [{"type": "MEASURES", "start_id": "evidence-1", "end_id": "outcome-1"}],
     }
     invalid_payload: dict[str, object] = {
         "nodes": [
@@ -184,7 +190,9 @@ def test_kg_write_happy_path_and_validation_error(app: FastAPI) -> None:
     }
 
     async def run() -> None:
-        async with HTTPX.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with HTTPX.AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
             success = await client.post("/kg/write", json=valid_payload, headers=headers)
             assert success.status_code == 200
             body = success.json()

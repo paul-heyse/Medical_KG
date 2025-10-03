@@ -1,6 +1,6 @@
 """Typing helpers shared across Medical_KG."""
 
-from .json import JSONMapping, JSONPrimitive, JSONValue, JSONObject, MutableJSONMapping
+from .json import JSONMapping, JSONObject, JSONPrimitive, JSONValue, MutableJSONMapping
 
 __all__ = [
     "JSONMapping",

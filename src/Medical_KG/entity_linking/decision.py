@@ -1,8 +1,9 @@
 """Decision logic for entity linking outputs."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping, Sequence
+from typing import Sequence
 
 from .candidates import Candidate
 from .detectors import IdentifierCandidate

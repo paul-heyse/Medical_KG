@@ -1,4 +1,5 @@
 """Real-time Q&A heuristics for briefing outputs."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -44,18 +45,29 @@ class QAEngine:
             evidence_payload = [self._format_evidence(ev) for ev in evidences]
         elif intent == "ae":
             answer = self._summarize_items(bundle.adverse_events, field="meddra_pt")
-            evidence_payload = [self._format_generic(ae.meddra_pt, ae.citations) for ae in bundle.adverse_events]
+            evidence_payload = [
+                self._format_generic(ae.meddra_pt, ae.citations) for ae in bundle.adverse_events
+            ]
         elif intent == "dose":
             answer = self._summarize_items(bundle.doses, field="description")
-            evidence_payload = [self._format_generic(dose.description, dose.citations) for dose in bundle.doses]
+            evidence_payload = [
+                self._format_generic(dose.description, dose.citations) for dose in bundle.doses
+            ]
         else:
             answer = self._summarize_items(bundle.eligibility, field="description")
-            evidence_payload = [self._format_generic(item.description, item.citations) for item in bundle.eligibility]
+            evidence_payload = [
+                self._format_generic(item.description, item.citations)
+                for item in bundle.eligibility
+            ]
         conflicts: list[Mapping[str, object]] = []
         if intent == "endpoint":
-            conflicts = [self._format_conflict(group) for group in _find_conflicting_effects(bundle.evidence)]
+            conflicts = [
+                self._format_conflict(group) for group in _find_conflicting_effects(bundle.evidence)
+            ]
         gaps = _find_gaps(bundle, intent)
-        return QAResult(answer=answer, intent=intent, evidence=evidence_payload, conflicts=conflicts, gaps=gaps)
+        return QAResult(
+            answer=answer, intent=intent, evidence=evidence_payload, conflicts=conflicts, gaps=gaps
+        )
 
     def _summarize_effect(self, evidences: Sequence[Evidence]) -> str:
         if not evidences:

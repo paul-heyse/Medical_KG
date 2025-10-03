@@ -5,7 +5,6 @@ from typing import Any
 
 from . import load_json_fixture, load_text_fixture
 
-
 _NICE = load_json_fixture("nice_guideline.json")
 _CDC_SOCRATA = load_json_fixture("cdc_socrata.json")
 _USPSTF = load_json_fixture("uspstf_stub.json")

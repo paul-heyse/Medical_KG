@@ -81,8 +81,12 @@ class CDKOSchema:
             "Document": NodeSchema(
                 label="Document",
                 properties=[
-                    NodeProperty("uri", "string", required=True, description="Canonical document URI"),
-                    NodeProperty("id", "string", required=True, description="Internal document identifier"),
+                    NodeProperty(
+                        "uri", "string", required=True, description="Canonical document URI"
+                    ),
+                    NodeProperty(
+                        "id", "string", required=True, description="Internal document identifier"
+                    ),
                     NodeProperty("source", "string", description="Ingestion source"),
                     NodeProperty("title", "string", description="Document title"),
                     NodeProperty("language", "string", description="ISO 639-1 language code"),
@@ -103,7 +107,9 @@ class CDKOSchema:
                     NodeProperty("start", "integer", description="Character start offset"),
                     NodeProperty("end", "integer", description="Character end offset"),
                     NodeProperty("token_count", "integer", description="Token length"),
-                    NodeProperty("coherence_score", "float", description="Model-estimated coherence"),
+                    NodeProperty(
+                        "coherence_score", "float", description="Model-estimated coherence"
+                    ),
                     NodeProperty("facets", "map", description="Facet assignments"),
                     NodeProperty("embedding_qwen", "vector<4096>", description="Qwen embedding"),
                     NodeProperty("splade_terms", "map", description="SPLADE sparse vector"),
@@ -127,12 +133,19 @@ class CDKOSchema:
             "Study": NodeSchema(
                 label="Study",
                 properties=[
-                    NodeProperty("nct_id", "string", required=True, description="ClinicalTrials.gov identifier"),
+                    NodeProperty(
+                        "nct_id",
+                        "string",
+                        required=True,
+                        description="ClinicalTrials.gov identifier",
+                    ),
                     NodeProperty("title", "string", description="Study title"),
                     NodeProperty("phase", "string", description="Study phase"),
                     NodeProperty("status", "string", description="Recruitment status"),
                     NodeProperty("conditions", "array", description="Study conditions"),
-                    NodeProperty("interventions_json", "map", description="Structured interventions"),
+                    NodeProperty(
+                        "interventions_json", "map", description="Structured interventions"
+                    ),
                     NodeProperty("arms_json", "map", description="Structured arms"),
                     NodeProperty("eligibility_json", "map", description="Eligibility criteria"),
                 ],
@@ -144,13 +157,19 @@ class CDKOSchema:
                     NodeProperty("label", "string", description="Arm label"),
                     NodeProperty("type", "string", description="Arm type"),
                     NodeProperty("n_enrolled", "integer", description="Enrollment count"),
-                    NodeProperty("intervention_summary", "string", description="Text summary of interventions"),
+                    NodeProperty(
+                        "intervention_summary",
+                        "string",
+                        description="Text summary of interventions",
+                    ),
                 ],
             ),
             "Intervention": NodeSchema(
                 label="Intervention",
                 properties=[
-                    NodeProperty("id", "string", required=True, description="Intervention identifier"),
+                    NodeProperty(
+                        "id", "string", required=True, description="Intervention identifier"
+                    ),
                     NodeProperty("name", "string", description="Display name"),
                     NodeProperty("type", "string", description="Intervention category"),
                     NodeProperty("rxcui", "string", description="RxNorm code"),
@@ -173,7 +192,9 @@ class CDKOSchema:
                 properties=[
                     NodeProperty("id", "string", required=True),
                     NodeProperty("population_json", "map", description="Population definition"),
-                    NodeProperty("interventions_json", "map", description="Intervention definition"),
+                    NodeProperty(
+                        "interventions_json", "map", description="Intervention definition"
+                    ),
                     NodeProperty("comparators_json", "map", description="Comparator definition"),
                     NodeProperty("outcomes_json", "map", description="Outcome definition"),
                     NodeProperty("timeframe", "string", description="Observation timeframe"),
@@ -258,7 +279,9 @@ class CDKOSchema:
             "Identifier": NodeSchema(
                 label="Identifier",
                 properties=[
-                    NodeProperty("scheme", "string", required=True, description="Identifier scheme"),
+                    NodeProperty(
+                        "scheme", "string", required=True, description="Identifier scheme"
+                    ),
                     NodeProperty("value", "string", required=True, description="Identifier value"),
                     NodeProperty("label", "string", description="Human readable label"),
                     NodeProperty("version", "string", description="Scheme version"),
@@ -271,7 +294,9 @@ class CDKOSchema:
                 type="HAS_CHUNK",
                 start="Document",
                 end="Chunk",
-                properties=[NodeProperty("order", "integer", description="Chunk order within document")],
+                properties=[
+                    NodeProperty("order", "integer", description="Chunk order within document")
+                ],
             ),
             "MENTIONS": RelationshipSchema(
                 type="MENTIONS",
@@ -303,7 +328,9 @@ class CDKOSchema:
                 type="USES_INTERVENTION",
                 start="Arm",
                 end="Intervention",
-                properties=[NodeProperty("dose", "map", description="Dose metadata including UCUM unit")],
+                properties=[
+                    NodeProperty("dose", "map", description="Dose metadata including UCUM unit")
+                ],
             ),
             "HAS_OUTCOME": RelationshipSchema(
                 type="HAS_OUTCOME",
@@ -322,7 +349,9 @@ class CDKOSchema:
                 type="MEASURES",
                 start="Evidence",
                 end="Outcome",
-                properties=[NodeProperty("confidence", "float", description="Extractor confidence")],
+                properties=[
+                    NodeProperty("confidence", "float", description="Extractor confidence")
+                ],
             ),
             "HAS_AE": RelationshipSchema(
                 type="HAS_AE",
@@ -334,10 +363,18 @@ class CDKOSchema:
                     NodeProperty("grade", "integer", description="Worst grade"),
                 ],
             ),
-            "HAS_ELIGIBILITY": RelationshipSchema("HAS_ELIGIBILITY", "Study", "EligibilityConstraint"),
-            "WAS_GENERATED_BY": RelationshipSchema("WAS_GENERATED_BY", "Evidence", "ExtractionActivity"),
-            "WAS_GENERATED_BY_VAR": RelationshipSchema("WAS_GENERATED_BY_VAR", "EvidenceVariable", "ExtractionActivity"),
-            "WAS_GENERATED_BY_ELIG": RelationshipSchema("WAS_GENERATED_BY_ELIG", "EligibilityConstraint", "ExtractionActivity"),
+            "HAS_ELIGIBILITY": RelationshipSchema(
+                "HAS_ELIGIBILITY", "Study", "EligibilityConstraint"
+            ),
+            "WAS_GENERATED_BY": RelationshipSchema(
+                "WAS_GENERATED_BY", "Evidence", "ExtractionActivity"
+            ),
+            "WAS_GENERATED_BY_VAR": RelationshipSchema(
+                "WAS_GENERATED_BY_VAR", "EvidenceVariable", "ExtractionActivity"
+            ),
+            "WAS_GENERATED_BY_ELIG": RelationshipSchema(
+                "WAS_GENERATED_BY_ELIG", "EligibilityConstraint", "ExtractionActivity"
+            ),
             "SAME_AS": RelationshipSchema("SAME_AS", "Concept", "Concept"),
             "IS_A": RelationshipSchema("IS_A", "Concept", "Concept"),
             "SIMILAR_TO": RelationshipSchema(
@@ -421,12 +458,16 @@ class CDKOSchema:
             ),
         ]
 
-        return cls(nodes=nodes, relationships=relationships, constraints=constraints, indexes=indexes)
+        return cls(
+            nodes=nodes, relationships=relationships, constraints=constraints, indexes=indexes
+        )
 
     def describe(self) -> Mapping[str, object]:
         return {
             "nodes": {label: schema.as_dict() for label, schema in self.nodes.items()},
-            "relationships": {rtype: schema.as_dict() for rtype, schema in self.relationships.items()},
+            "relationships": {
+                rtype: schema.as_dict() for rtype, schema in self.relationships.items()
+            },
             "constraints": [constraint.statement for constraint in self.constraints],
             "indexes": [index.statement for index in self.indexes],
         }

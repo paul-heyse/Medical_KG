@@ -1,4 +1,5 @@
 """In-memory repository for document chunks used by the API layer."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

@@ -12,18 +12,15 @@ from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Mapping, MutableMapping, Optional, cast
+from typing import Any, Mapping, MutableMapping, cast
 
 import yaml
-
 from Medical_KG.compat.prometheus import Gauge, GaugeLike
-from Medical_KG.types import JSONMapping, JSONValue, MutableJSONMapping, JSONObject
+from Medical_KG.types import JSONMapping, JSONObject, JSONValue, MutableJSONMapping
+
 from .models import Config, PolicyDocument, validate_constraints
 
-
-CONFIG_INFO: GaugeLike = Gauge(
-    "config_info", "Current configuration metadata", ["version", "hash"]
-)
+CONFIG_INFO: GaugeLike = Gauge("config_info", "Current configuration metadata", ["version", "hash"])
 FEATURE_FLAG: GaugeLike = Gauge("feature_flag", "Feature flag states", ["name"])
 
 ENV_SIMPLE_PATHS: Mapping[str, str] = {
@@ -246,9 +243,7 @@ class ConfigManager:
             raise ConfigError(f"{path.name} must contain a mapping at the root")
         return dict(cast(MutableJSONMapping, data))
 
-    def _deep_merge(
-        self, base: MutableJSONMapping, overlay: JSONMapping
-    ) -> JSONObject:
+    def _deep_merge(self, base: MutableJSONMapping, overlay: JSONMapping) -> JSONObject:
         result: JSONObject = dict(base)
         for key, value in overlay.items():
             if (
@@ -256,9 +251,7 @@ class ConfigManager:
                 and isinstance(result[key], MutableMapping)
                 and isinstance(value, Mapping)
             ):
-                result[key] = self._deep_merge(
-                    cast(MutableJSONMapping, result[key]), value
-                )
+                result[key] = self._deep_merge(cast(MutableJSONMapping, result[key]), value)
             else:
                 result[key] = value
         return result
@@ -396,7 +389,9 @@ def mask_secrets(data: JSONMapping) -> JSONObject:
 
     def _mask(value: JSONValue, key: str | None = None) -> JSONValue:
         if isinstance(value, Mapping):
-            return {child_key: _mask(child_val, child_key) for child_key, child_val in value.items()}
+            return {
+                child_key: _mask(child_val, child_key) for child_key, child_val in value.items()
+            }
         if isinstance(value, list):
             return [_mask(item, key) for item in value]
         if isinstance(key, str) and any(

@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from Medical_KG.ingestion import registry
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 from Medical_KG.ingestion.ledger import IngestionLedger
-from Medical_KG.ingestion import registry
 
 
 def _ledger_path(tmp_path: Path) -> Path:

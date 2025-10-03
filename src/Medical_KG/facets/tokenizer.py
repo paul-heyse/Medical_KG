@@ -1,4 +1,5 @@
 """Token counting utilities using tiktoken with graceful fallback."""
+
 from __future__ import annotations
 
 from functools import lru_cache

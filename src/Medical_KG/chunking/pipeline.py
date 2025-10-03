@@ -102,9 +102,7 @@ class ChunkingPipeline:
         facet_records: List[FacetVectorRecord] = []
         if not payloads:
             return facet_records
-        dense_vectors, _ = self._embedding_service.embed_texts(
-            [payload for _, payload in payloads]
-        )
+        dense_vectors, _ = self._embedding_service.embed_texts([payload for _, payload in payloads])
         for (chunk, _), vector in zip(payloads, dense_vectors):
             chunk.facet_embedding_qwen = vector
             facet_records.append(

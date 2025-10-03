@@ -35,9 +35,7 @@ def _check_positive_numbers(payload: JSONMapping, errors: list[str]) -> None:
         )
         assert_positive(rate.get("burst"), f"sources.{source_name}.rate_limit.burst")
         retry = _as_mapping(source_mapping.get("retry"))
-        assert_positive(
-            retry.get("max_attempts"), f"sources.{source_name}.retry.max_attempts"
-        )
+        assert_positive(retry.get("max_attempts"), f"sources.{source_name}.retry.max_attempts")
         assert_positive(
             retry.get("backoff_seconds"), f"sources.{source_name}.retry.backoff_seconds"
         )
@@ -135,7 +133,9 @@ class Config:
             else:
                 for key in remainder_keys:
                     current = weights.get(key, 0.0)
-                    weights[key] = current + splade_weight * (current / remainder_total if remainder_total else 0)
+                    weights[key] = current + splade_weight * (
+                        current / remainder_total if remainder_total else 0
+                    )
             weights["splade"] = 0.0
         return weights
 

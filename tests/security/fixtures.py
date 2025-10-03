@@ -89,7 +89,9 @@ def sample_audit_payload(index: int) -> dict[str, object]:
     return {"index": index, "action": "read", "resource": f"doc-{index}"}
 
 
-def sample_retention_records(now: datetime) -> list[tuple[str, datetime, dict[str, object], tuple[str, ...]]]:
+def sample_retention_records(
+    now: datetime,
+) -> list[tuple[str, datetime, dict[str, object], tuple[str, ...]]]:
     return [
         (
             "recent",

@@ -1,8 +1,9 @@
 """Entity linking orchestration service."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List, Mapping, Sequence
+from typing import List, Sequence
 
 from .candidates import CandidateGenerator
 from .decision import DecisionEngine, LinkingDecision
@@ -61,7 +62,9 @@ class EntityLinkingService:
                 fallback_reason = "llm-error"
             decision = self._decision.decide(llm, candidates, identifiers)
             if not decision.accepted and candidates:
-                decision = LinkingDecision(True, candidates[0], reason=fallback_reason or "fallback")
+                decision = LinkingDecision(
+                    True, candidates[0], reason=fallback_reason or "fallback"
+                )
             result = LinkingResult(mention=mention, decision=decision, identifiers=identifiers)
             if decision.accepted and self._kg:
                 self._kg.write(result)

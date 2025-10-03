@@ -89,7 +89,9 @@ class IRValidator:
         allowed_keys = set(schema.get("properties", {}).keys()) | {"created_at"}
         extras = set(payload.keys()) - allowed_keys
         if extras:
-            raise ValidationError(f"Document contains unsupported fields: {', '.join(sorted(extras))}")
+            raise ValidationError(
+                f"Document contains unsupported fields: {', '.join(sorted(extras))}"
+            )
 
     def _validate_block_payload(self, block: Mapping[str, Any]) -> None:
         schema = self._schemas["block"]

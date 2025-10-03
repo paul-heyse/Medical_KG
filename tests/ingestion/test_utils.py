@@ -33,4 +33,4 @@ def test_hash_content_matches_sha256() -> None:
 def test_canonical_json_sorts_keys() -> None:
     payload = {"b": 1, "a": 2}
     encoded = utils.canonical_json(payload)
-    assert encoded == b"{\"a\":2,\"b\":1}"
+    assert encoded == b'{"a":2,"b":1}'

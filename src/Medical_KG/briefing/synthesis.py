@@ -1,4 +1,5 @@
 """Synthesis utilities for briefing outputs."""
+
 from __future__ import annotations
 
 import math
@@ -40,7 +41,9 @@ def build_endpoint_summary(bundle: TopicBundle) -> list[dict[str, object]]:
             "intervention": intervention,
             "certainty": _highest_certainty(evidences),
             "meta": _meta_analysis(evidences),
-            "citations": [citation.as_dict() for citation in _collect_evidence_citations(evidences)],
+            "citations": [
+                citation.as_dict() for citation in _collect_evidence_citations(evidences)
+            ],
         }
         summaries.append(summary)
     summaries.sort(key=_endpoint_sort_key)
@@ -86,7 +89,9 @@ def _random_effects(evidences: list[Evidence]) -> tuple[float, float, float, flo
     fixed_effect = sum(w * e for w, e in zip(weights, effects)) / sum(weights)
     q = sum(w * (e - fixed_effect) ** 2 for w, e in zip(weights, effects))
     df = len(evidences) - 1
-    tau_squared = max(0.0, (q - df) / max(sum(weights) - sum(w**2 for w in weights) / sum(weights), 1e-9))
+    tau_squared = max(
+        0.0, (q - df) / max(sum(weights) - sum(w**2 for w in weights) / sum(weights), 1e-9)
+    )
     random_weights = [1 / (1 / w + tau_squared) for w in weights]
     pooled = sum(w * e for w, e in zip(random_weights, effects)) / sum(random_weights)
     se_pooled = math.sqrt(1 / sum(random_weights))

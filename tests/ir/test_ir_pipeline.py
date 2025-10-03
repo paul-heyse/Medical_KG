@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from Medical_KG.ir.builder import ClinicalTrialsBuilder, DailyMedBuilder, GuidelineBuilder, MinerUBuilder
+from Medical_KG.ir.builder import (
+    ClinicalTrialsBuilder,
+    DailyMedBuilder,
+    GuidelineBuilder,
+    MinerUBuilder,
+)
 from Medical_KG.ir.models import Block
 from Medical_KG.ir.normalizer import TextNormalizer
 from Medical_KG.ir.storage import IrStorage
@@ -36,8 +41,12 @@ def test_clinical_trials_builder_creates_blocks(tmp_path: Path) -> None:
             {"measure": "Mortality", "description": "28 day", "timeFrame": "28 days"},
         ],
     }
-    document = builder.build_from_study(doc_id="study#1", uri="https://clinicaltrials.gov/study#1", study=study)
-    assert any(isinstance(block, Block) and block.section == "eligibility" for block in document.blocks)
+    document = builder.build_from_study(
+        doc_id="study#1", uri="https://clinicaltrials.gov/study#1", study=study
+    )
+    assert any(
+        isinstance(block, Block) and block.section == "eligibility" for block in document.blocks
+    )
     validator = IRValidator()
     validator.validate_document(document)
     storage = IrStorage(tmp_path)
@@ -75,11 +84,27 @@ def test_mineru_builder_uses_offset_map() -> None:
             {"caption": "Table 1", "headers": ["A"], "rows": [["B"]], "page": 1},
         ],
         "offset_map": [
-            {"char_start": 0, "char_end": 5, "canonical_start": 0, "canonical_end": 5, "page": 1, "bbox": [0, 0, 10, 10]},
-            {"char_start": 6, "char_end": 20, "canonical_start": 6, "canonical_end": 20, "page": 1, "bbox": [0, 10, 10, 20]},
+            {
+                "char_start": 0,
+                "char_end": 5,
+                "canonical_start": 0,
+                "canonical_end": 5,
+                "page": 1,
+                "bbox": [0, 0, 10, 10],
+            },
+            {
+                "char_start": 6,
+                "char_end": 20,
+                "canonical_start": 6,
+                "canonical_end": 20,
+                "page": 1,
+                "bbox": [0, 10, 10, 20],
+            },
         ],
     }
-    document = builder.build_from_artifacts(doc_id="mineru#1", uri="s3://bucket/doc", artifacts=artifacts)
+    document = builder.build_from_artifacts(
+        doc_id="mineru#1", uri="s3://bucket/doc", artifacts=artifacts
+    )
     assert document.span_map.to_list()[0]["page"] == 1
     IRValidator().validate_document(document)
 

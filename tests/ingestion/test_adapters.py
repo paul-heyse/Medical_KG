@@ -35,7 +35,6 @@ from Medical_KG.ingestion.adapters.terminology import (
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 from Medical_KG.ingestion.models import Document
 from Medical_KG.utils.optional_dependencies import get_httpx_module
-
 from tests.ingestion.fixtures.clinical import (
     accessgudid_record,
     clinical_study,
@@ -100,7 +99,9 @@ def test_pubmed_adapter_parses_fixture(fake_ledger: Any, monkeypatch: pytest.Mon
     _run(_test())
 
 
-def test_pubmed_adapter_handles_missing_history(fake_ledger: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pubmed_adapter_handles_missing_history(
+    fake_ledger: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
     async def _test() -> None:
         client = AsyncHttpClient()
         adapter = PubMedAdapter(AdapterContext(fake_ledger), client)
@@ -140,7 +141,9 @@ def test_pubmed_rate_limit_adjusts_for_api_key(fake_ledger: Any) -> None:
 def test_clinical_trials_parses_metadata(fake_ledger: Any) -> None:
     async def _test() -> None:
         client = AsyncHttpClient()
-        adapter = ClinicalTrialsGovAdapter(AdapterContext(fake_ledger), client, bootstrap_records=[clinical_study()])
+        adapter = ClinicalTrialsGovAdapter(
+            AdapterContext(fake_ledger), client, bootstrap_records=[clinical_study()]
+        )
         results = await adapter.run()
         document = results[0].document
         assert document.metadata["record_version"] == "2024-01-01"
@@ -181,11 +184,15 @@ def test_clinical_trials_paginates(fake_ledger: Any, monkeypatch: pytest.MonkeyP
         adapter = ClinicalTrialsGovAdapter(AdapterContext(fake_ledger), client)
         calls: list[MutableMapping[str, Any]] = []
 
-        async def fake_fetch_json(url: str, *, params: MutableMapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
+        async def fake_fetch_json(
+            url: str, *, params: MutableMapping[str, Any] | None = None, **_: Any
+        ) -> dict[str, Any]:
             assert params is not None
             calls.append(dict(params))
             if "pageToken" in params:
-                return {"studies": [{"protocolSection": {"identificationModule": {"nctId": "NCT2"}}}]}
+                return {
+                    "studies": [{"protocolSection": {"identificationModule": {"nctId": "NCT2"}}}]
+                }
             return {
                 "studies": [{"protocolSection": {"identificationModule": {"nctId": "NCT1"}}}],
                 "nextPageToken": "token",
@@ -259,14 +266,18 @@ def test_clinical_trials_retries_on_rate_limit(
 def test_clinical_trials_metadata_enrichment(fake_ledger: Any) -> None:
     record = clinical_study()
     protocol = record.setdefault("protocolSection", {})
-    protocol.setdefault("sponsorCollaboratorsModule", {})["leadSponsor"] = {"name": "Example Sponsor"}
+    protocol.setdefault("sponsorCollaboratorsModule", {})["leadSponsor"] = {
+        "name": "Example Sponsor"
+    }
     protocol.setdefault("designModule", {}).setdefault("enrollmentInfo", {})["count"] = 256
     status_module = protocol.setdefault("statusModule", {})
     status_module["startDateStruct"] = {"date": "2024-05-01"}
     status_module["completionDateStruct"] = {"date": "2025-10-31"}
 
     client = AsyncHttpClient()
-    adapter = ClinicalTrialsGovAdapter(AdapterContext(fake_ledger), client, bootstrap_records=[record])
+    adapter = ClinicalTrialsGovAdapter(
+        AdapterContext(fake_ledger), client, bootstrap_records=[record]
+    )
     results = _run(adapter.run())
     metadata = results[0].document.metadata
     assert metadata["sponsor"] == "Example Sponsor"
@@ -279,7 +290,9 @@ def test_clinical_trials_metadata_enrichment(fake_ledger: Any) -> None:
 def test_openfda_requires_identifier(fake_ledger: Any) -> None:
     async def _test() -> None:
         client = AsyncHttpClient()
-        adapter = OpenFdaAdapter(AdapterContext(fake_ledger), client, bootstrap_records=[{"foo": "bar"}])
+        adapter = OpenFdaAdapter(
+            AdapterContext(fake_ledger), client, bootstrap_records=[{"foo": "bar"}]
+        )
         with pytest.raises(ValueError):
             await adapter.run(resource="drug/event")
         await client.aclose()
@@ -290,7 +303,9 @@ def test_openfda_requires_identifier(fake_ledger: Any) -> None:
 def test_openfda_parses_identifier(fake_ledger: Any) -> None:
     async def _test() -> None:
         client = AsyncHttpClient()
-        adapter = OpenFdaAdapter(AdapterContext(fake_ledger), client, bootstrap_records=[openfda_faers_record()])
+        adapter = OpenFdaAdapter(
+            AdapterContext(fake_ledger), client, bootstrap_records=[openfda_faers_record()]
+        )
         results = await adapter.run(resource="drug/event")
         assert results[0].document.metadata["identifier"]
         await client.aclose()
@@ -301,7 +316,9 @@ def test_openfda_parses_identifier(fake_ledger: Any) -> None:
 def test_openfda_udi_enriches_metadata(fake_ledger: Any) -> None:
     async def _test() -> None:
         client = AsyncHttpClient()
-        adapter = OpenFdaUdiAdapter(AdapterContext(fake_ledger), client, bootstrap_records=[openfda_udi_record()])
+        adapter = OpenFdaUdiAdapter(
+            AdapterContext(fake_ledger), client, bootstrap_records=[openfda_udi_record()]
+        )
         results = await adapter.run(resource="device/udi")
         metadata = results[0].document.metadata
         assert metadata["identifier"]
@@ -315,7 +332,9 @@ def test_accessgudid_validation(fake_ledger: Any) -> None:
     async def _test() -> None:
         payload = accessgudid_record()
         client = AsyncHttpClient()
-        adapter = AccessGudidAdapter(AdapterContext(fake_ledger), client, bootstrap_records=[payload])
+        adapter = AccessGudidAdapter(
+            AdapterContext(fake_ledger), client, bootstrap_records=[payload]
+        )
         results = await adapter.run(udi_di="00380740000011")
         assert results[0].document.metadata["udi_di"] == "00380740000011"
         await client.aclose()
@@ -328,7 +347,9 @@ def test_accessgudid_rejects_bad_udi(fake_ledger: Any) -> None:
         payload = accessgudid_record()
         payload["udi"]["deviceIdentifier"] = "1234"
         client = AsyncHttpClient()
-        adapter = AccessGudidAdapter(AdapterContext(fake_ledger), client, bootstrap_records=[payload])
+        adapter = AccessGudidAdapter(
+            AdapterContext(fake_ledger), client, bootstrap_records=[payload]
+        )
         with pytest.raises(ValueError):
             await adapter.run(udi_di="1234")
         await client.aclose()
@@ -339,7 +360,9 @@ def test_accessgudid_rejects_bad_udi(fake_ledger: Any) -> None:
 def test_dailymed_parses_sections(fake_ledger: Any) -> None:
     async def _test() -> None:
         client = AsyncHttpClient()
-        adapter = DailyMedAdapter(AdapterContext(fake_ledger), client, bootstrap_records=[dailymed_xml()])
+        adapter = DailyMedAdapter(
+            AdapterContext(fake_ledger), client, bootstrap_records=[dailymed_xml()]
+        )
         results = await adapter.run(setid="setid")
         sections = results[0].document.raw["sections"]
         assert sections and sections[0]["text"]
@@ -367,7 +390,9 @@ def test_pmc_adapter_collects_tables(fake_ledger: Any, monkeypatch: pytest.Monke
     _run(_test())
 
 
-def test_pmc_adapter_extracts_sections_and_references(fake_ledger: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pmc_adapter_extracts_sections_and_references(
+    fake_ledger: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
     async def _test() -> None:
         client = AsyncHttpClient()
         adapter = PmcAdapter(AdapterContext(fake_ledger), client)
@@ -443,8 +468,12 @@ def test_medrxiv_paginates(fake_ledger: Any, monkeypatch: pytest.MonkeyPatch) ->
 def test_guideline_adapters(fake_ledger: Any) -> None:
     async def _test() -> None:
         client = AsyncHttpClient()
-        nice = NiceGuidelineAdapter(AdapterContext(fake_ledger), client, bootstrap_records=[nice_guideline()])
-        cdc = CdcSocrataAdapter(AdapterContext(fake_ledger), client, bootstrap_records=cdc_socrata_record())
+        nice = NiceGuidelineAdapter(
+            AdapterContext(fake_ledger), client, bootstrap_records=[nice_guideline()]
+        )
+        cdc = CdcSocrataAdapter(
+            AdapterContext(fake_ledger), client, bootstrap_records=cdc_socrata_record()
+        )
         nic_results = await nice.run()
         cdc_results = await cdc.run(dataset="abc")
         assert nic_results[0].document.metadata["uid"].startswith("CG")
@@ -509,7 +538,9 @@ def test_terminology_validations(fake_ledger: Any) -> None:
 
     snomed = SnomedAdapter(context, client, bootstrap_records=[snomed_record()])
     with pytest.raises(ValueError):
-        snomed.validate(Document("doc", "snomed", "", metadata={"code": "12"}, raw={"designation": []}))
+        snomed.validate(
+            Document("doc", "snomed", "", metadata={"code": "12"}, raw={"designation": []})
+        )
 
     _run(client.aclose())
 

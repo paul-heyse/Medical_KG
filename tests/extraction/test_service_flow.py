@@ -77,4 +77,3 @@ def test_service_raises_after_max_retries(monkeypatch: pytest.MonkeyPatch) -> No
 
     with pytest.raises(RuntimeError):
         service.extract(_make_chunk("Patients"))
-

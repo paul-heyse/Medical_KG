@@ -5,7 +5,6 @@ from typing import Any
 
 from . import load_json_fixture, load_text_fixture
 
-
 _PUBMED_SEARCH = load_json_fixture("pubmed_search.json")
 _PUBMED_SUMMARY = load_json_fixture("pubmed_summary.json")
 _PUBMED_FETCH_XML = load_text_fixture("pubmed_fetch.xml")

@@ -104,4 +104,3 @@ def test_validator_enforces_token_budget() -> None:
     validator = ExtractionValidator(facet_token_budget=5, full_token_budget=10)
     with pytest.raises(ExtractionValidationError):
         validator.validate(extraction, text=payload, facet_mode=True)
-

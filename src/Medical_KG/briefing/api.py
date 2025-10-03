@@ -1,4 +1,5 @@
 """FastAPI router exposing briefing endpoints."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -13,7 +14,6 @@ from .api_models import (
     InterviewKitRequest,
     QARequest,
     QAResponse,
-    TopicOnlyRequest,
 )
 from .models import Topic
 from .repository import BriefingRepository, InMemoryBriefingRepository
@@ -30,9 +30,7 @@ def _get_dependencies() -> _Dependencies:
     return _Dependencies(repository=InMemoryBriefingRepository())
 
 
-def _get_service(
-    deps: Annotated[_Dependencies, Depends(_get_dependencies)]
-) -> BriefingService:
+def _get_service(deps: Annotated[_Dependencies, Depends(_get_dependencies)]) -> BriefingService:
     return BriefingService(deps.repository)
 
 

@@ -1,9 +1,10 @@
 """Deterministic identifier detectors and validators."""
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Iterable, List
+from typing import List
 
 
 @dataclass(slots=True)

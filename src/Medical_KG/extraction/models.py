@@ -1,13 +1,13 @@
 """Pydantic models and validation for clinical extractions."""
+
 from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, model_validator
-
 from Medical_KG.facets.models import Code, EvidenceSpan
+from pydantic import BaseModel, Field, model_validator
 
 
 class ExtractionType(str, Enum):
@@ -21,9 +21,7 @@ class ExtractionType(str, Enum):
 class ExtractionBase(BaseModel):
     type: ExtractionType
     evidence_spans: Annotated[list[EvidenceSpan], Field(min_length=1)]
-    confidence: Annotated[
-        float | None, Field(default=None, serialization_alias="__confidence")
-    ]
+    confidence: Annotated[float | None, Field(default=None, serialization_alias="__confidence")]
 
 
 class PICOExtraction(ExtractionBase):

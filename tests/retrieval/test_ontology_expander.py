@@ -12,7 +12,9 @@ class StubCatalog(ConceptCatalogClient):
     synonyms_map: dict[str, list[OntologyTerm]]
     search_map: dict[str, list[OntologyTerm]]
 
-    def synonyms(self, identifier: str) -> list[OntologyTerm]:  # pragma: no cover - executed in tests
+    def synonyms(
+        self, identifier: str
+    ) -> list[OntologyTerm]:  # pragma: no cover - executed in tests
         return list(self.synonyms_map.get(identifier, ()))
 
     def search(self, text: str) -> list[OntologyTerm]:  # pragma: no cover - executed in tests

@@ -44,7 +44,11 @@ def test_parse_temporal_constraint_normalises_units() -> None:
     assert temporal == {"op": "<=", "days": 180.0}
 
 
-@given(st.integers(min_value=1, max_value=365), st.sampled_from(["day", "week", "month", "year"]), st.booleans())
+@given(
+    st.integers(min_value=1, max_value=365),
+    st.sampled_from(["day", "week", "month", "year"]),
+    st.booleans(),
+)
 def test_temporal_constraint_property(value: int, unit: str, plural: bool) -> None:
     suffix = "s" if plural else ""
     text = f"Within {value} {unit}{suffix}"
@@ -64,4 +68,3 @@ def test_temporal_constraint_property(value: int, unit: str, plural: bool) -> No
 )
 def test_normalise_number(raw: str, expected: float | None) -> None:
     assert normalise_number(raw) == expected
-

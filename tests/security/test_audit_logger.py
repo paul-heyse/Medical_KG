@@ -16,8 +16,20 @@ from .fixtures import sample_audit_payload
 def test_log_creation_and_query(tmp_path: Path) -> None:
     logger = AuditLogger(tmp_path / "audit.log")
     timestamp = datetime.now(timezone.utc)
-    logger.log(AuditEvent(category="login", payload=sample_audit_payload(0), actor="alice", resource="console", timestamp=timestamp))
-    logger.log(AuditEvent(category="access", payload=sample_audit_payload(1), actor="bob", resource="console"))
+    logger.log(
+        AuditEvent(
+            category="login",
+            payload=sample_audit_payload(0),
+            actor="alice",
+            resource="console",
+            timestamp=timestamp,
+        )
+    )
+    logger.log(
+        AuditEvent(
+            category="access", payload=sample_audit_payload(1), actor="bob", resource="console"
+        )
+    )
 
     records = logger.read()
     assert len(records) == 2
@@ -74,8 +86,16 @@ def test_export_invalid_format(tmp_path: Path) -> None:
 def test_query_filters_apply(tmp_path: Path) -> None:
     logger = AuditLogger(tmp_path / "audit.log")
     timestamp = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    logger.log(AuditEvent(category="login", payload={}, actor="alice", resource="console", timestamp=timestamp))
-    logger.log(AuditEvent(category="access", payload={}, actor="bob", resource="console", timestamp=timestamp))
+    logger.log(
+        AuditEvent(
+            category="login", payload={}, actor="alice", resource="console", timestamp=timestamp
+        )
+    )
+    logger.log(
+        AuditEvent(
+            category="access", payload={}, actor="bob", resource="console", timestamp=timestamp
+        )
+    )
 
     assert logger.query(category="missing") == []
     assert logger.query(actor="charlie") == []

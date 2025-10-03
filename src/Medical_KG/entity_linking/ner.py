@@ -1,7 +1,7 @@
 """NER helpers bridging optional scispaCy dependency."""
+
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -30,10 +30,7 @@ class NerPipeline:
         if pipeline is None:
             return []
         doc = pipeline(text)
-        return [
-            Mention(ent.text, ent.start_char, ent.end_char, ent.label_)
-            for ent in doc.ents
-        ]
+        return [Mention(ent.text, ent.start_char, ent.end_char, ent.label_) for ent in doc.ents]
 
 
 __all__ = ["Mention", "NerPipeline"]

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-import math
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -290,7 +290,9 @@ class SemanticChunker:
     def _start_with_overlap(self, previous_chunk: Optional[Chunk]) -> List[Sentence]:
         if not previous_chunk:
             return []
-        overlap_tokens, overlap_text, overlap_start, overlap_end = self._overlap_window(previous_chunk)
+        overlap_tokens, overlap_text, overlap_start, overlap_end = self._overlap_window(
+            previous_chunk
+        )
         if overlap_tokens == 0 or not overlap_text:
             return []
         synthetic_sentence = Sentence(

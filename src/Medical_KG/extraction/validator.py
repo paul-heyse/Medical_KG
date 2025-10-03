@@ -33,7 +33,9 @@ class DeadLetterQueue:
         payload_json = payload.model_dump_json(by_alias=True, exclude_none=True)
         digest = hashlib.sha256(payload_json.encode()).hexdigest()
         self.records.append(
-            DeadLetterRecord(reason=reason, payload_hash=digest, timestamp=datetime.now(timezone.utc))
+            DeadLetterRecord(
+                reason=reason, payload_hash=digest, timestamp=datetime.now(timezone.utc)
+            )
         )
 
     def __iter__(self):  # pragma: no cover - convenience
@@ -109,9 +111,7 @@ class ExtractionValidator:
         budget = self._facet_budget if facet_mode else self._full_budget
         tokens = count_tokens(extraction.model_dump_json(by_alias=True))
         if tokens > budget:
-            raise ExtractionValidationError(
-                f"extraction exceeds token budget ({tokens}>{budget})"
-            )
+            raise ExtractionValidationError(f"extraction exceeds token budget ({tokens}>{budget})")
 
 
 __all__ = ["DeadLetterQueue", "ExtractionValidator", "ExtractionValidationError"]

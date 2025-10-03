@@ -1,4 +1,5 @@
 """Client abstractions used by retrieval pipeline."""
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
@@ -9,28 +10,29 @@ from .types import EmbeddingVector, JSONValue, SearchHit, VectorHit
 
 
 class OpenSearchClient(Protocol):  # pragma: no cover - interface definition
-    def search(self, *, index: str, body: Mapping[str, JSONValue], size: int) -> Sequence[SearchHit]:
-        ...
+    def search(
+        self, *, index: str, body: Mapping[str, JSONValue], size: int
+    ) -> Sequence[SearchHit]: ...
 
 
 class VectorSearchClient(Protocol):  # pragma: no cover - interface definition
-    def query(self, *, index: str, embedding: EmbeddingVector, top_k: int) -> Sequence[VectorHit]:
-        ...
+    def query(
+        self, *, index: str, embedding: EmbeddingVector, top_k: int
+    ) -> Sequence[VectorHit]: ...
 
 
 class EmbeddingClient(Protocol):  # pragma: no cover - interface definition
-    def embed(self, text: str) -> EmbeddingVector:
-        ...
+    def embed(self, text: str) -> EmbeddingVector: ...
 
 
 class SpladeEncoder(Protocol):  # pragma: no cover - interface definition
-    def expand(self, text: str) -> Mapping[str, float]:
-        ...
+    def expand(self, text: str) -> Mapping[str, float]: ...
 
 
 class Reranker(Protocol):  # pragma: no cover - interface definition
-    async def rerank(self, query: str, candidates: Sequence[RetrievalResult]) -> Sequence[RetrievalResult]:
-        ...
+    async def rerank(
+        self, query: str, candidates: Sequence[RetrievalResult]
+    ) -> Sequence[RetrievalResult]: ...
 
 
 @dataclass(slots=True)
@@ -67,7 +69,9 @@ class InMemorySearch(OpenSearchClient):
     def __init__(self, hits: Iterable[InMemorySearchHit]):
         self._hits = list(hits)
 
-    def search(self, *, index: str, body: Mapping[str, JSONValue], size: int) -> Sequence[SearchHit]:
+    def search(
+        self, *, index: str, body: Mapping[str, JSONValue], size: int
+    ) -> Sequence[SearchHit]:
         _ = index, body
         hits: list[SearchHit] = []
         for hit in self._hits[:size]:

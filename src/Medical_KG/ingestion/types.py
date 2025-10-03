@@ -1,7 +1,7 @@
 """Shared typing utilities for ingestion adapters."""
 from __future__ import annotations
 
-from typing import Mapping, MutableMapping, Sequence, TypedDict, Union
+from typing import Mapping, MutableMapping, NotRequired, Sequence, TypedDict, Union
 
 
 JSONPrimitive = Union[str, int, float, bool, None]
@@ -11,138 +11,138 @@ JSONSequence = Sequence[JSONValue]
 MutableJSONMapping = MutableMapping[str, JSONValue]
 
 
-class ClinicalTrialsStudyPayload(TypedDict, total=False):
+class ClinicalTrialsStudyPayload(TypedDict):
     protocolSection: JSONMapping
-    derivedSection: JSONMapping
+    derivedSection: NotRequired[JSONMapping]
 
 
-class ClinicalDocumentPayload(TypedDict, total=False):
+class ClinicalDocumentPayload(TypedDict):
     nct_id: str
     title: str
-    status: str | None
-    phase: str | None
-    study_type: str | None
+    version: str
     arms: Sequence[JSONMapping]
     eligibility: JSONValue
     outcomes: Sequence[JSONMapping]
-    version: str
-    lead_sponsor: str | None
-    enrollment: int | str | None
-    start_date: str | None
-    completion_date: str | None
+    status: NotRequired[str | None]
+    phase: NotRequired[str | None]
+    study_type: NotRequired[str | None]
+    lead_sponsor: NotRequired[str | None]
+    enrollment: NotRequired[int | str | None]
+    start_date: NotRequired[str | None]
+    completion_date: NotRequired[str | None]
 
 
 class OpenFdaRecordPayload(TypedDict, total=False):
-    safetyreportid: str | None
-    udi_di: str | None
-    setid: str | None
-    id: str | None
-    receivedate: str | None
-    version_number: str | None
-    last_updated: str | None
+    safetyreportid: NotRequired[str | None]
+    udi_di: NotRequired[str | None]
+    setid: NotRequired[str | None]
+    id: NotRequired[str | None]
+    receivedate: NotRequired[str | None]
+    version_number: NotRequired[str | None]
+    last_updated: NotRequired[str | None]
 
 
-class OpenFdaDocumentPayload(TypedDict, total=False):
+class OpenFdaDocumentPayload(TypedDict):
     identifier: str
     version: str
     record: JSONMapping
 
 
-class DailyMedSectionPayload(TypedDict, total=False):
-    loinc: str | None
+class DailyMedSectionPayload(TypedDict):
     text: str
+    loinc: NotRequired[str | None]
 
 
-class DailyMedDocumentPayload(TypedDict, total=False):
+class DailyMedDocumentPayload(TypedDict):
     setid: str
     title: str
     version: str
     sections: Sequence[DailyMedSectionPayload]
 
 
-class RxNormDocumentPayload(TypedDict, total=False):
+class RxNormDocumentPayload(TypedDict):
     rxcui: str
-    name: str | None
-    synonym: str | None
-    tty: str | None
-    ndc: str | None
+    name: NotRequired[str | None]
+    synonym: NotRequired[str | None]
+    tty: NotRequired[str | None]
+    ndc: NotRequired[str | None]
 
 
-class AccessGudidDocumentPayload(TypedDict, total=False):
+class AccessGudidDocumentPayload(TypedDict):
     udi_di: str
-    brand: str | None
-    model: str | None
-    company: str | None
-    description: str | None
+    brand: NotRequired[str | None]
+    model: NotRequired[str | None]
+    company: NotRequired[str | None]
+    description: NotRequired[str | None]
 
 
-class NiceGuidelineDocumentPayload(TypedDict, total=False):
+class NiceGuidelineDocumentPayload(TypedDict):
     uid: str
     title: str
     summary: str
-    url: str | None
-    licence: str | None
+    url: NotRequired[str | None]
+    licence: NotRequired[str | None]
 
 
-class UspstfDocumentPayload(TypedDict, total=False):
-    id: str | None
+class UspstfDocumentPayload(TypedDict):
     title: str
-    status: str | None
-    url: str | None
+    id: NotRequired[str | None]
+    status: NotRequired[str | None]
+    url: NotRequired[str | None]
 
 
-class CdcSocrataDocumentPayload(TypedDict, total=False):
+class CdcSocrataDocumentPayload(TypedDict):
     identifier: str
     record: JSONMapping
 
 
-class CdcWonderDocumentPayload(TypedDict, total=False):
+class CdcWonderDocumentPayload(TypedDict):
     rows: Sequence[Mapping[str, str]]
 
 
-class WhoGhoDocumentPayload(TypedDict, total=False):
-    indicator: str | None
+class WhoGhoDocumentPayload(TypedDict):
     value: JSONValue
-    country: str | None
-    year: str | None
+    indicator: NotRequired[str | None]
+    country: NotRequired[str | None]
+    year: NotRequired[str | None]
 
 
-class OpenPrescribingDocumentPayload(TypedDict, total=False):
+class OpenPrescribingDocumentPayload(TypedDict):
     identifier: str
     record: JSONMapping
 
 
-class PubMedDocumentPayload(TypedDict, total=False):
+class PubMedDocumentPayload(TypedDict):
     pmid: str
-    pmcid: str | None
-    doi: str | None
     title: str
     abstract: str
     authors: Sequence[str]
     mesh_terms: Sequence[str]
-    journal: str | None
-    pub_year: str | None
     pub_types: Sequence[str]
-    pubdate: str | None
+    pmcid: NotRequired[str | None]
+    doi: NotRequired[str | None]
+    journal: NotRequired[str | None]
+    pub_year: NotRequired[str | None]
+    pubdate: NotRequired[str | None]
 
 
-class PmcSectionPayload(TypedDict, total=False):
+class PmcSectionPayload(TypedDict):
     title: str
     text: str
 
 
-class PmcMediaPayload(TypedDict, total=False):
+class PmcMediaPayload(TypedDict):
     label: str
     caption: str
     uri: str
 
 
-class PmcReferencePayload(TypedDict, total=False):
+class PmcReferencePayload(TypedDict):
     label: str
     citation: str
 
 
-class PmcDocumentPayload(TypedDict, total=False):
+class PmcDocumentPayload(TypedDict):
     pmcid: str
     title: str
     abstract: str
@@ -152,45 +152,45 @@ class PmcDocumentPayload(TypedDict, total=False):
     references: Sequence[PmcReferencePayload]
 
 
-class MedRxivDocumentPayload(TypedDict, total=False):
+class MedRxivDocumentPayload(TypedDict):
     doi: str
     title: str
     abstract: str
-    date: str | None
+    date: NotRequired[str | None]
 
 
-class MeshDocumentPayload(TypedDict, total=False):
-    descriptor_id: str | None
+class MeshDocumentPayload(TypedDict):
     name: str
     terms: Sequence[str]
+    descriptor_id: NotRequired[str | None]
 
 
-class UmlsDocumentPayload(TypedDict, total=False):
-    cui: str | None
-    name: str | None
+class UmlsDocumentPayload(TypedDict):
     synonyms: Sequence[str]
-    definition: str | None
+    cui: NotRequired[str | None]
+    name: NotRequired[str | None]
+    definition: NotRequired[str | None]
 
 
-class LoincDocumentPayload(TypedDict, total=False):
-    code: str | None
-    display: str | None
+class LoincDocumentPayload(TypedDict):
     property: JSONValue
     system: JSONValue
     method: JSONValue
+    code: NotRequired[str | None]
+    display: NotRequired[str | None]
 
 
-class Icd11DocumentPayload(TypedDict, total=False):
-    code: str | None
-    title: str | None
-    definition: str | None
-    uri: str | None
+class Icd11DocumentPayload(TypedDict):
+    code: NotRequired[str | None]
+    title: NotRequired[str | None]
+    definition: NotRequired[str | None]
+    uri: NotRequired[str | None]
 
 
-class SnomedDocumentPayload(TypedDict, total=False):
-    code: str | None
-    display: str | None
+class SnomedDocumentPayload(TypedDict):
     designation: Sequence[JSONMapping]
+    code: NotRequired[str | None]
+    display: NotRequired[str | None]
 
 
 AnyDocumentPayload = Union[

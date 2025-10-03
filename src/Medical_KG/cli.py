@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from types import TracebackType
 from typing import Protocol, cast
+
 from Medical_KG.config.manager import ConfigError, ConfigManager, ConfigValidator, mask_secrets
 from Medical_KG.config.models import PdfPipelineSettings
 from Medical_KG.ingestion.adapters.base import AdapterContext
@@ -30,31 +31,26 @@ from Medical_KG.security.licenses import LicenseRegistry
 class HttpxResponse(Protocol):
     content: bytes
 
-    def raise_for_status(self) -> None:
-        ...
+    def raise_for_status(self) -> None: ...
 
 
 class HttpxClient(Protocol):
-    def __enter__(self) -> "HttpxClient":
-        ...
+    def __enter__(self) -> "HttpxClient": ...
 
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
         exc: BaseException | None,
         traceback: TracebackType | None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
-    def get(self, url: str, *, follow_redirects: bool) -> HttpxResponse:
-        ...
+    def get(self, url: str, *, follow_redirects: bool) -> HttpxResponse: ...
 
 
 class HttpxModule(Protocol):
     HTTPError: type[Exception]
 
-    def Client(self, *, timeout: float) -> HttpxClient:
-        ...
+    def Client(self, *, timeout: float) -> HttpxClient: ...
 
 
 def _require_httpx() -> HttpxModule:

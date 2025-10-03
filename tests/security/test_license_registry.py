@@ -15,7 +15,9 @@ def _registry(tmp_path) -> LicenseRegistry:
 
 def test_free_tier_blocks_and_redacts(tmp_path) -> None:
     registry = _registry(tmp_path)
-    session = registry.create_session("free", expires_at=datetime.now(timezone.utc) + timedelta(days=1))
+    session = registry.create_session(
+        "free", expires_at=datetime.now(timezone.utc) + timedelta(days=1)
+    )
 
     with pytest.raises(PermissionError):
         session.enforce_feature("briefing")

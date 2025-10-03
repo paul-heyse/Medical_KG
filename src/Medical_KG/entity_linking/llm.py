@@ -1,7 +1,7 @@
 """LLM adjudication helper."""
+
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
@@ -10,7 +10,9 @@ from .ner import Mention
 
 
 class LlmClient:
-    async def complete(self, *, prompt: str, payload: Mapping[str, Any]) -> Mapping[str, Any]:  # pragma: no cover
+    async def complete(
+        self, *, prompt: str, payload: Mapping[str, Any]
+    ) -> Mapping[str, Any]:  # pragma: no cover
         raise NotImplementedError
 
 
@@ -28,7 +30,9 @@ class LlmAdjudicator:
     def __init__(self, client: LlmClient) -> None:
         self._client = client
 
-    async def adjudicate(self, mention: Mention, candidates: Sequence[Candidate], context: str) -> AdjudicationResult:
+    async def adjudicate(
+        self, mention: Mention, candidates: Sequence[Candidate], context: str
+    ) -> AdjudicationResult:
         payload = {
             "mention": mention.text,
             "context": context,

@@ -1,9 +1,10 @@
 """Evaluation harness implementing quality checks."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from statistics import mean
-from typing import Iterable, Mapping, MutableMapping, Sequence
+from typing import Mapping, Sequence
 
 from .metrics import (
     RetrievalMetrics,
@@ -28,7 +29,9 @@ class EvaluationHarness:
     def __init__(self, settings: EvaluationSettings | None = None) -> None:
         self._settings = settings or EvaluationSettings()
 
-    def evaluate_retrieval(self, gold: Sequence[GoldSample], predictions: Sequence[Prediction]) -> RetrievalMetrics:
+    def evaluate_retrieval(
+        self, gold: Sequence[GoldSample], predictions: Sequence[Prediction]
+    ) -> RetrievalMetrics:
         metrics: list[RetrievalMetrics] = []
         prediction_by_id = {pred.query_id: pred for pred in predictions}
         for sample in gold:
@@ -40,7 +43,9 @@ class EvaluationHarness:
         avg_mrr = mean(metric.mrr for metric in metrics) if metrics else 0.0
         return RetrievalMetrics(recall_at_10=avg_recall, ndcg_at_10=avg_ndcg, mrr=avg_mrr)
 
-    def evaluate_extraction(self, gold_spans: Sequence[Sequence[str]], predicted_spans: Sequence[Sequence[str]]) -> Mapping[str, float]:
+    def evaluate_extraction(
+        self, gold_spans: Sequence[Sequence[str]], predicted_spans: Sequence[Sequence[str]]
+    ) -> Mapping[str, float]:
         scores = [extraction_f1(truth, pred) for truth, pred in zip(gold_spans, predicted_spans)]
         return {
             "f1": mean(scores) if scores else 0.0,
@@ -48,27 +53,34 @@ class EvaluationHarness:
         }
 
     def evaluate_rag(self, answers: Sequence[Prediction]) -> Mapping[str, float]:
-        claims = [
-            {"citations": list(answer.citations)}
-            for answer in answers
-        ]
+        claims = [{"citations": list(answer.citations)} for answer in answers]
         return {
             "hallucination_rate": hallucination_rate(claims),
         }
 
-    def detect_drift(self, current: Mapping[str, float], previous: Mapping[str, float]) -> Mapping[str, float]:
+    def detect_drift(
+        self, current: Mapping[str, float], previous: Mapping[str, float]
+    ) -> Mapping[str, float]:
         return drift_delta(current, previous)
 
-    def run(self, gold: Sequence[GoldSample], predictions: Sequence[Prediction]) -> EvaluationReport:
+    def run(
+        self, gold: Sequence[GoldSample], predictions: Sequence[Prediction]
+    ) -> EvaluationReport:
         retrieval = self.evaluate_retrieval(gold, predictions)
         extraction = self.evaluate_extraction(
             [sample.relevant_ids for sample in gold],
-            [prediction.ranked_ids[: len(sample.relevant_ids)] for sample, prediction in zip(gold, predictions)],
+            [
+                prediction.ranked_ids[: len(sample.relevant_ids)]
+                for sample, prediction in zip(gold, predictions)
+            ],
         )
         rag = self.evaluate_rag(predictions)
         drift = self.detect_drift(
             {"recall_at_10": retrieval.recall_at_10, "ndcg_at_10": retrieval.ndcg_at_10},
-            {"recall_at_10": self._settings.recall_threshold, "ndcg_at_10": self._settings.ndcg_threshold},
+            {
+                "recall_at_10": self._settings.recall_threshold,
+                "ndcg_at_10": self._settings.ndcg_threshold,
+            },
         )
         report = EvaluationReport(
             retrieval={

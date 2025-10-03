@@ -20,7 +20,9 @@ class RecordingLedger:
     def __init__(self) -> None:
         self.records: list[tuple[str, str, Mapping[str, object] | None]] = []
 
-    def record(self, doc_key: str, state: str, metadata: Mapping[str, object] | None = None) -> None:
+    def record(
+        self, doc_key: str, state: str, metadata: Mapping[str, object] | None = None
+    ) -> None:
         self.records.append((doc_key, state, metadata))
 
 
@@ -121,11 +123,15 @@ def pipeline_components(tmp_path: Path) -> dict[str, object]:
     }
 
 
-def test_pdf_pipeline_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pipeline_components: dict[str, object]) -> None:
+def test_pdf_pipeline_end_to_end(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pipeline_components: dict[str, object]
+) -> None:
     monkeypatch.setenv("REQUIRE_GPU", "0")
     monkeypatch.setattr("Medical_KG.pdf.service.ensure_gpu", lambda require_flag=True: None)
     pdf_path = write_sample_pdf(tmp_path, "paper.pdf")
-    document = PdfDocument(doc_key="DOC-001", uri="https://example.org/paper.pdf", local_path=pdf_path)
+    document = PdfDocument(
+        doc_key="DOC-001", uri="https://example.org/paper.pdf", local_path=pdf_path
+    )
 
     pipeline = pipeline_components["pipeline"]
     metadata = pipeline.process(document)
@@ -214,7 +220,9 @@ def test_pdf_pipeline_parses_blocks_tables_and_metadata(
     assert metadata["qa_metrics"]["table_count"] == 1
 
 
-def test_pdf_pipeline_handles_multi_column_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pdf_pipeline_handles_multi_column_layout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("REQUIRE_GPU", "0")
     monkeypatch.setattr("Medical_KG.pdf.service.ensure_gpu", lambda require_flag=True: None)
 

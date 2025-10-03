@@ -1,4 +1,5 @@
 """Infrastructure planning utilities for Medical KG."""
+
 from .models import DeploymentTarget, EnvironmentConfig, GPUProfile, ServiceConfig
 from .planner import InfrastructurePlanner
 

@@ -1,4 +1,5 @@
 """Structured audit logging."""
+
 from __future__ import annotations
 
 import csv
@@ -79,7 +80,10 @@ class AuditLogger:
                     handle.write(json.dumps(chunk) + "\n")
         elif format == "csv":
             with destination.open("w", encoding="utf-8", newline="") as handle:
-                writer = csv.DictWriter(handle, fieldnames=["timestamp", "category", "actor", "resource", "payload", "hash"])
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=["timestamp", "category", "actor", "resource", "payload", "hash"],
+                )
                 writer.writeheader()
                 for record in records:
                     writer.writerow(
@@ -162,7 +166,9 @@ class AuditLogger:
             return ""
 
 
-def _chunked(iterator: Iterator[Mapping[str, object]], size: int) -> Iterable[list[Mapping[str, object]]]:
+def _chunked(
+    iterator: Iterator[Mapping[str, object]], size: int
+) -> Iterable[list[Mapping[str, object]]]:
     chunk: list[Mapping[str, object]] = []
     for item in iterator:
         chunk.append(item)

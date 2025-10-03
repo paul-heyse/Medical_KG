@@ -3,6 +3,7 @@
 from typing import Any, Callable, cast
 
 from fastapi import FastAPI
+
 from Medical_KG.config.manager import ConfigError, ConfigManager
 
 

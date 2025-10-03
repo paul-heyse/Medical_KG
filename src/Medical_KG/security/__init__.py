@@ -1,4 +1,5 @@
 """Security and compliance utilities."""
+
 from .audit import AuditEvent, AuditLogger
 from .licenses import LicenseRegistry, LicenseSession, LicenseTier
 from .provenance import ExtractionActivity, ProvenanceStore

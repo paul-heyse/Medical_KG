@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import yaml
-
 from Medical_KG.catalog.licenses import load_license_policy
 from Medical_KG.catalog.loaders import SnomedCTLoader
 from Medical_KG.catalog.models import Concept, ConceptFamily, Synonym, SynonymType
@@ -49,6 +48,8 @@ def test_license_policy_filtering_and_default(tmp_path: Path) -> None:
     permissive_policy = load_license_policy(None)
     missing_policy = load_license_policy(tmp_path / "does-not-exist.yaml")
 
-    assert [concept.license_bucket for concept in public_policy.filter_concepts(concepts)] == ["open"]
+    assert [concept.license_bucket for concept in public_policy.filter_concepts(concepts)] == [
+        "open"
+    ]
     assert len(permissive_policy.filter_concepts(concepts)) == 2
     assert missing_policy.entitlements == permissive_policy.entitlements

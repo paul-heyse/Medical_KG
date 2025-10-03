@@ -1,24 +1,25 @@
 """Retrieval orchestration package."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, NoReturn
 
-from .service import RetrievalService, RetrieverConfig
-from .intent import IntentClassifier, IntentRule
-from .ontology import OntologyExpander, OntologyTerm, ConceptCatalogClient
 from .clients import (
+    ConstantEmbeddingClient,
     EmbeddingClient,
-    OpenSearchClient,
-    VectorSearchClient,
-    SpladeEncoder,
-    Reranker,
     InMemorySearch,
     InMemorySearchHit,
     InMemoryVector,
+    OpenSearchClient,
     PassthroughEncoder,
-    ConstantEmbeddingClient,
+    Reranker,
+    SpladeEncoder,
+    VectorSearchClient,
 )
+from .intent import IntentClassifier, IntentRule
 from .models import RetrievalRequest, RetrievalResponse
+from .ontology import ConceptCatalogClient, OntologyExpander, OntologyTerm
+from .service import RetrievalService, RetrieverConfig
 
 if TYPE_CHECKING:
     from fastapi import APIRouter
@@ -31,6 +32,7 @@ else:  # pragma: no cover - optional FastAPI dependency
 
         def create_router(service: RetrievalService) -> NoReturn:  # pragma: no cover - fallback
             raise RuntimeError("FastAPI integration is unavailable: fastapi not installed")
+
 
 __all__ = [
     "create_router",

@@ -42,14 +42,21 @@ def test_map_condition_links_to_patient(mapper: FhirGraphMapper) -> None:
         "resourceType": "Condition",
         "id": "Condition/c-1",
         "subject": {"reference": "Patient/p-1"},
-        "code": {"coding": [{"system": "http://snomed.info/sct", "code": "111", "display": "Asthma"}]},
+        "code": {
+            "coding": [{"system": "http://snomed.info/sct", "code": "111", "display": "Asthma"}]
+        },
         "severity": {"coding": [{"system": "http://snomed.info/sct", "code": "222"}]},
         "clinicalStatus": {"coding": [{"system": "http://snomed.info/sct", "code": "111"}]},
     }
     mapping = mapper.map_condition(condition)
     assert mapping.nodes[0]["codes"][0]["code"] == "111"
     assert mapping.relationships == [
-        {"type": "HAS_CONDITION", "start_id": "Patient/p-1", "end_id": "Condition/c-1", "properties": {}}
+        {
+            "type": "HAS_CONDITION",
+            "start_id": "Patient/p-1",
+            "end_id": "Condition/c-1",
+            "properties": {},
+        }
     ]
 
 

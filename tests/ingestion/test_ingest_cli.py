@@ -13,15 +13,17 @@ def test_ingest_cli_batch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     ledger = tmp_path / "ledger.jsonl"
 
     parser = build_parser()
-    args = parser.parse_args([
-        "ingest",
-        "pubmed",
-        "--batch",
-        str(batch),
-        "--auto",
-        "--ledger",
-        str(ledger),
-    ])
+    args = parser.parse_args(
+        [
+            "ingest",
+            "pubmed",
+            "--batch",
+            str(batch),
+            "--auto",
+            "--ledger",
+            str(ledger),
+        ]
+    )
 
     class DummyAdapter:
         async def run(self, **kwargs: Any) -> list[object]:

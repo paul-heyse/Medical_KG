@@ -30,9 +30,13 @@ from Medical_KG.briefing.api import _get_dependencies
 def topic_bundle() -> TopicBundle:
     topic = Topic(condition="SNOMED:123", intervention="RxCUI:456", outcome="LOINC:789")
     citation = Citation(doc_id="PMID:1", start=0, end=10, quote="Example quote")
-    studies = [Study(study_id="NCT0001", title="Trial 1", registry_ids=["NCT0001"], citations=[citation])]
+    studies = [
+        Study(study_id="NCT0001", title="Trial 1", registry_ids=["NCT0001"], citations=[citation])
+    ]
     variables = [
-        EvidenceVariable(kind="population", description="Adults with condition", citations=[citation]),
+        EvidenceVariable(
+            kind="population", description="Adults with condition", citations=[citation]
+        ),
         EvidenceVariable(kind="outcome", description="LOINC:789", citations=[citation]),
     ]
     evidence = [
@@ -85,7 +89,9 @@ def topic_bundle() -> TopicBundle:
         )
     ]
     eligibility = [
-        EligibilityConstraint(constraint_type="inclusion", description="Age 18-65", citations=[citation])
+        EligibilityConstraint(
+            constraint_type="inclusion", description="Age 18-65", citations=[citation]
+        )
     ]
     guidelines = [
         GuidelineRecommendation(
@@ -115,7 +121,9 @@ def repository(topic_bundle: TopicBundle) -> InMemoryBriefingRepository:
     return repo
 
 
-def test_dossier_generates_all_sections(repository: InMemoryBriefingRepository, topic_bundle: TopicBundle) -> None:
+def test_dossier_generates_all_sections(
+    repository: InMemoryBriefingRepository, topic_bundle: TopicBundle
+) -> None:
     service = BriefingService(repository)
     dossier = service.dossier(topic_bundle.topic, format="json")
     payload = json.loads(dossier["content"])
@@ -130,16 +138,22 @@ def test_dossier_generates_all_sections(repository: InMemoryBriefingRepository, 
     assert dossier["bibliography"][0]["doc_id"] == "PMID:1"
 
 
-def test_evidence_map_highlights_conflicts(repository: InMemoryBriefingRepository, topic_bundle: TopicBundle) -> None:
+def test_evidence_map_highlights_conflicts(
+    repository: InMemoryBriefingRepository, topic_bundle: TopicBundle
+) -> None:
     service = BriefingService(repository)
     evidence_map = service.evidence_map(topic_bundle.topic)
     assert evidence_map["conflicts"], "Expected conflict when effects disagree"
     assert evidence_map["gaps"], "Outcome variable without evidence should be reported as gap"
 
 
-def test_qa_endpoint_via_fastapi(repository: InMemoryBriefingRepository, topic_bundle: TopicBundle) -> None:
+def test_qa_endpoint_via_fastapi(
+    repository: InMemoryBriefingRepository, topic_bundle: TopicBundle
+) -> None:
     app = create_app()
-    app.dependency_overrides[_get_dependencies] = lambda: type("Deps", (), {"repository": repository})()
+    app.dependency_overrides[_get_dependencies] = lambda: type(
+        "Deps", (), {"repository": repository}
+    )()
     client = TestClient(app)
     response = client.post(
         "/briefing/qa",
@@ -156,4 +170,3 @@ def test_qa_endpoint_via_fastapi(repository: InMemoryBriefingRepository, topic_b
     body = response.json()
     assert body["intent"] == "endpoint"
     assert body["evidence"], "Should return supporting evidence"
-

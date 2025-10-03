@@ -8,8 +8,6 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from pydantic import TypeAdapter, ValidationError
-
 from Medical_KG.facets.models import (
     AdverseEventFacet,
     DoseFacet,
@@ -21,6 +19,7 @@ from Medical_KG.facets.models import (
 )
 from Medical_KG.facets.normalizer import drop_low_confidence_codes, normalize_facets
 from Medical_KG.facets.tokenizer import count_tokens
+from pydantic import TypeAdapter, ValidationError
 
 INTERVENTION_PATTERN = re.compile(r"\b(treatment|drug|therapy|enalapril|placebo)\b", re.I)
 OUTCOME_PATTERN = re.compile(r"\b(mortality|survival|event|nausea)\b", re.I)
@@ -38,10 +37,14 @@ def _span_for(text: str, phrase: str) -> EvidenceSpan | None:
     index = text.lower().find(phrase.lower())
     if index == -1:
         return None
-    return EvidenceSpan(start=index, end=index + len(phrase), quote=text[index : index + len(phrase)])
+    return EvidenceSpan(
+        start=index, end=index + len(phrase), quote=text[index : index + len(phrase)]
+    )
 
 
-def _ensure_spans(spans: Sequence[EvidenceSpan | None], *, fallback_text: str) -> list[EvidenceSpan]:
+def _ensure_spans(
+    spans: Sequence[EvidenceSpan | None], *, fallback_text: str
+) -> list[EvidenceSpan]:
     filtered = [span for span in spans if span is not None]
     if filtered:
         return filtered

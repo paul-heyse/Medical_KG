@@ -10,7 +10,6 @@ from Medical_KG.facets.models import (
     AdverseEventFacet,
     DoseFacet,
     EndpointFacet,
-    Facet,
     FacetModel,
 )
 
@@ -127,7 +126,9 @@ def drop_low_confidence_codes(facets: Iterable[FacetModel]) -> list[FacetModel]:
     sanitized: list[FacetModel] = []
     for facet in facets:
         if isinstance(facet, EndpointFacet):
-            facet.outcome_codes = [code for code in facet.outcome_codes if (code.confidence or 0) >= 0.5]
+            facet.outcome_codes = [
+                code for code in facet.outcome_codes if (code.confidence or 0) >= 0.5
+            ]
         elif isinstance(facet, AdverseEventFacet):
             facet.codes = [code for code in facet.codes if (code.confidence or 0) >= 0.5]
         elif isinstance(facet, DoseFacet):

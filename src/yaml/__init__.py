@@ -1,4 +1,5 @@
 """Minimal YAML shim backed by JSON parsing."""
+
 from __future__ import annotations
 
 import json

@@ -41,13 +41,15 @@ def _run_cli(args: list[str]) -> tuple[int, str]:
 
 
 def test_cli_validate_success(cli_config_dir: Path) -> None:
-    exit_code, output = _run_cli([
-        "config",
-        "validate",
-        "--strict",
-        "--config-dir",
-        str(cli_config_dir),
-    ])
+    exit_code, output = _run_cli(
+        [
+            "config",
+            "validate",
+            "--strict",
+            "--config-dir",
+            str(cli_config_dir),
+        ]
+    )
     assert exit_code == 0
     assert "Config valid" in output
 
@@ -56,33 +58,31 @@ def test_cli_validate_failure_on_invalid_payload(cli_config_dir: Path) -> None:
     override = cli_config_dir / "config-override.yaml"
     override.write_text(
         json.dumps(
-            {
-                "retrieval": {
-                    "fusion": {
-                        "weights": {"bm25": 0.8, "splade": 0.1, "dense": 0.05}
-                    }
-                }
-            },
+            {"retrieval": {"fusion": {"weights": {"bm25": 0.8, "splade": 0.1, "dense": 0.05}}}},
             indent=2,
         )
     )
-    exit_code, output = _run_cli([
-        "config",
-        "validate",
-        "--strict",
-        "--config-dir",
-        str(cli_config_dir),
-    ])
+    exit_code, output = _run_cli(
+        [
+            "config",
+            "validate",
+            "--strict",
+            "--config-dir",
+            str(cli_config_dir),
+        ]
+    )
     assert exit_code == 1
     assert "Configuration invalid" in output
 
 
 def test_cli_show_masks_secrets(cli_config_dir: Path) -> None:
-    exit_code, output = _run_cli([
-        "config",
-        "show",
-        "--config-dir",
-        str(cli_config_dir),
-    ])
+    exit_code, output = _run_cli(
+        [
+            "config",
+            "show",
+            "--config-dir",
+            str(cli_config_dir),
+        ]
+    )
     assert exit_code == 0
     assert "***" in output

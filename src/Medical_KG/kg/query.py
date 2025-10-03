@@ -2,10 +2,9 @@ from __future__ import annotations
 
 """High-level Cypher query builders for the CDKO-Med graph."""
 
+import textwrap
 from dataclasses import dataclass
 from typing import Any, Dict, Sequence
-
-import textwrap
 
 
 @dataclass(slots=True)
@@ -108,4 +107,3 @@ class KgQueryApi:
             "query_vector": list(query_vector),
         }
         return Query(cypher=cypher, parameters=params)
-

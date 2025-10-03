@@ -61,7 +61,7 @@ async def api_client() -> AsyncIterator[tuple[httpx.AsyncClient, DummyRetrievalS
 
 @pytest.mark.asyncio
 async def test_retrieve_endpoint_success(
-    api_client: tuple[httpx.AsyncClient, DummyRetrievalService]
+    api_client: tuple[httpx.AsyncClient, DummyRetrievalService],
 ) -> None:
     client, service = api_client
     payload = {"query": "Pembrolizumab", "topK": 2}
@@ -75,7 +75,7 @@ async def test_retrieve_endpoint_success(
 
 @pytest.mark.asyncio
 async def test_retrieve_endpoint_streaming(
-    api_client: tuple[httpx.AsyncClient, DummyRetrievalService]
+    api_client: tuple[httpx.AsyncClient, DummyRetrievalService],
 ) -> None:
     client, _ = api_client
     payload = {"query": "Pembrolizumab"}

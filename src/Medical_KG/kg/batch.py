@@ -31,4 +31,3 @@ def transaction_config(max_size: str = "512M") -> Mapping[str, str]:
     """Configuration snippet for Neo4j transaction memory limits."""
 
     return {"dbms.memory.transaction.max_size": max_size}
-

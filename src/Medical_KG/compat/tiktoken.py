@@ -7,8 +7,7 @@ from typing import Protocol, Sequence, cast
 
 
 class EncodingProtocol(Protocol):
-    def encode(self, text: str) -> Sequence[int]:
-        ...
+    def encode(self, text: str) -> Sequence[int]: ...
 
 
 def load_encoding(name: str = "cl100k_base") -> EncodingProtocol | None:

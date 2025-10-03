@@ -7,7 +7,13 @@ from Medical_KG.kg.service import KgWriteFailure, KgWriteResult, KgWriteService
 def valid_payload() -> dict[str, object]:
     return {
         "nodes": [
-            {"label": "Outcome", "id": "out-1", "loinc": "1234-5", "unit_ucum": "mg", "provenance": ["run"]},
+            {
+                "label": "Outcome",
+                "id": "out-1",
+                "loinc": "1234-5",
+                "unit_ucum": "mg",
+                "provenance": ["run"],
+            },
             {
                 "label": "Evidence",
                 "id": "ev-1",
@@ -22,7 +28,9 @@ def valid_payload() -> dict[str, object]:
     }
 
 
-def test_write_returns_summary(monkeypatch: pytest.MonkeyPatch, valid_payload: dict[str, object]) -> None:
+def test_write_returns_summary(
+    monkeypatch: pytest.MonkeyPatch, valid_payload: dict[str, object]
+) -> None:
     service = KgWriteService()
     monkeypatch.setattr("Medical_KG.kg.service.validate_shacl", lambda graph: [])
     result = service.write(valid_payload)
@@ -40,7 +48,9 @@ def test_write_raises_on_validation_error(valid_payload: dict[str, object]) -> N
     assert excinfo.value.issues
 
 
-def test_write_raises_on_shacl_error(monkeypatch: pytest.MonkeyPatch, valid_payload: dict[str, object]) -> None:
+def test_write_raises_on_shacl_error(
+    monkeypatch: pytest.MonkeyPatch, valid_payload: dict[str, object]
+) -> None:
     service = KgWriteService()
     monkeypatch.setattr(
         "Medical_KG.kg.service.validate_shacl", lambda graph: ["missing provenance"]

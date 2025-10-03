@@ -98,7 +98,9 @@ def test_embedding_service_fallback_logs_warning(
     assert labels_call[1]["device"] == "cpu_fallback"  # type: ignore[index]
 
 
-def test_embedding_service_records_error_on_failure(stub_embedding_metrics: dict[str, object]) -> None:
+def test_embedding_service_records_error_on_failure(
+    stub_embedding_metrics: dict[str, object],
+) -> None:
     class FailingQwen(FakeQwen):
         def embed(self, texts: Sequence[str]) -> list[list[float]]:  # type: ignore[override]
             raise RuntimeError("boom")

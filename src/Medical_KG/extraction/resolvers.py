@@ -10,7 +10,9 @@ _DRUG_MAP = {
 }
 
 _LAB_MAP = {
-    "egfr": Code(system="LOINC", code="48642-3", display="Glomerular filtration rate", confidence=0.85),
+    "egfr": Code(
+        system="LOINC", code="48642-3", display="Glomerular filtration rate", confidence=0.85
+    ),
     "hbA1c": Code(system="LOINC", code="4548-4", display="Hemoglobin A1c", confidence=0.85),
 }
 

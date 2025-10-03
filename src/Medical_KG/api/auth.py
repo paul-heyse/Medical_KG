@@ -1,14 +1,16 @@
 """Authentication and authorization helpers for the FastAPI layer."""
+
 from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from typing import Annotated, Iterable, Mapping
+from typing import Iterable, Mapping
 
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from Medical_KG.api.types import DependencyCallable
+
 
 @dataclass(frozen=True)
 class Principal:
@@ -37,10 +39,14 @@ class Authenticator:
         if api_key:
             scopes = self._valid_api_keys.get(api_key)
             if scopes is None:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key"
+                )
             return Principal(subject=f"apikey:{api_key}", scopes=scopes, api_key=api_key)
         if credentials is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing credentials")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing credentials"
+            )
         token_hash = hashlib.sha256(credentials.credentials.encode()).hexdigest()
         # In this simplified implementation we derive scopes from the hash prefix for reproducibility.
         if token_hash.endswith("0"):
@@ -56,11 +62,15 @@ class Authenticator:
         ) -> Principal:
             principal = self.authenticate(credentials, api_key)
             if scope and not principal.has_scope(scope):
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient scope")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient scope"
+                )
             return principal
 
         return _dependency
 
 
 def build_default_authenticator() -> Authenticator:
-    return Authenticator(valid_api_keys={"demo-key": {"retrieve:read", "facets:write", "extract:write"}})
+    return Authenticator(
+        valid_api_keys={"demo-key": {"retrieve:read", "facets:write", "extract:write"}}
+    )

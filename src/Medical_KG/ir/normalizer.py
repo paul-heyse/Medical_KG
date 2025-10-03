@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from langdetect import detect
-
 from Medical_KG.ir.models import SpanMap
 
 _DEHYPHENATION_DICTIONARY = {
@@ -41,7 +40,9 @@ class TextNormalizer:
         language = self._detect_language(normalized)
         span_map = SpanMap()
         span_map.add(0, len(raw_text), 0, len(normalized), "normalize")
-        return NormalizedText(text=normalized, raw_text=raw_text, span_map=span_map, language=language)
+        return NormalizedText(
+            text=normalized, raw_text=raw_text, span_map=span_map, language=language
+        )
 
     def _collapse_whitespace(self, text: str) -> str:
         normalized_lines = []

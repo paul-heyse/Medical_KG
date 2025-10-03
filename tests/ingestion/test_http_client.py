@@ -59,11 +59,15 @@ def test_retry_on_transient_failure(monkeypatch: Any) -> None:
     ]
     transport = _MockTransport(responses)
 
-    async def _request(self: HttpxAsyncClient, method: str, url: str, **kwargs: Any) -> HttpxResponseProtocol:
+    async def _request(
+        self: HttpxAsyncClient, method: str, url: str, **kwargs: Any
+    ) -> HttpxResponseProtocol:
         return await transport.handle_async_request(HTTPX.Request(method, url, **kwargs))
 
     client = AsyncHttpClient(retries=2, limits={"example.com": RateLimit(rate=5, per=1)})
-    monkeypatch.setattr(client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient))
+    monkeypatch.setattr(
+        client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient)
+    )
 
     payload = asyncio.run(client.get_json("https://example.com"))
     assert payload == {"ok": True}
@@ -74,7 +78,9 @@ def test_retry_on_transient_failure(monkeypatch: Any) -> None:
 def test_rate_limiter_serializes_calls(monkeypatch: Any) -> None:
     calls: list[float] = []
 
-    async def _request(self: HttpxAsyncClient, method: str, url: str, **kwargs: Any) -> HttpxResponseProtocol:
+    async def _request(
+        self: HttpxAsyncClient, method: str, url: str, **kwargs: Any
+    ) -> HttpxResponseProtocol:
         calls.append(asyncio.get_running_loop().time())
         return HTTPX.Response(
             status_code=200,
@@ -83,7 +89,9 @@ def test_rate_limiter_serializes_calls(monkeypatch: Any) -> None:
         )
 
     client = AsyncHttpClient(limits={"example.com": RateLimit(rate=1, per=0.5)})
-    monkeypatch.setattr(client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient))
+    monkeypatch.setattr(
+        client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient)
+    )
 
     async def _run() -> None:
         await asyncio.gather(*(client.get_json("https://example.com") for _ in range(3)))
@@ -95,11 +103,15 @@ def test_rate_limiter_serializes_calls(monkeypatch: Any) -> None:
 
 
 def test_timeout_propagates(monkeypatch: Any) -> None:
-    async def _request(self: HttpxAsyncClient, method: str, url: str, **kwargs: Any) -> HttpxResponseProtocol:
+    async def _request(
+        self: HttpxAsyncClient, method: str, url: str, **kwargs: Any
+    ) -> HttpxResponseProtocol:
         raise HTTPX.TimeoutException("timeout")
 
     client = AsyncHttpClient()
-    monkeypatch.setattr(client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient))
+    monkeypatch.setattr(
+        client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient)
+    )
 
     async def _call() -> None:
         await client.get_json("https://example.com")
@@ -110,7 +122,9 @@ def test_timeout_propagates(monkeypatch: Any) -> None:
 
 
 def test_get_text_and_bytes(monkeypatch: Any) -> None:
-    async def _request(self: HttpxAsyncClient, method: str, url: str, **kwargs: Any) -> HttpxResponseProtocol:
+    async def _request(
+        self: HttpxAsyncClient, method: str, url: str, **kwargs: Any
+    ) -> HttpxResponseProtocol:
         return HTTPX.Response(
             status_code=200,
             content=b"payload",
@@ -118,7 +132,9 @@ def test_get_text_and_bytes(monkeypatch: Any) -> None:
         )
 
     client = AsyncHttpClient()
-    monkeypatch.setattr(client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient))
+    monkeypatch.setattr(
+        client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient)
+    )
 
     async def _run() -> None:
         text = await client.get_text("https://example.com")
@@ -131,13 +147,19 @@ def test_get_text_and_bytes(monkeypatch: Any) -> None:
 
 
 def test_post_uses_execute(monkeypatch: Any) -> None:
-    async def _request(self: HttpxAsyncClient, method: str, url: str, **kwargs: Any) -> HttpxResponseProtocol:
+    async def _request(
+        self: HttpxAsyncClient, method: str, url: str, **kwargs: Any
+    ) -> HttpxResponseProtocol:
         assert method == "POST"
         assert kwargs["json"] == {"value": 1}
-        return HTTPX.Response(status_code=200, json={"ok": True}, request=HTTPX.Request(method, url, **kwargs))
+        return HTTPX.Response(
+            status_code=200, json={"ok": True}, request=HTTPX.Request(method, url, **kwargs)
+        )
 
     client = AsyncHttpClient()
-    monkeypatch.setattr(client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient))
+    monkeypatch.setattr(
+        client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient)
+    )
 
     async def _run() -> None:
         response = await client.post("https://example.com", json={"value": 1})
@@ -169,7 +191,9 @@ def test_stream_context_manager(monkeypatch: Any) -> None:
         return _Stream()
 
     client = AsyncHttpClient()
-    monkeypatch.setattr(client._client, "stream", _stream.__get__(client._client, HTTPX.AsyncClient))
+    monkeypatch.setattr(
+        client._client, "stream", _stream.__get__(client._client, HTTPX.AsyncClient)
+    )
 
     async def _run() -> None:
         async with client.stream("GET", "https://example.com") as resp:

@@ -25,7 +25,9 @@ class FixedEmbeddingService:
 
 
 def build_document() -> Document:
-    table_html = "<table><tr><td>Group</td><td>Rate</td></tr><tr><td>A</td><td>60%</td></tr></table>"
+    table_html = (
+        "<table><tr><td>Group</td><td>Rate</td></tr><tr><td>A</td><td>60%</td></tr></table>"
+    )
     text = (
         "INTRODUCTION\n"
         "Study overview sentence.\n"

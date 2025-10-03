@@ -1,4 +1,5 @@
 """Reusable PDF fixtures for MinerU and catalog tests."""
+
 from __future__ import annotations
 
 import json

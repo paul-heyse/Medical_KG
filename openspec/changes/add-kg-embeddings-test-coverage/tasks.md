@@ -4,17 +4,17 @@
 
 - [ ] 1.1 Create sample Neo4j response JSON for nodes, relationships, and query results
 - [ ] 1.2 Create `FakeNeo4jDriver` with in-memory graph for integration tests
-- [ ] 1.3 Create sample FHIR resources (Patient, Condition, MedicationStatement, Observation)
-- [ ] 1.4 Mock `torch.cuda` for GPU availability checks
-- [ ] 1.5 Mock model loading for Qwen and SPLADE (return dummy embeddings)
+- [x] 1.3 Create sample FHIR resources (Patient, Condition, MedicationStatement, Observation)
+- [x] 1.4 Mock `torch.cuda` for GPU availability checks
+- [x] 1.5 Mock model loading for Qwen and SPLADE (return dummy embeddings)
 
 ## 2. KG Writer Tests
 
-- [ ] 2.1 Test node creation: verify MERGE with properties
-- [ ] 2.2 Test relationship creation: verify start/end node matching and properties
+- [x] 2.1 Test node creation: verify MERGE with properties
+- [x] 2.2 Test relationship creation: verify start/end node matching and properties
 - [ ] 2.3 Test batch operations: verify transaction handling and rollback on error
 - [ ] 2.4 Test property updates: verify SET operations and null handling
-- [ ] 2.5 Test Cypher statement generation: verify parameterization and escaping
+- [x] 2.5 Test Cypher statement generation: verify parameterization and escaping
 - [ ] 2.6 Test constraint violations: verify error handling for duplicate keys
 
 ## 3. KG Schema Validator Tests
@@ -36,19 +36,19 @@
 
 ## 5. KG Query Builder Tests
 
-- [ ] 5.1 Test simple node query: `MATCH (n:Label) WHERE n.prop = $val RETURN n`
-- [ ] 5.2 Test relationship traversal: `MATCH (a)-[r:REL]->(b) RETURN a, r, b`
-- [ ] 5.3 Test aggregation queries: `MATCH (n:Study) RETURN count(n)`
-- [ ] 5.4 Test parameterization: verify safe parameter binding
-- [ ] 5.5 Test query composition: verify builder pattern for complex queries
+- [x] 5.1 Test simple node query: `MATCH (n:Label) WHERE n.prop = $val RETURN n`
+- [x] 5.2 Test relationship traversal: `MATCH (a)-[r:REL]->(b) RETURN a, r, b`
+- [x] 5.3 Test aggregation queries: `MATCH (n:Study) RETURN count(n)`
+- [x] 5.4 Test parameterization: verify safe parameter binding
+- [x] 5.5 Test query composition: verify builder pattern for complex queries
 
 ## 6. Embeddings GPU Validator Tests
 
-- [ ] 6.1 Test GPU availability check: mock `torch.cuda.is_available()`
-- [ ] 6.2 Test CUDA diagnostics: mock `torch.cuda.device_count()`, `get_device_name()`
+- [x] 6.1 Test GPU availability check: mock `torch.cuda.is_available()`
+- [x] 6.2 Test CUDA diagnostics: mock `torch.cuda.device_count()`, `get_device_name()`
 - [ ] 6.3 Test memory allocation: mock `torch.cuda.mem_get_info()`
 - [ ] 6.4 Test fallback to CPU: verify service continues with CPU embeddings
-- [ ] 6.5 Test error reporting: verify alerts when GPU is unavailable
+- [x] 6.5 Test error reporting: verify alerts when GPU is unavailable
 
 ## 7. Embeddings Monitoring Tests
 
@@ -60,11 +60,11 @@
 ## 8. Qwen & SPLADE Tests
 
 - [ ] 8.1 Test model loading: mock `transformers.AutoModel.from_pretrained()`
-- [ ] 8.2 Test embedding generation: verify output shape and dtype
+- [x] 8.2 Test embedding generation: verify output shape and dtype
 - [ ] 8.3 Test batch processing: verify batching logic and padding
 - [ ] 8.4 Test error handling: verify graceful degradation on OOM or CUDA errors
-- [ ] 8.5 Test normalization: verify L2 norm for Qwen embeddings
-- [ ] 8.6 Test SPLADE sparsification: verify non-zero indices and values
+- [x] 8.5 Test normalization: verify L2 norm for Qwen embeddings
+- [x] 8.6 Test SPLADE sparsification: verify non-zero indices and values
 
 ## 9. Coverage & Validation
 

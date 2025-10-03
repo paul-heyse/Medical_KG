@@ -6,30 +6,30 @@
 - [ ] 1.2 Create sample MinerU JSON outputs for each PDF type
 - [ ] 1.3 Create sample concept catalog files (UMLS MRCONSO.RRF, RxNorm, SNOMED)
 - [ ] 1.4 Create sample license policies for catalog loaders
-- [ ] 1.5 Mock GPU availability for MinerU service
+- [x] 1.5 Mock GPU availability for MinerU service
 
 ## 2. PDF Service Tests
 
-- [ ] 2.1 Test PDF → IR conversion: verify blocks, paragraphs, tables, metadata
+- [x] 2.1 Test PDF → IR conversion: verify blocks, paragraphs, tables, metadata
 - [ ] 2.2 Test table extraction: verify cell text, row/column spans, and captions
 - [ ] 2.3 Test OCR handling: verify scanned PDFs are processed correctly
-- [ ] 2.4 Test metadata preservation: verify title, authors, DOI, publication date
+- [x] 2.4 Test metadata preservation: verify title, authors, DOI, publication date
 - [ ] 2.5 Test multi-column layout: verify correct reading order
-- [ ] 2.6 Test error handling: verify corrupted PDFs are rejected with clear errors
+- [x] 2.6 Test error handling: verify corrupted PDFs are rejected with clear errors
 
 ## 3. PDF Post-Processing Tests
 
-- [ ] 3.1 Test header/footer removal: verify repeated text is stripped
+- [x] 3.1 Test header/footer removal: verify repeated text is stripped
 - [ ] 3.2 Test equation normalization: verify LaTeX equations are formatted consistently
 - [ ] 3.3 Test reference extraction: verify bibliography is parsed into citations
 - [ ] 3.4 Test figure caption extraction: verify captions are linked to figures
-- [ ] 3.5 Test hyphenation repair: verify split words are rejoined
+- [x] 3.5 Test hyphenation repair: verify split words are rejoined
 
 ## 4. PDF QA Validation Tests
 
-- [ ] 4.1 Test structure checks: verify required sections (title, abstract, body) are present
-- [ ] 4.2 Test missing section detection: verify warnings for missing methods/results
-- [ ] 4.3 Test quality scoring: verify low-quality PDFs (OCR errors, garbled text) are flagged
+- [x] 4.1 Test structure checks: verify required sections (title, abstract, body) are present
+- [x] 4.2 Test missing section detection: verify warnings for missing methods/results
+- [x] 4.3 Test quality scoring: verify low-quality PDFs (OCR errors, garbled text) are flagged
 - [ ] 4.4 Test page count validation: verify minimum/maximum page limits
 - [ ] 4.5 Test language detection: verify non-English PDFs are handled appropriately
 
@@ -44,9 +44,9 @@
 
 ## 6. License Policy Tests
 
-- [ ] 6.1 Test free tier: verify only public domain concepts are loaded
+- [x] 6.1 Test free tier: verify only public domain concepts are loaded
 - [ ] 6.2 Test pro tier: verify licensed vocabularies (e.g., SNOMED) are included
-- [ ] 6.3 Test loader skipping: verify loaders are skipped when license is insufficient
+- [x] 6.3 Test loader skipping: verify loaders are skipped when license is insufficient
 - [ ] 6.4 Test policy updates: verify catalog is rebuilt when license tier changes
 
 ## 7. Concept Graph Writer Tests
@@ -67,11 +67,11 @@
 
 ## 9. Chunking Pipeline Tests
 
-- [ ] 9.1 Test semantic chunking: verify chunks respect sentence/paragraph boundaries
+- [x] 9.1 Test semantic chunking: verify chunks respect sentence/paragraph boundaries
 - [ ] 9.2 Test configurable profiles: verify small/medium/large chunk sizes
 - [ ] 9.3 Test chunk ID stability: verify deterministic IDs based on content hash
-- [ ] 9.4 Test metadata propagation: verify document ID, section, page number in chunks
-- [ ] 9.5 Test multi-granularity indexing: verify parent-child chunk relationships
+- [x] 9.4 Test metadata propagation: verify document ID, section, page number in chunks
+- [x] 9.5 Test multi-granularity indexing: verify parent-child chunk relationships
 - [ ] 9.6 Test error handling: verify empty documents or oversized chunks are handled
 
 ## 10. Neighbor Merging Tests
@@ -83,7 +83,7 @@
 
 ## 11. Guardrails Tests
 
-- [ ] 11.1 Test list item grouping: verify numbered/bulleted lists stay together
+- [x] 11.1 Test list item grouping: verify numbered/bulleted lists stay together
 - [ ] 11.2 Test table preservation: verify tables are not split across chunks
 - [ ] 11.3 Test code block handling: verify code blocks are preserved intact
 - [ ] 11.4 Test section boundaries: verify chunks respect section headers
@@ -93,5 +93,5 @@
 
 - [ ] 12.1 Run `pytest tests/pdf/ tests/catalog/ tests/chunking/ --cov=src/Medical_KG/pdf --cov=src/Medical_KG/catalog --cov=src/Medical_KG/chunking --cov-report=term-missing`
 - [ ] 12.2 Verify 100% coverage for all PDF, catalog, and chunking modules
-- [ ] 12.3 Ensure no GPU or external service calls in test suite (mock all dependencies)
+- [x] 12.3 Ensure no GPU or external service calls in test suite (mock all dependencies)
 - [ ] 12.4 Document PDF, catalog, and chunking test patterns in respective README files

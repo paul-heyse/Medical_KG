@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/pdf/gpu.py
-# hypothesis_version: 6.140.2
-
-['--query-gpu=name', '0', '1', 'CommandRunner', 'GpuNotAvailableError', 'REQUIRE_GPU', 'SubprocessRunner', 'detect_gpu', 'ensure_gpu', 'nvidia-smi']

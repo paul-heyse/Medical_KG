@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/entity_linking/llm.py
-# hypothesis_version: 6.140.2
-
-[0.0, 'AdjudicationResult', 'LlmAdjudicator', 'LlmClient', 'alternates', 'candidates', 'chosen_id', 'context', 'entity_linking', 'evidence_span', 'identifier', 'label', 'mention', 'notes', 'ontology', 'score']

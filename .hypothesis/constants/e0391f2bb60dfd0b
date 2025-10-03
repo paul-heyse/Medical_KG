@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/extraction/normalizers.py
-# hypothesis_version: 6.140.2
-
-[0.5, 2.0, 3.0, 4.0, 'IV', 'PO', 'bid', 'intravenous', 'iv', 'label', 'loinc', 'normalise_extraction', 'op', 'oral', 'po', 'q12h', 'qid', 'serious', 'tid', 'unit', 'value']

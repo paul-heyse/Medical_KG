@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import sys
 import types
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, List
 
 import pytest
 
-# Provide a minimal typer shim for the CLI module.
+# ---------------------------------------------------------------------------
+# Typer shim for the ingestion CLI tests
 
 
 class _TyperModule(types.ModuleType):
@@ -20,7 +20,7 @@ class _TyperModule(types.ModuleType):
     BadParameter: type[Exception]
     echo: Callable[[object], None]
 
-    def __init__(self) -> None:
+    def __init__(self) -> None:  # pragma: no cover - infrastructure
         super().__init__("typer")
         self.Typer = _Typer
         self.Argument = _argument
@@ -33,11 +33,11 @@ class _BadParameter(Exception):
     pass
 
 
-def _argument(default: object, **_kwargs: object) -> object:
+def _argument(default: object, *_, **__) -> object:
     return default
 
 
-def _option(default: object = None, **_kwargs: object) -> object:
+def _option(default: object = None, *_, **__) -> object:
     return default
 
 
@@ -60,56 +60,60 @@ class _Typer:
 if "typer" not in sys.modules:
     sys.modules["typer"] = _TyperModule()
 
+
+# ---------------------------------------------------------------------------
+# Helper fixtures
+
+
 from Medical_KG.ingestion import cli
+from Medical_KG.ingestion.pipeline import PipelineResult
 from Medical_KG.ingestion.models import Document, IngestionResult
 
 
+class FakePipeline:
+    def __init__(
+        self,
+        *,
+        results: List[PipelineResult] | None = None,
+        status: dict[str, list[dict[str, Any]]] | None = None,
+    ) -> None:
+        self.results = results or []
+        self.status_payload = status or {}
+        self.calls: list[dict[str, Any]] = []
+
+    def run(self, source: str, params: Any = None, *, resume: bool) -> List[PipelineResult]:
+        self.calls.append({"source": source, "params": params, "resume": resume})
+        return self.results
+
+    def status(self) -> dict[str, list[dict[str, Any]]]:
+        return self.status_payload
+
+
+@pytest.fixture
+def make_pipeline(monkeypatch: pytest.MonkeyPatch) -> Callable[[List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline]:
+    def _factory(
+        results: List[PipelineResult] | None = None,
+        status: dict[str, list[dict[str, Any]]] | None = None,
+    ) -> FakePipeline:
+        pipeline = FakePipeline(results=results, status=status)
+        monkeypatch.setattr(cli, "_build_pipeline", lambda _ledger: pipeline)
+        return pipeline
+
+    return _factory
+
+
 @pytest.fixture(autouse=True)
-def reset_event_loop_policy() -> None:
-    asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
-
-
-class DummyClient:
-    def __init__(self) -> None:
-        self.closed = False
-
-    async def aclose(self) -> None:
-        self.closed = True
-
-
-@pytest.fixture
-def dummy_client(monkeypatch: pytest.MonkeyPatch) -> DummyClient:
-    client = DummyClient()
-    monkeypatch.setattr(cli, "AsyncHttpClient", lambda: client)
-    return client
-
-
-@pytest.fixture
-def configure_registry(
-    monkeypatch: pytest.MonkeyPatch, fake_registry: Any
-) -> Callable[[list[IngestionResult]], list[dict[str, object]]]:
-    def _configure(results: list[IngestionResult]) -> list[dict[str, object]]:
-        calls: list[dict[str, object]] = []
-
-        class _Adapter:
-            async def run(self, **params: object) -> list[IngestionResult]:
-                calls.append(params)
-                return results
-
-        def _factory(_context: object, _client: DummyClient, **_kwargs: object) -> _Adapter:
-            return _Adapter()
-
-        fake_registry.adapters.clear()
-        fake_registry.register("demo", _factory)
-        monkeypatch.setattr(cli, "_resolve_registry", lambda: fake_registry)
-        return calls
-
-    return _configure
+def mock_available_sources(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "_available_sources", lambda: ["demo"])
 
 
 def _result(doc_id: str) -> IngestionResult:
     document = Document(doc_id=doc_id, source="demo", content="{}")
     return IngestionResult(document=document, state="auto_done", timestamp=datetime.now(timezone.utc))
+
+
+# ---------------------------------------------------------------------------
+# Tests
 
 
 def test_load_batch_skips_empty_lines(tmp_path: Path) -> None:
@@ -121,10 +125,15 @@ def test_load_batch_skips_empty_lines(tmp_path: Path) -> None:
 
 
 def test_ingest_with_batch_outputs_doc_ids(
-    dummy_client: DummyClient, configure_registry: Callable[[list[IngestionResult]], list[dict[str, object]]], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    make_pipeline: Callable[[List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    results = [_result("doc-1"), _result("doc-2")]
-    calls = configure_registry(results)
+    results = [
+        PipelineResult(source="demo", doc_ids=["doc-1", "doc-2"]),
+        PipelineResult(source="demo", doc_ids=["doc-1", "doc-2"]),
+    ]
+    pipeline = make_pipeline(results, None)
 
     batch = tmp_path / "batch.jsonl"
     batch.write_text("\n".join([json.dumps({"param": "value"}), json.dumps({"param": "second"})]))
@@ -135,15 +144,16 @@ def test_ingest_with_batch_outputs_doc_ids(
     captured = capsys.readouterr()
     lines = [json.loads(line) for line in captured.out.strip().splitlines() if line]
     assert lines == [["doc-1", "doc-2"], ["doc-1", "doc-2"]]
-    assert dummy_client.closed is True
-    assert calls == [{"param": "value"}, {"param": "second"}]
+    assert pipeline.calls[0]["params"] == [{"param": "value"}, {"param": "second"}]
 
 
 def test_ingest_without_batch_runs_once(
-    dummy_client: DummyClient, configure_registry: Callable[[list[IngestionResult]], list[dict[str, object]]], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    make_pipeline: Callable[[List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    results = [_result("doc-3")]
-    calls = configure_registry(results)
+    results = [PipelineResult(source="demo", doc_ids=["doc-3"])]
+    pipeline = make_pipeline(results, None)
     ledger_path = tmp_path / "ledger.jsonl"
 
     cli.ingest("demo", batch=None, auto=True, ledger_path=ledger_path)
@@ -151,12 +161,54 @@ def test_ingest_without_batch_runs_once(
     captured = capsys.readouterr()
     lines = [json.loads(line) for line in captured.out.strip().splitlines() if line]
     assert lines == [["doc-3"]]
-    assert dummy_client.closed is True
-    assert calls == [{}]
+    assert pipeline.calls[0]["params"] is None
 
 
-def test_ingest_rejects_unknown_source(configure_registry: Callable[[list[IngestionResult]], list[dict[str, object]]]) -> None:
-    configure_registry([])
-
+def test_ingest_rejects_unknown_source(make_pipeline: Callable[..., FakePipeline]) -> None:
+    make_pipeline()
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(cli, "_available_sources", lambda: ["other"])
     with pytest.raises(sys.modules["typer"].BadParameter):
-        cli.ingest("unknown")
+        cli.ingest("demo")
+    monkeypatch.undo()
+
+
+def test_ingest_accepts_ids_option(
+    make_pipeline: Callable[[List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline]
+) -> None:
+    pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=["doc-1"])], None)
+    cli.ingest("demo", ids="NCT123,NCT456")
+    assert pipeline.calls[0]["params"] == [{"ids": ["NCT123", "NCT456"]}]
+
+
+def test_resume_invokes_pipeline_in_resume_mode(
+    make_pipeline: Callable[[List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=["doc-x"])], None)
+    cli.resume("demo", auto=True)
+    assert pipeline.calls[0]["resume"] is True
+    captured = capsys.readouterr()
+    assert json.loads(captured.out.strip()) == ["doc-x"]
+
+
+def test_status_command_outputs_json(
+    make_pipeline: Callable[[List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    status_payload = {
+        "auto_done": [{"doc_id": "doc-1", "metadata": {"source": "demo"}}],
+        "auto_failed": [{"doc_id": "doc-2", "metadata": {"error": "boom"}}],
+    }
+    make_pipeline(None, status_payload)
+    cli.status(fmt="json")
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == status_payload
+
+
+def test_status_command_text_format(make_pipeline: Callable[..., FakePipeline], capsys: pytest.CaptureFixture[str]) -> None:
+    status_payload = {"auto_done": [{"doc_id": "doc-1", "metadata": {}}]}
+    make_pipeline(None, status_payload)
+    cli.status()
+    captured = capsys.readouterr()
+    assert "auto_done" in captured.out

@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/ir/validator.py
-# hypothesis_version: 6.140.2
-
-['Table span invalid', 'block', 'block.schema.json', 'blocks', 'canonical_end', 'canonical_start', 'caption', 'created_at', 'doc_id', 'document', 'document.schema.json', 'end', 'headers', 'language', 'meta', 'page', 'pattern', 'properties', 'provenance', 'raw_text', 'required', 'rows', 'schemas', 'section', 'source', 'span_map', 'start', 'table', 'table.schema.json', 'tables', 'text', 'type', 'uri', 'utf-8']

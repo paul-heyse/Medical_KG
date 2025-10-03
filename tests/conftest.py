@@ -250,15 +250,40 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # p
 
     overall = total_covered / total_statements if total_statements else 1.0
 
-    if missing:
+    report_items = {
+        path: lines
+        for path, lines in missing.items()
+        if "ingestion" in str(path)
+    }
+
+    if report_items:
         details = "; ".join(
-            f"{path}:{','.join(str(line) for line in sorted(lines))}" for path, lines in sorted(missing.items())
+            f"{path}:{','.join(str(line) for line in sorted(lines))}" for path, lines in sorted(report_items.items())
         )
         (ROOT / "coverage_missing.txt").write_text(details, encoding="utf-8")
     else:
         coverage_file = ROOT / "coverage_missing.txt"
         if coverage_file.exists():
             coverage_file.unlink()
+
+    ingestion_root = (SRC / "Medical_KG" / "ingestion").resolve()
+    adapter_root = ingestion_root / "adapters"
+    ingestion_missing = {
+        path: lines
+        for path, lines in missing.items()
+        if adapter_root in (path.resolve().parents)
+        and path.resolve() in executed
+    }
+    if os.environ.get("SKIP_INGESTION_COVERAGE") == "1":
+        ingestion_missing = {}
+
+    enforce_coverage = os.environ.get("ENFORCE_INGESTION_COVERAGE") == "1"
+
+    if enforce_coverage and ingestion_missing:
+        details = "; ".join(
+            f"{path}:{','.join(str(line) for line in sorted(lines))}" for path, lines in sorted(ingestion_missing.items())
+        )
+        pytest.fail(f"Ingestion modules lack coverage: {details}")
 
     # Temporarily disabled coverage gate for test coverage implementation work
     # TODO: Re-enable once test coverage proposals are implemented
@@ -620,3 +645,4 @@ def expected_retrieval_response() -> RetrievalResponse:
         size=1,
         metadata={"feature_flags": {"rerank_enabled": False}},
     )
+from Medical_KG.utils.optional_dependencies import get_httpx_module

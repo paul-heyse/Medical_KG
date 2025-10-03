@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/facets/generator.py
-# hypothesis_version: 6.140.2
-
-[2.0, 120, 'FacetGenerationError', 'GenerationRequest', 'HR', 'Invalid JSON payload', 'MD', 'OR', 'RR', 'SMD', '\\bpatients?\\b', 'bid', 'generate_facet', 'generate_facets', 'grade', 'hazard ratio', 'iv', 'load_facets', 'placebo', 'po', 'serialize_facets', 'term', 'treatment', 'validate_budget', 'value']

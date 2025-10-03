@@ -61,7 +61,7 @@ def test_role_revocation() -> None:
 
 
 def test_scope_enforcer() -> None:
-    enforcer = ScopeEnforcer(["admin", "metrics"]) 
+    enforcer = ScopeEnforcer(["admin", "metrics"])
     enforcer.verify(["admin", "metrics", "other"])
     with pytest.raises(PermissionError):
         enforcer.verify(["admin"])

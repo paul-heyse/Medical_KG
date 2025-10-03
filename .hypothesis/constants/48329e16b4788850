@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/chunking/metrics.py
-# hypothesis_version: 6.140.2
-
-[0.0, 0.5, 1.0, 10.0, 20.0, 120, 1200, 'ChunkMetrics', '[A-Za-z0-9]+', 'compute_metrics']

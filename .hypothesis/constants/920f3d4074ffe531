@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/extraction/models.py
-# hypothesis_version: 6.140.2
-
-['HR', 'MD', 'OR', 'RR', 'SMD', '__confidence', 'ae', 'after', 'dose', 'effects', 'eligibility', 'exclusion', 'inclusion', 'pico']

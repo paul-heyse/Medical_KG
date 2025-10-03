@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/catalog/models.py
-# hypothesis_version: 6.140.2
-
-[', ', 'Concept', 'ConceptFamily', 'Synonym', 'SynonymType', 'abbrev', 'active', 'adverse_event', 'ancestors', 'attributes', 'brand', 'broad', 'codes', 'condition', 'deprecated', 'device', 'drug', 'exact', 'family', 'http://', 'https://', 'iri', 'lab', 'label', 'license_bucket', 'literature_id', 'narrow', 'ontology', 'open', 'outcome', 'parents', 'permissive', 'phenotype', 'preferred_term', 'proprietary', 'provenance', 'related', 'restricted', 'retired', 'substance', 'synonyms', 'xrefs']

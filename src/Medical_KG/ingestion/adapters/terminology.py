@@ -30,13 +30,18 @@ class MeSHAdapter(HttpAdapter):
     ) -> None:
         super().__init__(context, client)
         self._bootstrap = list(bootstrap_records or [])
+        self._cache: dict[str, Any] = {}
 
     async def fetch(self, descriptor_id: str) -> AsyncIterator[Any]:
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record
             return
+        if descriptor_id in self._cache:
+            yield self._cache[descriptor_id]
+            return
         payload = await self.fetch_json("https://id.nlm.nih.gov/mesh/lookup/descriptor", params={"resource": descriptor_id})
+        self._cache[descriptor_id] = payload
         yield payload
 
     def parse(self, raw: Any) -> Document:
@@ -74,13 +79,18 @@ class UMLSAdapter(HttpAdapter):
     ) -> None:
         super().__init__(context, client)
         self._bootstrap = list(bootstrap_records or [])
+        self._cache: dict[str, Any] = {}
 
     async def fetch(self, cui: str) -> AsyncIterator[Any]:
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record
             return
+        if cui in self._cache:
+            yield self._cache[cui]
+            return
         payload = await self.fetch_json("https://uts-ws.nlm.nih.gov/rest/content/current/CUI/" + cui)
+        self._cache[cui] = payload
         yield payload
 
     def parse(self, raw: Any) -> Document:
@@ -114,13 +124,18 @@ class LoincAdapter(HttpAdapter):
     ) -> None:
         super().__init__(context, client)
         self._bootstrap = list(bootstrap_records or [])
+        self._cache: dict[str, Any] = {}
 
     async def fetch(self, code: str) -> AsyncIterator[Any]:
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record
             return
+        if code in self._cache:
+            yield self._cache[code]
+            return
         payload = await self.fetch_json("https://fhir.loinc.org/CodeSystem/$lookup", params={"code": code})
+        self._cache[code] = payload
         yield payload
 
     def parse(self, raw: Any) -> Document:
@@ -154,13 +169,18 @@ class Icd11Adapter(HttpAdapter):
     ) -> None:
         super().__init__(context, client)
         self._bootstrap = list(bootstrap_records or [])
+        self._cache: dict[str, Any] = {}
 
     async def fetch(self, code: str) -> AsyncIterator[Any]:
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record
             return
+        if code in self._cache:
+            yield self._cache[code]
+            return
         payload = await self.fetch_json(f"https://id.who.int/icd/release/11/mms/{code}")
+        self._cache[code] = payload
         yield payload
 
     def parse(self, raw: Any) -> Document:
@@ -193,13 +213,18 @@ class SnomedAdapter(HttpAdapter):
     ) -> None:
         super().__init__(context, client)
         self._bootstrap = list(bootstrap_records or [])
+        self._cache: dict[str, Any] = {}
 
     async def fetch(self, code: str) -> AsyncIterator[Any]:
         if self._bootstrap:
             for record in self._bootstrap:
                 yield record
             return
+        if code in self._cache:
+            yield self._cache[code]
+            return
         payload = await self.fetch_json("https://snowstorm.snomedserver.org/fhir/CodeSystem/$lookup", params={"code": code})
+        self._cache[code] = payload
         yield payload
 
     def parse(self, raw: Any) -> Document:

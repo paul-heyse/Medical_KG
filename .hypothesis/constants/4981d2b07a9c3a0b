@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/catalog/pipeline.py
-# hypothesis_version: 6.140.2
-
-['CatalogAuditLog', 'CatalogBuildResult', 'CatalogReleaseHasher', 'CrosswalkBuilder', 'LicensePolicy', 'action', 'buckets', 'catalog', 'concept.loaded', 'enabled', 'license', 'license_bucket', 'loader.skipped', 'loaders', 'ontology', 'open', 'permissive', 'proprietary', 'reason', 'resource', 'restricted', 'umls_cui', 'user', 'utf-8']

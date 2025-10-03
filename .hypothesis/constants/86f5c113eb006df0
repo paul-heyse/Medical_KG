@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/cli.py
-# hypothesis_version: 6.140.2
-
-[30.0, '-', '--auto', '--batch', '--config-dir', '--doc-key', '--fail-if-no-gpu', '--ledger', '--licenses', '--mask', '--no-mask', '--steps', '--strict', '--uri', '.ingest-ledger.jsonl', 'Config directory', 'Config valid', 'Document identifier', 'Fail on any warning', 'HttpxClient', 'Licenses valid', 'Licensing commands', 'PDF URL', 'Source identifier', '__main__', 'command', 'config', 'config.schema.json', 'config_command', 'downloads', 'error', 'httpx', 'ingest', 'ingest-pdf', 'licensed', 'licenses.yml', 'licensing', 'licensing_command', 'local_path', 'mask', 'med', 'mineru-run', 'mineru_failed', 'pdf_downloaded', 'pdf_ir_ready', 'policy', 'postpdf-start', 'postpdf_started', 'show', 'source', 'steps', 'store_false', 'store_true', 'territory', 'unlicensed', 'uri', 'validate']

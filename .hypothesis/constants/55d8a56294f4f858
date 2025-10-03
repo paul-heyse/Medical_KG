@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/facets/normalizer.py
-# hypothesis_version: 6.140.2
-
-[0.5, 1.0, 2.0, 3.0, 4.0, '<', '=', 'amount', 'bid', 'count', 'denom', 'drug', 'grade', 'high', 'low', 'qd', 'qid', 'route', 'schedule', 'serious adverse', 'tid', 'unit', 'value']

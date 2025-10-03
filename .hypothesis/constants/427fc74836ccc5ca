@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/extraction/prompts.py
-# hypothesis_version: 6.140.2
-
-['GLOBAL_RULES', 'Prompt', 'PromptLibrary', 'PromptTemplate', 'ae', 'dose', 'effects', 'eligibility', 'pico', 'rules', 'system', 'templates', 'user']

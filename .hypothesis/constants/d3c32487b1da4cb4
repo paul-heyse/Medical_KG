@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/ops/load_test/check_thresholds.py
-# hypothesis_version: 6.140.2
-
-[0.0, 100.0, '\nAll checks passed ✅', '%', '(ms)', '(s)', ',', '-', '--budget', '--profile', '.csv', '.html', '/', '50pct', '95', '95pct', '99', '99pct', '<=', '>=', 'ALL', 'Aggregated', 'FAIL', 'Name', 'PASS', 'Total', 'Unnamed', '_', '__', '__main__', '_per_', 'aggregated', 'burst', 'defaults', 'endpoints', 'error_rate', 'fails', 'failures', 'html.parser', 'latency_ms', 'median', 'median_response_time', 'metric missing', 'ms', 'n/a', 'name', 'p50', 'p95', 'p99', 'pct', 'profiles', 'report', 'req/s', 'requests', 'requests_per_s', 'requests_s', 'route', 'rps', 's', 'table', 'tbody', 'td', 'th', 'thead', 'throughput_rps', 'total', 'tr', 'type']

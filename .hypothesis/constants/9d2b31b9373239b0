@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/pdf/mineru.py
-# hypothesis_version: 6.140.2
-
-['--input', '--ocr', '--output', '--tables', './artifacts', 'MinerUArtifacts', 'MinerUConfig', 'MinerURunResult', 'MinerURunner', 'auto', 'blocks.json', 'html', 'markdown.json', 'mineru', 'offset_map.json', 'stderr', 'stdout', 'tables.html', 'worker_count']

@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/embeddings/monitoring.py
-# hypothesis_version: 6.140.2
-
-[0.0, 1e-06, 60.0, 1000.0, 100, 256, 10000, ',', 'AlertSink', 'BenchmarkResult', 'Embedding Throughput', 'GPU Utilisation', 'GPUStats', 'LoadTestResult', 'SPLADE Terms/sec', 'batch_size', 'description', 'gpu_unavailable', 'inclusive', 'metric', 'nvidia-smi', 'panels', 'throughput_low', 'title']

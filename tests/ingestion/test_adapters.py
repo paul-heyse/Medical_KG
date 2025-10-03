@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from types import SimpleNamespace
 from typing import Any, Mapping, MutableMapping
 
 import pytest
@@ -17,7 +18,13 @@ from Medical_KG.ingestion.adapters.clinical import (
     UdiValidator,
 )
 from Medical_KG.ingestion.adapters.guidelines import CdcSocrataAdapter, NiceGuidelineAdapter
-from Medical_KG.ingestion.adapters.literature import MedRxivAdapter, PmcAdapter, PubMedAdapter
+from Medical_KG.ingestion.adapters.literature import (
+    LiteratureFallback,
+    LiteratureFallbackError,
+    MedRxivAdapter,
+    PmcAdapter,
+    PubMedAdapter,
+)
 from Medical_KG.ingestion.adapters.terminology import (
     Icd11Adapter,
     LoincAdapter,
@@ -27,6 +34,7 @@ from Medical_KG.ingestion.adapters.terminology import (
 )
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 from Medical_KG.ingestion.models import Document
+from Medical_KG.utils.optional_dependencies import get_httpx_module
 
 from tests.ingestion.fixtures.clinical import (
     accessgudid_record,
@@ -196,6 +204,78 @@ def test_clinical_trials_paginates(fake_ledger: Any, monkeypatch: pytest.MonkeyP
     _run(_test())
 
 
+@pytest.mark.parametrize("status", [404, 500])
+def test_clinical_trials_propagates_http_errors(
+    fake_ledger: Any, httpx_mock_transport: Any, status: int
+) -> None:
+    HTTPX = get_httpx_module()
+
+    def handler(request: Any) -> Any:
+        response = HTTPX.Response(status_code=status, request=request, text="error")
+        return response
+
+    httpx_mock_transport(handler)
+    client = AsyncHttpClient()
+    adapter = ClinicalTrialsGovAdapter(AdapterContext(fake_ledger), client)
+    with pytest.raises(HTTPX.HTTPStatusError):
+        _run(adapter.run())
+    _run(client.aclose())
+
+
+def test_clinical_trials_retries_on_rate_limit(
+    fake_ledger: Any, httpx_mock_transport: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    HTTPX = get_httpx_module()
+    calls: list[str] = []
+
+    studies_payload = {"studies": [clinical_study()]}
+
+    def handler(request: Any) -> Any:
+        calls.append(str(request.url))
+        if len(calls) == 1:
+            return HTTPX.Response(
+                status_code=429,
+                headers={"Retry-After": "0"},
+                request=request,
+                text="rate limited",
+            )
+        return HTTPX.Response(status_code=200, json=studies_payload, request=request)
+
+    httpx_mock_transport(handler)
+
+    async def _sleep(_: float) -> None:
+        return None
+
+    monkeypatch.setattr("Medical_KG.ingestion.http_client.asyncio.sleep", _sleep)
+
+    client = AsyncHttpClient()
+    adapter = ClinicalTrialsGovAdapter(AdapterContext(fake_ledger), client)
+    results = _run(adapter.run())
+    assert len(results) == 1
+    assert len(calls) == 2
+    _run(client.aclose())
+
+
+def test_clinical_trials_metadata_enrichment(fake_ledger: Any) -> None:
+    record = clinical_study()
+    protocol = record.setdefault("protocolSection", {})
+    protocol.setdefault("sponsorCollaboratorsModule", {})["leadSponsor"] = {"name": "Example Sponsor"}
+    protocol.setdefault("designModule", {}).setdefault("enrollmentInfo", {})["count"] = 256
+    status_module = protocol.setdefault("statusModule", {})
+    status_module["startDateStruct"] = {"date": "2024-05-01"}
+    status_module["completionDateStruct"] = {"date": "2025-10-31"}
+
+    client = AsyncHttpClient()
+    adapter = ClinicalTrialsGovAdapter(AdapterContext(fake_ledger), client, bootstrap_records=[record])
+    results = _run(adapter.run())
+    metadata = results[0].document.metadata
+    assert metadata["sponsor"] == "Example Sponsor"
+    assert metadata["enrollment"] == 256
+    assert metadata["start_date"] == "2024-05-01"
+    assert metadata["completion_date"] == "2025-10-31"
+    _run(client.aclose())
+
+
 def test_openfda_requires_identifier(fake_ledger: Any) -> None:
     async def _test() -> None:
         client = AsyncHttpClient()
@@ -282,6 +362,58 @@ def test_pmc_adapter_collects_tables(fake_ledger: Any, monkeypatch: pytest.Monke
         assert document.metadata["pmcid"] == "PMC1234567"
         assert document.metadata["datestamp"] == "2024-01-15"
         assert "Sepsis" in document.content
+        await client.aclose()
+
+    _run(_test())
+
+
+def test_pmc_adapter_extracts_sections_and_references(fake_ledger: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _test() -> None:
+        client = AsyncHttpClient()
+        adapter = PmcAdapter(AdapterContext(fake_ledger), client)
+        xml_payload = """
+        <record>
+          <header>
+            <identifier>oai:pubmedcentral.nih.gov:PMC999999</identifier>
+            <datestamp>2024-02-02</datestamp>
+          </header>
+          <metadata>
+            <article>
+              <front>
+                <article-title>Fallback Study</article-title>
+              </front>
+              <body>
+                <sec>
+                  <title>Introduction</title>
+                  <p>Sepsis overview</p>
+                </sec>
+                <table-wrap>
+                  <label>Table 1</label>
+                  <caption><p>Data summary</p></caption>
+                </table-wrap>
+              </body>
+              <back>
+                <ref-list>
+                  <ref>
+                    <label>1</label>
+                    <mixed-citation>Example reference</mixed-citation>
+                  </ref>
+                </ref-list>
+              </back>
+            </article>
+          </metadata>
+        </record>
+        """
+
+        async def fake_fetch_text(*_: object, **__: object) -> str:
+            return f"<OAI>{xml_payload}</OAI>"
+
+        monkeypatch.setattr(adapter, "fetch_text", fake_fetch_text)
+        results = await adapter.run(set_spec="pmc")
+        payload = results[0].document.raw
+        assert payload["sections"]
+        assert payload["references"]
+        assert payload["tables"]
         await client.aclose()
 
     _run(_test())
@@ -380,6 +512,66 @@ def test_terminology_validations(fake_ledger: Any) -> None:
         snomed.validate(Document("doc", "snomed", "", metadata={"code": "12"}, raw={"designation": []}))
 
     _run(client.aclose())
+
+
+def test_literature_fallback_returns_first_success() -> None:
+    document = Document(doc_id="doc-1", source="pubmed", content="text")
+
+    class _FakeAdapter:
+        def __init__(self, source: str, results: list[Document], *, raises: bool = False) -> None:
+            self.source = source
+            self._results = results
+            self._raises = raises
+            self.calls = 0
+
+        async def run(self, **_: Any) -> list[SimpleNamespace]:
+            self.calls += 1
+            if self._raises:
+                raise RuntimeError("adapter failure")
+            return [SimpleNamespace(document=doc) for doc in self._results]
+
+    first = _FakeAdapter("pmc", [], raises=False)
+    second = _FakeAdapter("pubmed", [document], raises=False)
+    third = _FakeAdapter("medrxiv", [document], raises=False)
+    fallback = LiteratureFallback(first, second, third)
+    docs, source = _run(fallback.run())
+    assert source == "pubmed"
+    assert docs == [document]
+    assert first.calls == 1 and second.calls == 1 and third.calls == 0
+
+
+def test_literature_fallback_raises_when_all_fail() -> None:
+    class _Failing:
+        source = "pmc"
+
+        async def run(self, **_: Any) -> list[SimpleNamespace]:
+            raise RuntimeError("boom")
+
+    fallback = LiteratureFallback(_Failing(), _Failing())
+    with pytest.raises(LiteratureFallbackError):
+        _run(fallback.run())
+
+
+def test_terminology_adapters_cache_responses(
+    fake_ledger: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _test() -> None:
+        client = AsyncHttpClient()
+        adapter = MeSHAdapter(AdapterContext(fake_ledger), client)
+        calls = 0
+
+        async def fake_fetch_json(*_: Any, **__: Any) -> dict[str, Any]:
+            nonlocal calls
+            calls += 1
+            return mesh_descriptor()
+
+        monkeypatch.setattr(adapter, "fetch_json", fake_fetch_json)
+        await adapter.run(descriptor_id="D012345")
+        await adapter.run(descriptor_id="D012345")
+        assert calls == 1
+        await client.aclose()
+
+    _run(_test())
 
 
 def test_udi_validator() -> None:

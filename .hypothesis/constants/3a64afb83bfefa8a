@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/kg/validators.py
-# hypothesis_version: 6.140.2
-
-[0.0, 1.0, '1', 'Concept', 'Device', 'Drug', 'Evidence', 'EvidenceVariable', 'HAS_AE', 'Intervention', 'Invalid span offsets', 'MEASURES', 'MENTIONS', 'Node missing label', 'Outcome', 'SIMILAR_TO', 'Study', 'USES_INTERVENTION', 'count', 'denominator', 'dose', 'end', 'end_id', 'g', 'grade', 'id', 'iri', 'kg', 'label', 'loinc', 'mL', 'mg', 'nct_id', 'outcome_loinc', 'properties', 'provenance', 'rxcui', 'score', 'spans_json', 'start', 'start_id', 'time_unit_ucum', 'type', 'udi_di', 'unit', 'unit_ucum', 'utf-8']

@@ -22,11 +22,16 @@ class BaseAdapter(ABC):
         self.context = context
 
     async def run(self, *args: Any, **kwargs: Any) -> Iterable[IngestionResult]:
+        resume = bool(kwargs.pop("resume", False))
         results: list[IngestionResult] = []
         async for raw_record in self.fetch(*args, **kwargs):
             document: Document | None = None
             try:
                 document = self.parse(raw_record)
+                if resume:
+                    existing = self.context.ledger.get(document.doc_id)
+                    if existing is not None and existing.state == "auto_done":
+                        continue
                 self.context.ledger.record(
                     doc_id=document.doc_id,
                     state="auto_inflight",

@@ -1,0 +1,4 @@
+# file: /home/paul/Medical_KG/src/Medical_KG/ingestion/pipeline.py
+# hypothesis_version: 6.140.2
+
+['IngestionPipeline', 'PipelineResult', 'doc_id', 'metadata', 'resume']

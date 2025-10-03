@@ -10,6 +10,8 @@ dependencies = [
     "tenacity==9.1.2",
     "aiolimiter==1.2.1",
     "anyio==4.11.0",
+    "pytest-cov==4.1.0",
+    "coverage==7.6.10",
 
     # CLI & UI
     "typer==0.17.5",

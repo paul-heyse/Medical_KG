@@ -3,6 +3,7 @@
 from .http_client import AsyncHttpClient
 from .ledger import IngestionLedger
 from .models import Document, IngestionResult
+from .pipeline import IngestionPipeline, PipelineResult
 from .registry import available_sources, get_adapter
 
 __all__ = [
@@ -10,6 +11,8 @@ __all__ = [
     "IngestionLedger",
     "Document",
     "IngestionResult",
+    "IngestionPipeline",
+    "PipelineResult",
     "available_sources",
     "get_adapter",
 ]

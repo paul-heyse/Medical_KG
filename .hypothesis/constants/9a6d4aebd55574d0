@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/evaluation/metrics.py
-# hypothesis_version: 6.140.2
-
-[0.0, 'RetrievalMetrics', 'citations', 'drift_delta', 'extraction_f1', 'hallucination_rate']

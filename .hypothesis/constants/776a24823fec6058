@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/embeddings/gpu.py
-# hypothesis_version: 6.140.2
-
-[0.0, 2.0, 200, '--query-gpu=name', '/', '/health', '0', '1', 'GPURequirementError', 'GPUValidator', 'REQUIRE_GPU', 'cuda', 'enforce_gpu_or_exit', 'false', 'mem_get_info', 'no', 'nvidia-smi']

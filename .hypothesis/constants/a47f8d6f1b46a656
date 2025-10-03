@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/api/routes.py
-# hypothesis_version: 6.140.2
-
-[',', '/chunks/{chunk_id}', '/extract/ae', '/extract/dose', '/extract/effects', '/extract/eligibility', '/extract/pico', '/facets/generate', '/health', '/kg/write', '/retrieve', '/version', 'ApiRouter', 'Chunk not found', 'Idempotency-Key', 'Qwen3-Embedding-8B', 'Rate limit exceeded', 'Retry-After', 'X-License-Tier', 'X-RateLimit-Limit', 'X-RateLimit-Reset', 'affiliate', 'chunks', 'code', 'extract', 'extract:write', 'extraction', 'facet_type', 'facet_types', 'facets', 'facets:write', 'issues', 'json', 'kg', 'kg:write', 'kg_validation_failed', 'meddra', 'member', 'message', 'meta', 'ok', 'payload', 'payload_hash', 'public', 'qwen', 'ready', 'reason', 'retrieval', 'retrieve', 'retrieve:read', 'snomed', 'snomedct', 'splade', 'splade-v3', 'umls', 'utf-8', 'v1']

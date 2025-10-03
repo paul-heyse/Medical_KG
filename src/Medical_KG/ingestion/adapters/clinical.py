@@ -60,6 +60,12 @@ class ClinicalTrialsGovAdapter(HttpAdapter):
         status = protocol.get("statusModule", {}).get("overallStatus")
         summary = normalize_text(protocol.get("descriptionModule", {}).get("briefSummary", ""))
         version = raw.get("derivedSection", {}).get("miscInfoModule", {}).get("version", "unknown")
+        sponsor_module = protocol.get("sponsorCollaboratorsModule", {})
+        lead_sponsor = sponsor_module.get("leadSponsor", {}) if isinstance(sponsor_module, Mapping) else {}
+        enrollment_module = protocol.get("designModule", {}).get("enrollmentInfo", {})
+        date_module = protocol.get("statusModule", {}) if isinstance(protocol.get("statusModule", {}), Mapping) else {}
+        start_date_struct = date_module.get("startDateStruct", {}) if isinstance(date_module, Mapping) else {}
+        completion_date_struct = date_module.get("completionDateStruct", {}) if isinstance(date_module, Mapping) else {}
         payload = {
             "nct_id": nct_id,
             "title": title,
@@ -70,6 +76,10 @@ class ClinicalTrialsGovAdapter(HttpAdapter):
             "eligibility": protocol.get("eligibilityModule", {}).get("eligibilityCriteria"),
             "outcomes": protocol.get("outcomesModule", {}).get("primaryOutcomes", []),
             "version": version,
+            "lead_sponsor": lead_sponsor.get("name") if isinstance(lead_sponsor, Mapping) else None,
+            "enrollment": enrollment_module.get("count") if isinstance(enrollment_module, Mapping) else None,
+            "start_date": start_date_struct.get("date"),
+            "completion_date": completion_date_struct.get("date"),
         }
         content = canonical_json(payload)
         doc_id = self.build_doc_id(identifier=nct_id, version=version, content=content)
@@ -78,6 +88,16 @@ class ClinicalTrialsGovAdapter(HttpAdapter):
             "status": status,
             "record_version": version,
         }
+        if payload.get("lead_sponsor"):
+            metadata["sponsor"] = payload["lead_sponsor"]
+        if payload.get("phase"):
+            metadata["phase"] = payload["phase"]
+        if payload.get("enrollment") is not None:
+            metadata["enrollment"] = payload["enrollment"]
+        if payload.get("start_date"):
+            metadata["start_date"] = payload["start_date"]
+        if payload.get("completion_date"):
+            metadata["completion_date"] = payload["completion_date"]
         return Document(
             doc_id=doc_id,
             source=self.source,

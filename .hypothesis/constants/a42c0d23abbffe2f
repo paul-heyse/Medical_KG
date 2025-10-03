@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/chunking/profiles.py
-# hypothesis_version: 6.140.2
-
-[0.12, 0.15, 100, 350, 400, 450, 'ChunkingProfile', 'PROFILES', 'get_profile', 'guideline', 'imrad', 'registry', 'spl']

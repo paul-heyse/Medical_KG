@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/observability/logging.py
-# hypothesis_version: 6.140.2
-
-[0.0, 1.0, '1.0', 'INFO', 'MEDKG_LOG_LEVEL', 'asctime', 'configure_logging', 'level', 'levelname', 'medkg.context', 'timestamp']

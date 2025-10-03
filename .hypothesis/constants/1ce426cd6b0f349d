@@ -1,4 +1,0 @@
-# file: /home/paul/Medical_KG/src/Medical_KG/catalog/validators.py
-# hypothesis_version: 6.140.2
-
-['VALIDATORS', '^NCT\\d{8}$', '^[0-9]{1,5}-[0-9]$', '^[1-9]\\d*$', '^[A-HJ-NP-Z0-9]{10}$', '^\\d{14}$', '^\\d{6,18}$', 'doi', 'gtin14', 'is_valid_doi', 'is_valid_gtin14', 'is_valid_loinc', 'is_valid_nct_id', 'is_valid_pmid', 'is_valid_unii', 'loinc', 'nct', 'pmid', 'snomed', 'unii']

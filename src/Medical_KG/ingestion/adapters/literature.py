@@ -421,3 +421,31 @@ class MedRxivAdapter(HttpAdapter):
         doi = raw["doi"] if isinstance(raw, Mapping) else None
         if not isinstance(doi, str) or "/" not in doi:
             raise ValueError("Invalid DOI")
+
+
+class LiteratureFallbackError(RuntimeError):
+    """Raised when every literature adapter fails to return results."""
+
+
+class LiteratureFallback:
+    """Sequentially attempt literature adapters until one returns results."""
+
+    def __init__(self, *adapters: HttpAdapter) -> None:
+        if not adapters:
+            raise ValueError("At least one adapter must be provided for fallback")
+        self._adapters = list(adapters)
+
+    async def run(self, **kwargs: Any) -> tuple[list[Document], str | None]:
+        last_error: Exception | None = None
+        for adapter in self._adapters:
+            try:
+                results = await adapter.run(**kwargs)
+            except Exception as exc:  # pragma: no cover - exercised in tests
+                last_error = exc
+                continue
+            docs = [result.document for result in results]
+            if docs:
+                return docs, adapter.source
+        if last_error is not None:
+            raise LiteratureFallbackError("All literature adapters failed") from last_error
+        return [], None

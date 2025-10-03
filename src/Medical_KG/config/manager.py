@@ -11,27 +11,31 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Mapping, MutableMapping, Optional
+from typing import TYPE_CHECKING
 
 import yaml
 
 from .models import Config, PolicyDocument, validate_constraints
 
-try:  # pragma: no cover - optional dependency
-    from prometheus_client import Gauge  # type: ignore
-except ModuleNotFoundError:  # pragma: no cover
+if TYPE_CHECKING:
+    from prometheus_client import Gauge
+else:  # pragma: no cover - optional dependency
+    try:
+        from prometheus_client import Gauge
+    except ModuleNotFoundError:
 
-    class Gauge:  # type: ignore
-        def __init__(self, *_: Any, **__: Any) -> None:
-            pass
+        class Gauge:
+            def __init__(self, *_: Any, **__: Any) -> None:
+                pass
 
-        def labels(self, **_: Any) -> "Gauge":
-            return self
+            def labels(self, **_: Any) -> "Gauge":
+                return self
 
-        def set(self, *_: Any, **__: Any) -> None:
-            return None
+            def set(self, *_: Any, **__: Any) -> None:
+                return None
 
-        def clear(self) -> None:
-            return None
+            def clear(self) -> None:
+                return None
 
 
 CONFIG_INFO = Gauge("config_info", "Current configuration metadata", ["version", "hash"])
@@ -255,7 +259,9 @@ class ConfigManager:
             raise ConfigError(f"{path.name} must contain a mapping at the root")
         return dict(data)
 
-    def _deep_merge(self, base: Dict[str, Any], overlay: Mapping[str, Any]) -> Dict[str, Any]:
+    def _deep_merge(
+        self, base: MutableMapping[str, Any], overlay: Mapping[str, Any]
+    ) -> Dict[str, Any]:
         result: Dict[str, Any] = dict(base)
         for key, value in overlay.items():
             if (
@@ -263,7 +269,7 @@ class ConfigManager:
                 and isinstance(result[key], MutableMapping)
                 and isinstance(value, Mapping)
             ):
-                result[key] = self._deep_merge(result[key], value)  # type: ignore[arg-type]
+                result[key] = self._deep_merge(result[key], value)
             else:
                 result[key] = value
         return result
@@ -299,9 +305,13 @@ class ConfigManager:
 
     def _set_dotted_key(self, payload: Dict[str, Any], dotted_path: str, value: Any) -> None:
         parts = dotted_path.split(".")
-        cursor: Dict[str, Any] = payload
+        cursor: MutableMapping[str, Any] = payload
         for part in parts[:-1]:
-            cursor = cursor.setdefault(part, {})  # type: ignore[assignment]
+            next_value = cursor.get(part)
+            if not isinstance(next_value, MutableMapping):
+                next_value = {}
+                cursor[part] = next_value
+            cursor = next_value
         cursor[parts[-1]] = value
 
     def _resolve_placeholders(self, payload: Mapping[str, Any]) -> Dict[str, Any]:

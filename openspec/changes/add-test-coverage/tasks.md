@@ -13,12 +13,12 @@
 - [ ] 2.3 Prioritize high-risk/high-complexity areas
 
 ## 3. Unit & Integration Tests
-- [ ] 3.1 Briefing service & formatters edge cases
+- [x] 3.1 Briefing service & formatters edge cases
 - [ ] 3.2 IR builder/validator schema validations
 - [ ] 3.3 Ingestion adapters (clinical, guidelines, literature, terminology)
 - [ ] 3.4 Retrieval service (auth, caching, ranking fallbacks)
 - [ ] 3.5 Security modules (license enforcement, retention policies)
-- [ ] 3.6 CLI commands & failure paths
+- [x] 3.6 CLI commands & failure paths
 - [ ] 3.7 Embeddings GPU validator scenarios
 - [ ] 3.8 KG writer & validators
 
@@ -34,9 +34,9 @@
 - [ ] 5.4 Add coverage badge/dashboard
 
 ## 6. Documentation & Guidelines
-- [ ] 6.1 Testing strategy doc (unit vs integration vs e2e)
-- [ ] 6.2 Contributor guide for adding tests
-- [ ] 6.3 Maintenance plan (triage failing tests, update fixtures)
+- [x] 6.1 Testing strategy doc (unit vs integration vs e2e)
+- [x] 6.2 Contributor guide for adding tests
+- [x] 6.3 Maintenance plan (triage failing tests, update fixtures)
 
 ## 7. Validation
 - [ ] 7.1 Verify 100% coverage with pytest --cov

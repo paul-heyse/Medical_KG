@@ -106,7 +106,7 @@ def test_qwen_client_http_retries(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_enforce_gpu_or_exit(monkeypatch: pytest.MonkeyPatch) -> None:
     class FailingValidator(GPUValidator):
-        def validate(self) -> None:  # type: ignore[override]
+        def validate(self) -> None:
             raise GPURequirementError("missing gpu")
 
     with pytest.raises(SystemExit) as excinfo:
@@ -156,7 +156,7 @@ def test_embedding_monitor_collects_gpu_stats(monkeypatch: pytest.MonkeyPatch) -
 
 def test_embedding_monitor_load_test_and_health(monkeypatch: pytest.MonkeyPatch) -> None:
     class FailingValidator(GPUValidator):
-        def validate(self) -> None:  # type: ignore[override]
+        def validate(self) -> None:
             raise GPURequirementError("not visible")
 
     service = EmbeddingService(

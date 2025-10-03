@@ -20,10 +20,15 @@ from __future__ import annotations
 
 import random
 
-from locust import HttpUser, between, task  # type: ignore[import-untyped]
+from typing import Callable
+
+try:
+    from locust import HttpUser, between, task
+except Exception as exc:  # pragma: no cover - locust is optional during tests
+    raise RuntimeError("locust must be installed to run load tests") from exc
 
 
-class MedicalKGUser(HttpUser):  # type: ignore[misc]
+class MedicalKGUser(HttpUser):
     """Simulates a user making requests to Medical KG API."""
 
     wait_time = between(1, 3)  # Wait 1-3 seconds between tasks

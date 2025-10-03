@@ -171,8 +171,9 @@ def test_literature_adapters(tmp_path: Path) -> None:
     async def fake_fetch_json(*_, **__):
         return medrxiv_payload
 
-    pmc_adapter.fetch_text = fake_fetch_text  # type: ignore[assignment]
-    medrxiv_adapter.fetch_json = fake_fetch_json  # type: ignore[assignment]
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(pmc_adapter, "fetch_text", fake_fetch_text)
+    monkeypatch.setattr(medrxiv_adapter, "fetch_json", fake_fetch_json)
 
     async def _exec() -> None:
         pmc_results = await pmc_adapter.run(set_spec="pmc")

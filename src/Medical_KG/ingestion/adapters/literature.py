@@ -3,8 +3,9 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import AsyncIterator
-from typing import Any, Iterable
+from typing import Any, Iterable, TypedDict
 from urllib.parse import urlparse
+from typing import Mapping
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
@@ -107,7 +108,7 @@ class PubMedAdapter(HttpAdapter):
         uid = str(raw.get("pmid") or raw.get("uid"))
         title = normalize_text(raw.get("title", ""))
         abstract = normalize_text(raw.get("abstract", ""))
-        payload = {
+        payload: PubMedPayload = {
             "pmid": uid,
             "pmcid": raw.get("pmcid"),
             "doi": raw.get("doi"),
@@ -131,8 +132,9 @@ class PubMedAdapter(HttpAdapter):
         return Document(doc_id=doc_id, source=self.source, content=abstract or title, metadata=metadata, raw=payload)
 
     def validate(self, document: Document) -> None:
-        pmid = document.raw["pmid"]  # type: ignore[index]
-        if not PMID_RE.match(str(pmid)):
+        raw = document.raw
+        pmid = raw["pmid"] if isinstance(raw, Mapping) else None
+        if not isinstance(pmid, (str, int)) or not PMID_RE.match(str(pmid)):
             raise ValueError(f"Invalid PMID: {pmid}")
 
     @staticmethod
@@ -282,8 +284,9 @@ class PmcAdapter(HttpAdapter):
         return Document(doc_id=doc_id, source=self.source, content=document_content, metadata=meta, raw=payload)
 
     def validate(self, document: Document) -> None:
-        pmcid = document.raw["pmcid"]  # type: ignore[index]
-        if not PMCID_RE.match(pmcid):
+        raw = document.raw
+        pmcid = raw["pmcid"] if isinstance(raw, Mapping) else None
+        if not isinstance(pmcid, str) or not PMCID_RE.match(pmcid):
             raise ValueError(f"Invalid PMCID: {pmcid}")
 
     @staticmethod
@@ -414,5 +417,7 @@ class MedRxivAdapter(HttpAdapter):
         return Document(doc_id=doc_id, source=self.source, content=abstract or title, metadata=metadata, raw=payload)
 
     def validate(self, document: Document) -> None:
-        if "/" not in document.raw["doi"]:  # type: ignore[index]
+        raw = document.raw
+        doi = raw["doi"] if isinstance(raw, Mapping) else None
+        if not isinstance(doi, str) or "/" not in doi:
             raise ValueError("Invalid DOI")

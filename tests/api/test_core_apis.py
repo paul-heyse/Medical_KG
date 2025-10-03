@@ -3,19 +3,16 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+import importlib
 
 # ruff: noqa: E402
 
 # Ensure we import the site-packages version of httpx instead of the local stub package.
-_site_package = next((path for path in sys.path if "site-packages" in path), None)
-if _site_package is not None:
-    sys.path.insert(0, _site_package)
-    import httpx as _httpx  # type: ignore
-    from httpx import ASGITransport  # type: ignore
-    sys.path.pop(0)
-else:  # pragma: no cover - fallback for unusual environments
-    import httpx as _httpx  # type: ignore
-    from httpx import ASGITransport  # type: ignore
+httpx_spec = importlib.util.find_spec("httpx")
+if httpx_spec is None:  # pragma: no cover - tooling environment without httpx
+    raise RuntimeError("httpx must be available for API tests")
+_httpx = importlib.import_module("httpx")
+ASGITransport = getattr(_httpx, "ASGITransport")
 import pytest
 
 from Medical_KG.api.auth import Authenticator

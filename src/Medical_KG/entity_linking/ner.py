@@ -16,11 +16,9 @@ class Mention:
 class NerPipeline:
     def __init__(self, model: str = "en_core_sci_sm") -> None:
         try:  # pragma: no cover - optional heavy dependency
-            import spacy  # type: ignore
-
-            self._nlp = spacy.load(model)
-        except Exception:  # pragma: no cover - fallback when scispaCy unavailable
-            self._nlp = None
+            import spacy
+        except ModuleNotFoundError:  # pragma: no cover - tests may run without spaCy
+            spacy = None
 
     def __call__(self, text: str) -> Sequence[Mention]:
         if self._nlp is None:

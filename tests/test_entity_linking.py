@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Mapping, Sequence, Any
 
 from Medical_KG.entity_linking import (
     Candidate,
@@ -20,7 +20,7 @@ from Medical_KG.entity_linking import (
 
 
 class StubNER(NerPipeline):
-    def __call__(self, text: str) -> Sequence[Mention]:  # type: ignore[override]
+    def __call__(self, text: str) -> Sequence[Mention]:
         return [Mention(text="NCT01234567", start=0, end=11, label="trial")]
 
 
@@ -48,7 +48,7 @@ class StubDense(DenseClient):
 
 
 class StubLlm(LlmClient):
-    async def complete(self, *, prompt: str, payload):  # type: ignore[override]
+    async def complete(self, *, prompt: str, payload: Mapping[str, Any]) -> Mapping[str, Any]:
         return {
             "chosen_id": payload["candidates"][0]["identifier"],
             "ontology": payload["candidates"][0]["ontology"],

@@ -36,7 +36,7 @@ class SpanMap:
             values = tuple(float(value) for value in bbox)
             if len(values) != 4:
                 raise ValueError("bbox must contain four coordinates")
-            bbox_tuple = values  # type: ignore[assignment]
+            bbox_tuple = tuple(float(coord) for coord in values)
         self.spans.append(
             Span(
                 raw_start,
@@ -85,7 +85,7 @@ class SpanMap:
                 values = tuple(float(value) for value in bbox)
                 if len(values) != 4:
                     raise ValueError("bbox must contain four coordinates")
-                bbox_tuple = values  # type: ignore[assignment]
+                bbox_tuple = tuple(float(coord) for coord in values)
             new_spans.append(
                 Span(
                     raw_start,

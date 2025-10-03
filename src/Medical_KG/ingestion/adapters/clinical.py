@@ -4,7 +4,8 @@ import json
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import AsyncIterator, Iterable
-from typing import Any
+from typing import Any, Mapping
+from typing import MutableMapping
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
@@ -86,10 +87,11 @@ class ClinicalTrialsGovAdapter(HttpAdapter):
         )
 
     def validate(self, document: Document) -> None:
-        nct_id = document.raw.get("nct_id")  # type: ignore[assignment]
+        raw = document.raw if isinstance(document.raw, Mapping) else {}
+        nct_id = raw.get("nct_id")
         if not isinstance(nct_id, str) or not _CT_NCT_RE.match(nct_id):
             raise ValueError(f"Invalid NCT ID: {nct_id}")
-        outcomes = document.raw.get("outcomes", [])  # type: ignore[assignment]
+        outcomes = raw.get("outcomes", [])
         if outcomes and not isinstance(outcomes, list):
             raise ValueError("Outcomes must be a list")
 
@@ -311,7 +313,8 @@ class OpenFdaUdiAdapter(OpenFdaAdapter):
         document = super().parse(raw)
         udi_di = raw.get("udi_di")
         if udi_di:
-            document.metadata["udi_di"] = udi_di  # type: ignore[index]
+            if isinstance(document.metadata, MutableMapping):
+                document.metadata["udi_di"] = udi_di
         return document
 
     def validate(self, document: Document) -> None:

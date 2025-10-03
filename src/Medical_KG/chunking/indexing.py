@@ -41,7 +41,7 @@ class ChunkIndexer:
         return documents
 
     def neighbor_merge(
-        self, chunks: Sequence[Chunk], *, min_cosine: float = 0.60
+        self, chunks: Sequence[Chunk], *, min_cosine: float = 0.30
     ) -> List[tuple[Chunk, Chunk]]:
         """Return adjacent chunks whose embeddings are similar enough to merge at query time."""
 

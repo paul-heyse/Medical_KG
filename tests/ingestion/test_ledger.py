@@ -12,8 +12,10 @@ def test_ledger_persists_entries(tmp_path: Path) -> None:
     ledger.record("doc2", "pdf_downloaded", {"source": "pmc"})
 
     reloaded = IngestionLedger(ledger_path)
-    assert reloaded.get("doc1").state == "auto_done"  # type: ignore[union-attr]
-    assert reloaded.get("doc2").state == "pdf_downloaded"  # type: ignore[union-attr]
+    doc1 = reloaded.get("doc1")
+    doc2 = reloaded.get("doc2")
+    assert doc1 is not None and doc1.state == "auto_done"
+    assert doc2 is not None and doc2.state == "pdf_downloaded"
 
 
 def test_ledger_entries_returns_latest(tmp_path: Path) -> None:

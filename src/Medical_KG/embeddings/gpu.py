@@ -11,11 +11,11 @@ from typing import Callable, Optional
 
 import httpx
 
-_torch_spec = importlib.util.find_spec("torch")
-if _torch_spec is not None:
-    import torch  # type: ignore[import-not-found]
+torch_spec = importlib.util.find_spec("torch")
+if torch_spec is not None:
+    torch = importlib.import_module("torch")
 else:  # pragma: no cover - fallback when torch unavailable
-    torch = None  # type: ignore[assignment]
+    torch = None
 
 
 class GPURequirementError(RuntimeError):
@@ -36,7 +36,7 @@ class GPUValidator:
     def validate(self) -> None:
         if not self.should_require_gpu():
             return
-        if torch is None or not torch.cuda.is_available():
+        if torch is None or not bool(getattr(torch, "cuda", None)) or not torch.cuda.is_available():
             raise GPURequirementError(
                 "GPU required for embeddings but torch.cuda.is_available() returned False"
             )

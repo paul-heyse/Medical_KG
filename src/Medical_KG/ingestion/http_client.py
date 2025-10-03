@@ -25,10 +25,10 @@ except ModuleNotFoundError:  # pragma: no cover - fallback in tests
         def observe(self, *_args: Any, **_kwargs: Any) -> None:  # pragma: no cover - noop
             return None
 
-    def Counter(*_args: Any, **_kwargs: Any) -> _NoopMetric:  # type: ignore
+    def Counter(*_args: Any, **_kwargs: Any) -> _NoopMetric:
         return _NoopMetric()
 
-    def Histogram(*_args: Any, **_kwargs: Any) -> _NoopMetric:  # type: ignore
+    def Histogram(*_args: Any, **_kwargs: Any) -> _NoopMetric:
         return _NoopMetric()
 
 
@@ -91,7 +91,7 @@ class AsyncHttpClient:
         headers: MutableMapping[str, str] | None = None,
     ) -> None:
         try:
-            import h2  # type: ignore  # noqa: F401
+            import h2  # noqa: F401
 
             http2_enabled = True
         except ImportError:  # pragma: no cover - optional dependency

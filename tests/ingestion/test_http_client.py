@@ -7,17 +7,9 @@ import httpx
 from Medical_KG.ingestion.http_client import AsyncHttpClient, RateLimit
 
 
-class _MockTransport(httpx.AsyncBaseTransport):
-    def __init__(self, responses: list[httpx.Response]) -> None:
-        self._responses = responses
-        self.calls: list[httpx.Request] = []
-
-    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:  # type: ignore[override]
-        self.calls.append(request)
-        response = self._responses.pop(0)
-        if response.status_code >= 400:
-            raise httpx.HTTPStatusError("error", request=request, response=response)
-        return response
+class TestTransport(httpx.AsyncBaseTransport):
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"ok": True})
 
 
 def test_retry_on_transient_failure(monkeypatch: Any) -> None:

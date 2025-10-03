@@ -4,7 +4,7 @@ from __future__ import annotations
 import io
 import json
 from textwrap import indent
-from typing import Mapping, Sequence
+from typing import Iterable, Mapping, Sequence
 from xml.sax.saxutils import escape
 from zipfile import ZipFile
 
@@ -23,9 +23,19 @@ class BriefingFormatter:
 
     def to_markdown(self, payload: Mapping[str, object]) -> str:
         lines: list[str] = [f"# Topic Dossier: {payload['topic']}"]
-        for section in payload["sections"]:  # type: ignore[index]
+        sections = payload.get("sections")
+        if not isinstance(sections, Sequence):
+            return ""
+        for section in sections:
+            if not isinstance(section, Mapping):
+                continue
             lines.append(f"\n## {section['title']}")
-            for entry in section["items"]:  # type: ignore[index]
+            items = section.get("items")
+            if not isinstance(items, Sequence):
+                continue
+            for entry in items:
+                if not isinstance(entry, Mapping):
+                    continue
                 summary = entry.get("summary") or entry.get("description")
                 if summary:
                     lines.append(f"- {summary}")
@@ -33,15 +43,30 @@ class BriefingFormatter:
                         ids = ", ".join(citation["doc_id"] for citation in citations)
                         lines.append(indent(f"Citations: {ids}", "  "))
         lines.append("\n## Bibliography")
-        for citation in payload["bibliography"]:  # type: ignore[index]
+        bibliography = payload.get("bibliography")
+        if not isinstance(bibliography, Sequence):
+            return "\n".join(lines)
+        for citation in bibliography:
+            doi = citation.get("doi")
             lines.append(f"- {citation['doc_id']} ({citation['citation_count']} references)")
         return "\n".join(lines)
 
     def to_html(self, payload: Mapping[str, object]) -> str:
         body = [f"<h1>Topic Dossier: {escape(str(payload['topic']))}</h1>"]
-        for section in payload["sections"]:  # type: ignore[index]
+        bibliography = payload.get("bibliography")
+        sections = payload.get("sections")
+        if not isinstance(sections, Sequence):
+            return ""
+        for section in sections:
+            if not isinstance(section, Mapping):
+                continue
             body.append(f"<section><h2>{escape(section['title'])}</h2><ul>")
-            for entry in section["items"]:  # type: ignore[index]
+            items = section.get("items")
+            if not isinstance(items, Sequence):
+                continue
+            for entry in items:
+                if not isinstance(entry, Mapping):
+                    continue
                 summary = escape(str(entry.get("summary") or entry.get("description")))
                 citations = entry.get("citations") or []
                 citation_html = "".join(
@@ -50,11 +75,16 @@ class BriefingFormatter:
                 )
                 body.append(f"<li>{summary}<ul class='citations'>{citation_html}</ul></li>")
             body.append("</ul></section>")
-        bib_html = "".join(
-            f"<li>{escape(c['doc_id'])} ({c['citation_count']} refs)</li>"
-            for c in payload["bibliography"]  # type: ignore[index]
-        )
-        body.append(f"<section><h2>Bibliography</h2><ul>{bib_html}</ul></section>")
+
+        if isinstance(bibliography, Sequence):
+            bib_html = "".join(
+                f"<li>{escape(str(c['doc_id']))} ({c['citation_count']} refs)</li>"
+                for c in bibliography
+                if isinstance(c, Mapping)
+                and isinstance(c.get("doc_id"), str)
+                and isinstance(c.get("citation_count"), int)
+            )
+            body.append(f"<section><h2>Bibliography</h2><ul>{bib_html}</ul></section>")
         return f"<html><head><style>{self._stylesheet}</style></head><body>{''.join(body)}</body></html>"
 
     def to_pdf(self, payload: Mapping[str, object]) -> bytes:
@@ -66,7 +96,12 @@ class BriefingFormatter:
         pdf.drawString(72, y, f"Topic Dossier: {payload['topic']}")
         y -= 36
         pdf.setFont("Helvetica", 11)
-        for section in payload["sections"]:  # type: ignore[index]
+        sections = payload.get("sections")
+        if not isinstance(sections, Sequence):
+            return b""
+        for section in sections:
+            if not isinstance(section, Mapping):
+                continue
             if y < 100:
                 pdf.showPage()
                 y = height - 72
@@ -75,7 +110,10 @@ class BriefingFormatter:
             pdf.drawString(72, y, section["title"])
             y -= 24
             pdf.setFont("Helvetica", 11)
-            for entry in section["items"]:  # type: ignore[index]
+            items = section.get("items")
+            if not isinstance(items, Sequence):
+                continue
+            for entry in items:
                 summary = str(entry.get("summary") or entry.get("description"))
                 pdf.drawString(90, y, summary)
                 y -= 18

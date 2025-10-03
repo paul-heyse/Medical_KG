@@ -10,9 +10,22 @@ import typer
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 from Medical_KG.ingestion.ledger import IngestionLedger
-from Medical_KG.ingestion.registry import available_sources, get_adapter
 
 app = typer.Typer(help="Medical KG ingestion CLI")
+
+
+def _resolve_registry():  # pragma: no cover - simple import indirection
+    from Medical_KG.ingestion import registry
+
+    return registry
+
+
+def _available_sources() -> list[str]:
+    return _resolve_registry().available_sources()
+
+
+def _get_adapter(source: str, context: AdapterContext, client: AsyncHttpClient):
+    return _resolve_registry().get_adapter(source, context, client)
 
 
 def _load_batch(path: Path) -> Iterable[dict[str, Any]]:
@@ -24,20 +37,21 @@ def _load_batch(path: Path) -> Iterable[dict[str, Any]]:
 
 @app.command("ingest")
 def ingest(
-    source: str = typer.Argument(..., help="Source identifier", autocompletion=lambda: available_sources()),
+    source: str = typer.Argument(..., help="Source identifier", autocompletion=lambda: _available_sources()),
     batch: Path | None = typer.Option(None, help="Path to NDJSON with parameters"),
     auto: bool = typer.Option(False, help="Enable auto pipeline"),
     ledger_path: Path = typer.Option(Path(".ingest-ledger.jsonl"), help="Ledger storage"),
 ) -> None:
     """Run ingestion for the specified source."""
 
-    if source not in available_sources():
-        raise typer.BadParameter(f"Unknown source '{source}'. Known sources: {', '.join(available_sources())}")
+    known = _available_sources()
+    if source not in known:
+        raise typer.BadParameter(f"Unknown source '{source}'. Known sources: {', '.join(known)}")
 
     ledger = IngestionLedger(ledger_path)
     context = AdapterContext(ledger=ledger)
     client = AsyncHttpClient()
-    adapter = get_adapter(source, context, client)
+    adapter = _get_adapter(source, context, client)
 
     async def _run() -> None:
         try:

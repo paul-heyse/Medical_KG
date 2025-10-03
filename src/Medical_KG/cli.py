@@ -9,7 +9,10 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-import httpx
+try:
+    import httpx
+except Exception as exc:  # pragma: no cover - httpx required for CLI
+    raise RuntimeError("httpx is required for CLI operations") from exc
 from Medical_KG.config.manager import ConfigError, ConfigManager, ConfigValidator, mask_secrets
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.http_client import AsyncHttpClient
@@ -103,7 +106,7 @@ def _command_ingest_pdf(args: argparse.Namespace) -> int:
     downloads_dir.mkdir(parents=True, exist_ok=True)
     destination = downloads_dir / f"{args.doc_key}.pdf"
     try:
-        with httpx.Client(timeout=30.0) as client:  # type: ignore
+        with httpx.Client(timeout=30.0) as client:
             response = client.get(args.uri, follow_redirects=True)
             response.raise_for_status()
     except httpx.HTTPError as exc:

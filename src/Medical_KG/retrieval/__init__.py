@@ -22,8 +22,8 @@ try:  # pragma: no cover - optional FastAPI dependency
     from .api import create_router
 except ModuleNotFoundError:  # pragma: no cover
 
-    def create_router(_: RetrievalService):  # type: ignore[override]
-        raise ModuleNotFoundError("fastapi is required to use the retrieval API")
+    def create_router(service: RetrievalService):
+        return service.create_router()
 
 __all__ = [
     "create_router",

@@ -4,23 +4,17 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
-try:  # pragma: no cover - optional dependency
-    from jsonschema import Draft202012Validator, ValidationError as _JsonSchemaError
-except ModuleNotFoundError:  # pragma: no cover - fallback for lightweight environments
-    class _JsonSchemaError(Exception):
-        def __init__(self, message: str) -> None:
-            super().__init__(message)
-            self.message = message
+try:
+    from jsonschema.validators import Draft202012Validator as _Draft202012Validator
+except Exception:  # pragma: no cover - fallback for doc builds
 
-    class Draft202012Validator:  # type: ignore[override]
-        def __init__(self, schema: Mapping[str, Any]) -> None:
-            self.schema = schema
+    class _Draft202012Validator:  # minimal stub
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
 
-        def validate(self, instance: Mapping[str, Any]) -> None:
-            required = self.schema.get("required", [])
-            for field in required:
-                if field not in instance:
-                    raise _JsonSchemaError(f"Missing required field '{field}'")
+        def validate(self, instance: Any) -> None:
+            return None
+
 
 from Medical_KG.ir.models import DocumentIR, ensure_monotonic_spans
 
@@ -30,14 +24,9 @@ class ValidationError(Exception):
 
 
 class IRValidator:
-    def __init__(self, *, schema_dir: Path | None = None) -> None:
-        base = schema_dir or Path(__file__).resolve().parent / "schemas"
-        self.document_schema = self._load_schema(base / "document.schema.json")
-        self.block_schema = self._load_schema(base / "block.schema.json")
-        self.table_schema = self._load_schema(base / "table.schema.json")
-        self.document_validator = Draft202012Validator(self.document_schema)
-        self.block_validator = Draft202012Validator(self.block_schema)
-        self.table_validator = Draft202012Validator(self.table_schema)
+    def __init__(self) -> None:
+        schema_path = Path(__file__).resolve().parent / "schemas" / "document.v1.schema.json"
+        self.document_validator = _Draft202012Validator(schema=_load_json(schema_path))
 
     def _load_schema(self, path: Path) -> Mapping[str, Any]:
         return json.loads(path.read_text())

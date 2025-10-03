@@ -121,7 +121,7 @@ class ClinicalTrialsBuilder(IrBuilder):
                     str(outcome.get("description", "")),
                     str(outcome.get("timeFrame", "")),
                 ]
-                for outcome in outcomes  # type: ignore[arg-type]
+                for outcome in outcomes or []
             ]
             caption = "Primary Outcomes"
             start = len(document.text)

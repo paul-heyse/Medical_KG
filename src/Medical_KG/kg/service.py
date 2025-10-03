@@ -45,7 +45,7 @@ class KgWriteService:
         errors = validate_shacl(graph_payload)
         if errors:
             for error in errors:
-                validator.dead_letter.record(error, {"graph": graph_payload})
+                validator.dead_letter.record(str(error), {"graph": graph_payload, "path": getattr(error, "path", ())})
             raise KgWriteFailure(list(validator.dead_letter.entries))
 
         return KgWriteResult(written_nodes=len(nodes), written_relationships=len(relationships))

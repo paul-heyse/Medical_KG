@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from Medical_KG.ingestion import utils
 
 
@@ -7,7 +9,7 @@ def test_normalize_text_strips_and_canonicalizes() -> None:
     assert utils.normalize_text(" Café\n") == "Café"
 
 
-def test_detect_language_handles_failure(monkeypatch) -> None:
+def test_detect_language_handles_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     def _fail(_value: str) -> str:
         raise RuntimeError("boom")
 

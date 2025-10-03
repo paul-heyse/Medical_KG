@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import MutableMapping
+from datetime import datetime, timedelta, timezone
+from typing import Iterable, MutableMapping
+
+from .audit import AuditEvent, AuditLogger
 
 
 @dataclass(slots=True)
@@ -36,3 +39,79 @@ class PurgePipeline:
 
 
 __all__ = ["PurgePipeline"]
+
+
+@dataclass(slots=True)
+class RetentionRecord:
+    doc_id: str
+    created_at: datetime
+    data: MutableMapping[str, object]
+    tags: tuple[str, ...] = ()
+
+
+@dataclass(slots=True)
+class RetentionResult:
+    deleted: tuple[str, ...]
+    anonymized: tuple[str, ...]
+    skipped: tuple[str, ...]
+    dry_run_report: tuple[str, ...]
+
+
+@dataclass(slots=True)
+class RetentionPolicy:
+    name: str
+    retention_days: int
+    anonymize_fields: tuple[str, ...] = ()
+    dry_run: bool = False
+    exempt_tags: frozenset[str] = frozenset()
+    interval_minutes: int = 24 * 60
+
+    def execute(
+        self,
+        records: Iterable[RetentionRecord],
+        pipeline: PurgePipeline,
+        *,
+        now: datetime | None = None,
+        audit_logger: AuditLogger | None = None,
+    ) -> RetentionResult:
+        current = now or datetime.now(timezone.utc)
+        threshold = current - timedelta(days=self.retention_days)
+        deleted: list[str] = []
+        anonymized: list[str] = []
+        skipped: list[str] = []
+        dry_run_report: list[str] = []
+        for record in records:
+            if self.exempt_tags & set(record.tags):
+                skipped.append(record.doc_id)
+                continue
+            if record.created_at >= threshold:
+                skipped.append(record.doc_id)
+                continue
+            if self.dry_run:
+                dry_run_report.append(record.doc_id)
+                continue
+            for field in self.anonymize_fields:
+                if field in record.data and record.data[field] is not None:
+                    record.data[field] = "[anonymized]"
+                    anonymized.append(record.doc_id)
+            pipeline.purge(record.doc_id)
+            deleted.append(record.doc_id)
+            if audit_logger:
+                audit_logger.log(
+                    AuditEvent(
+                        category="retention",
+                        payload={"document": record.doc_id, "policy": self.name},
+                    )
+                )
+        return RetentionResult(
+            deleted=tuple(deleted),
+            anonymized=tuple(sorted(set(anonymized))),
+            skipped=tuple(sorted(set(skipped))),
+            dry_run_report=tuple(dry_run_report),
+        )
+
+    def next_run(self, *, after: datetime | None = None) -> datetime:
+        base = after or datetime.now(timezone.utc)
+        return base + timedelta(minutes=self.interval_minutes)
+
+__all__.extend(["RetentionPolicy", "RetentionRecord", "RetentionResult"])

@@ -2,35 +2,34 @@ from __future__ import annotations
 
 import asyncio
 import os
-import sys
-import importlib
+from typing import Any, Protocol, cast
 
-# ruff: noqa: E402
-
-# Ensure we import the site-packages version of httpx instead of the local stub package.
-httpx_spec = importlib.util.find_spec("httpx")
-if httpx_spec is None:  # pragma: no cover - tooling environment without httpx
-    raise RuntimeError("httpx must be available for API tests")
-_httpx = importlib.import_module("httpx")
-ASGITransport = getattr(_httpx, "ASGITransport")
 import pytest
+
+
+class FastAPI(Protocol):  # pragma: no cover - minimal contract for typing
+    state: Any
 
 from Medical_KG.api.auth import Authenticator
 from Medical_KG.app import create_app
 from Medical_KG.config.manager import SecretResolver
 from Medical_KG.services.chunks import Chunk
+from Medical_KG.utils.optional_dependencies import HttpxModule, get_httpx_module
+
+
+HTTPX: HttpxModule = get_httpx_module()
+ASGITransport = HTTPX.ASGITransport
 
 
 @pytest.fixture
-def app(monkeypatch: pytest.MonkeyPatch):
+def app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     monkeypatch.setenv("NCBI_API_KEY", "test-key")
     monkeypatch.setenv("PMC_API_KEY", "test-key")
     monkeypatch.setenv("CTGOV_SANDBOX_KEY", "test-key")
     monkeypatch.setenv("OPEN_FDA_SANDBOX_KEY", "test-key")
 
-    monkeypatch.setattr(
-        "Medical_KG.api.routes.build_default_authenticator",
-        lambda: Authenticator(
+    def _build_authenticator() -> Authenticator:
+        return Authenticator(
             valid_api_keys={
                 "demo-key": {
                     "retrieve:read",
@@ -39,10 +38,14 @@ def app(monkeypatch: pytest.MonkeyPatch):
                     "kg:write",
                 }
             }
-        ),
+        )
+
+    monkeypatch.setattr(
+        "Medical_KG.api.routes.build_default_authenticator",
+        _build_authenticator,
     )
 
-    def _resolve(self, key: str, default: str | None = None) -> str:
+    def _resolve(self: SecretResolver, key: str, default: str | None = None) -> str:
         if key in os.environ:
             return os.environ[key]
         if default is not None:
@@ -50,7 +53,7 @@ def app(monkeypatch: pytest.MonkeyPatch):
         return "test-secret"
 
     monkeypatch.setattr(SecretResolver, "resolve", _resolve)
-    application = create_app()
+    application = cast(FastAPI, create_app())
     router = application.state.api_router
     router.chunk_repository.add(
         Chunk(
@@ -66,15 +69,15 @@ def app(monkeypatch: pytest.MonkeyPatch):
     return application
 
 
-def test_generate_facets_and_get_chunk(app) -> None:
-    headers = {
+def test_generate_facets_and_get_chunk(app: FastAPI) -> None:
+    headers: dict[str, str] = {
         "X-API-Key": "demo-key",
         "X-License-Tier": "public",
         "traceparent": "00-{}-{}-01".format("a" * 32, "b" * 16),
     }
 
     async def run() -> None:
-        async with _httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with HTTPX.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post("/facets/generate", json={"chunk_ids": ["chunk-1"]}, headers=headers)
             assert response.status_code == 200
             facets = response.json()["facets_by_chunk"]["chunk-1"]
@@ -92,12 +95,15 @@ def test_generate_facets_and_get_chunk(app) -> None:
     asyncio.run(run())
 
 
-def test_idempotency_replay_and_conflict(app) -> None:
-    headers = {"X-API-Key": "demo-key", "Idempotency-Key": "123e4567-e89b-12d3-a456-426614174000"}
-    payload = {"chunk_ids": ["chunk-1"]}
+def test_idempotency_replay_and_conflict(app: FastAPI) -> None:
+    headers: dict[str, str] = {
+        "X-API-Key": "demo-key",
+        "Idempotency-Key": "123e4567-e89b-12d3-a456-426614174000",
+    }
+    payload: dict[str, object] = {"chunk_ids": ["chunk-1"]}
 
     async def run() -> None:
-        async with _httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with HTTPX.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             first = await client.post("/facets/generate", json=payload, headers=headers)
             assert first.status_code == 200
             replay = await client.post("/facets/generate", json=payload, headers=headers)
@@ -114,11 +120,11 @@ def test_idempotency_replay_and_conflict(app) -> None:
     asyncio.run(run())
 
 
-def test_rate_limiting_and_retrieval_headers(app) -> None:
-    headers = {"X-API-Key": "demo-key"}
+def test_rate_limiting_and_retrieval_headers(app: FastAPI) -> None:
+    headers: dict[str, str] = {"X-API-Key": "demo-key"}
 
     async def run() -> None:
-        async with _httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with HTTPX.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             await client.post("/facets/generate", json={"chunk_ids": ["chunk-1"]}, headers=headers)
             response = await client.get("/chunks/chunk-1", headers=headers)
             assert response.status_code == 200
@@ -138,9 +144,9 @@ def test_rate_limiting_and_retrieval_headers(app) -> None:
     asyncio.run(run())
 
 
-def test_kg_write_happy_path_and_validation_error(app) -> None:
-    headers = {"X-API-Key": "demo-key"}
-    valid_payload = {
+def test_kg_write_happy_path_and_validation_error(app: FastAPI) -> None:
+    headers: dict[str, str] = {"X-API-Key": "demo-key"}
+    valid_payload: dict[str, object] = {
         "nodes": [
             {
                 "id": "outcome-1",
@@ -161,7 +167,7 @@ def test_kg_write_happy_path_and_validation_error(app) -> None:
             {"type": "MEASURES", "start_id": "evidence-1", "end_id": "outcome-1"}
         ],
     }
-    invalid_payload = {
+    invalid_payload: dict[str, object] = {
         "nodes": [
             {
                 "id": "bad-evidence",
@@ -174,7 +180,7 @@ def test_kg_write_happy_path_and_validation_error(app) -> None:
     }
 
     async def run() -> None:
-        async with _httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with HTTPX.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             success = await client.post("/kg/write", json=valid_payload, headers=headers)
             assert success.status_code == 200
             body = success.json()

@@ -8,11 +8,14 @@ import sys
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-import httpx
-
-from Medical_KG.utils.optional_dependencies import get_torch_module
+from Medical_KG.utils.optional_dependencies import (
+    HttpxModule,
+    get_httpx_module,
+    get_torch_module,
+)
 
 TORCH = get_torch_module()
+HTTPX: HttpxModule = get_httpx_module()
 
 
 class GPURequirementError(RuntimeError):
@@ -66,12 +69,13 @@ class GPUValidator:
         if status_code != 200:
             raise GPURequirementError(f"vLLM health check at {url} returned status {status_code}")
 
-    def _get(self, url: str) -> int:
-        if self.http_getter:
-            return self.http_getter(url)
-        with httpx.Client(timeout=2.0) as client:
-            response = client.get(url)
-        return response.status_code
+
+def _get(self, url: str) -> int:
+    if self.http_getter:
+        return self.http_getter(url)
+    with HTTPX.Client(timeout=2.0) as client:
+        response = client.get(url)
+    return response.status_code
 
 
 def enforce_gpu_or_exit(

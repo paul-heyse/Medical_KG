@@ -1,4 +1,5 @@
 """Pydantic request/response models for the public API."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -77,3 +78,9 @@ class HealthResponse(BaseModel):
     status: str
     services: Dict[str, str]
     timestamp: datetime
+
+
+class VersionResponse(BaseModel):
+    api_version: str
+    component_versions: Dict[str, str]
+    model_versions: Dict[str, str] = Field(default_factory=dict)

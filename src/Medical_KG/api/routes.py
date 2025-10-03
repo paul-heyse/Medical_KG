@@ -1,8 +1,8 @@
 """FastAPI router implementing the public APIs."""
+
 from __future__ import annotations
 
 import hashlib
-import json
 import time
 from datetime import datetime, timezone
 from typing import Dict
@@ -16,16 +16,18 @@ from Medical_KG.api.models import (
     ExtractionResponse,
     FacetGenerationRequest,
     FacetGenerationResponse,
+    HealthResponse,
     RetrieveRequest,
     RetrieveResponse,
     RetrieveResult,
+    VersionResponse,
 )
 from Medical_KG.extraction.models import ExtractionType
 from Medical_KG.extraction.service import ClinicalExtractionService
 from Medical_KG.facets.models import AdverseEventFacet, DoseFacet, EndpointFacet, FacetModel
-from Medical_KG.facets.service import FacetService
 from Medical_KG.facets.service import Chunk as FacetChunk
-from Medical_KG.services.chunks import Chunk, ChunkRepository
+from Medical_KG.facets.service import FacetService
+from Medical_KG.services.chunks import ChunkRepository
 from Medical_KG.services.retrieval import RetrievalResult as RetrievalResultModel
 from Medical_KG.services.retrieval import RetrievalService
 
@@ -153,7 +155,9 @@ class ApiRouter(APIRouter):
                 copy.meddra_pt = None
                 copy.codes = [code for code in copy.codes if code.system.lower() not in restricted]
             elif isinstance(copy, DoseFacet) and tier == "public":
-                copy.drug_codes = [code for code in copy.drug_codes if code.system.lower() not in restricted]
+                copy.drug_codes = [
+                    code for code in copy.drug_codes if code.system.lower() not in restricted
+                ]
             sanitized.append(copy)
         return sanitized
 
@@ -182,7 +186,9 @@ class ApiRouter(APIRouter):
             for chunk_id in payload.chunk_ids:
                 chunk = self._chunks.get(chunk_id)
                 if chunk is None:
-                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown chunk {chunk_id}")
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown chunk {chunk_id}"
+                    )
                 service_chunk = FacetChunk(
                     chunk_id=chunk.chunk_id,
                     text=chunk.text,
@@ -196,9 +202,13 @@ class ApiRouter(APIRouter):
                 record = self._facets.index_payload(chunk_id)
                 if record:
                     self._retrieval.upsert(record, snippet=chunk.text)
-            response_model = FacetGenerationResponse(facets_by_chunk=facets_by_chunk, metadata=metadata)
+            response_model = FacetGenerationResponse(
+                facets_by_chunk=facets_by_chunk, metadata=metadata
+            )
             try:
-                self._idempotency.store(idempotency_key, body, response_model.model_dump_json().encode(), now=now)
+                self._idempotency.store(
+                    idempotency_key, body, response_model.model_dump_json().encode(), now=now
+                )
             except IdempotencyConflict as exc:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
             return response_model
@@ -301,20 +311,21 @@ class ApiRouter(APIRouter):
             filtered = self._filter_envelope(envelope, allowed={ExtractionType.ELIGIBILITY})
             return ExtractionResponse(envelope=filtered)
 
-        @self.get("/health", tags=["meta"])
-        async def healthcheck() -> Dict[str, str]:
-            return {
-                "status": "ok",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "services": json.dumps({"retrieval": "ready", "facets": "ready"}),
-            }
+        @self.get("/health", response_model=HealthResponse, tags=["meta"])
+        async def healthcheck() -> HealthResponse:
+            return HealthResponse(
+                status="ok",
+                services={"retrieval": "ready", "facets": "ready", "extraction": "ready"},
+                timestamp=datetime.now(timezone.utc),
+            )
 
-        @self.get("/version", tags=["meta"])
-        async def version() -> Dict[str, str]:
-            return {
-                "api_version": "v1",
-                "component_versions": json.dumps({"facets": "v1", "extract": "v1"}),
-            }
+        @self.get("/version", response_model=VersionResponse, tags=["meta"])
+        async def version() -> VersionResponse:
+            return VersionResponse(
+                api_version="v1",
+                component_versions={"facets": "v1", "extract": "v1", "retrieval": "v1"},
+                model_versions={"qwen": "Qwen3-Embedding-8B", "splade": "splade-v3"},
+            )
 
     # helper utilities -----------------------------------------------------
     def _load_chunks(self, chunk_ids: list[str]) -> list[FacetChunk]:
@@ -322,7 +333,9 @@ class ApiRouter(APIRouter):
         for chunk_id in chunk_ids:
             chunk = self._chunks.get(chunk_id)
             if chunk is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown chunk {chunk_id}")
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown chunk {chunk_id}"
+                )
             chunks.append(
                 FacetChunk(
                     chunk_id=chunk.chunk_id,

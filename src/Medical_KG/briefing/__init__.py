@@ -1,6 +1,9 @@
 """Briefing output generation utilities."""
 
-from .api import router
+try:  # pragma: no cover - optional FastAPI dependency for router wiring
+    from .api import router
+except ModuleNotFoundError:  # pragma: no cover - fallback when fastapi/pydantic absent
+    router = None  # type: ignore[assignment]
 from .models import (
     AdverseEvent,
     Citation,

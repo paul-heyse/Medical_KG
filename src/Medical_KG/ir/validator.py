@@ -11,7 +11,6 @@ from Medical_KG.ingestion.types import (
     is_pmc_payload,
     is_pubmed_payload,
 )
-
 from Medical_KG.ir.models import DocumentIR, ensure_monotonic_spans
 
 

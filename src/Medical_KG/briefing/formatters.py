@@ -12,9 +12,22 @@ from zipfile import ZipFile
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
+DEFAULT_TOPIC_TITLE = "Untitled Briefing"
+DEFAULT_SECTION_TITLE = "Untitled Section"
+DEFAULT_CITATION_ID = "Unknown"
+
 
 class BriefingFormatter:
-    """Render dossier payloads into multiple formats."""
+    """Render dossier payloads into multiple formats.
+
+    Missing or malformed fields degrade gracefully:
+
+    - ``topic`` falls back to ``"Untitled Briefing"``
+    - Section titles fall back to ``"Untitled Section"``
+    - Citation identifiers fall back to ``"Unknown"``
+    - Citation counts default to ``0``
+    - Item summaries and descriptions default to an empty string
+    """
 
     def __init__(self, *, stylesheet: str | None = None) -> None:
         self._stylesheet = stylesheet or "body { font-family: Arial, sans-serif; margin: 1.5rem; }"
@@ -23,82 +36,121 @@ class BriefingFormatter:
         return json.dumps(payload, indent=2, sort_keys=True)
 
     def to_markdown(self, payload: Mapping[str, object]) -> str:
-        lines: list[str] = [f"# Topic Dossier: {payload['topic']}"]
+        """Return a Markdown dossier, defaulting missing values to readable placeholders."""
+
+        topic = str(payload.get("topic", DEFAULT_TOPIC_TITLE))
+        lines: list[str] = [f"# Topic Dossier: {topic}"]
         sections = payload.get("sections")
-        if not isinstance(sections, Sequence):
-            return ""
+        if not isinstance(sections, Sequence) or isinstance(sections, (str, bytes)):
+            sections = []
         for section in sections:
             if not isinstance(section, Mapping):
                 continue
-            lines.append(f"\n## {section['title']}")
+            title = str(section.get("title", DEFAULT_SECTION_TITLE))
+            lines.append(f"\n## {title}")
             items = section.get("items")
-            if not isinstance(items, Sequence):
+            if not isinstance(items, Sequence) or isinstance(items, (str, bytes)):
                 continue
             for entry in items:
                 if not isinstance(entry, Mapping):
                     continue
-                summary = entry.get("summary") or entry.get("description")
+                summary_value = entry.get("summary") or entry.get("description") or ""
+                summary = str(summary_value).strip()
                 if summary:
                     lines.append(f"- {summary}")
-                    if citations := entry.get("citations"):
-                        ids = ", ".join(citation["doc_id"] for citation in citations)
-                        lines.append(indent(f"Citations: {ids}", "  "))
+                citations = entry.get("citations")
+                if not isinstance(citations, Sequence) or isinstance(citations, (str, bytes)):
+                    continue
+                citation_ids = []
+                for citation in citations:
+                    if not isinstance(citation, Mapping):
+                        continue
+                    citation_ids.append(str(citation.get("doc_id", DEFAULT_CITATION_ID)))
+                if citation_ids:
+                    lines.append(indent(f"Citations: {', '.join(citation_ids)}", "  "))
         lines.append("\n## Bibliography")
         bibliography = payload.get("bibliography")
-        if not isinstance(bibliography, Sequence):
-            return "\n".join(lines)
-        for citation in bibliography:
-            lines.append(f"- {citation['doc_id']} ({citation['citation_count']} references)")
+        if isinstance(bibliography, Sequence) and not isinstance(bibliography, (str, bytes)):
+            for citation in bibliography:
+                if not isinstance(citation, Mapping):
+                    continue
+                doc_id = str(citation.get("doc_id", DEFAULT_CITATION_ID))
+                count_value = citation.get("citation_count", 0)
+                try:
+                    count = int(count_value)
+                except (TypeError, ValueError):
+                    count = 0
+                lines.append(f"- {doc_id} ({count} references)")
         return "\n".join(lines)
 
     def to_html(self, payload: Mapping[str, object]) -> str:
-        body = [f"<h1>Topic Dossier: {escape(str(payload['topic']))}</h1>"]
+        """Return HTML output, filling in defaults for missing fields."""
+
+        topic = escape(str(payload.get("topic", DEFAULT_TOPIC_TITLE)))
+        body = [f"<h1>Topic Dossier: {topic}</h1>"]
         bibliography = payload.get("bibliography")
         sections = payload.get("sections")
-        if not isinstance(sections, Sequence):
-            return ""
+        if not isinstance(sections, Sequence) or isinstance(sections, (str, bytes)):
+            sections = []
         for section in sections:
             if not isinstance(section, Mapping):
                 continue
-            body.append(f"<section><h2>{escape(section['title'])}</h2><ul>")
+            title = escape(str(section.get("title", DEFAULT_SECTION_TITLE)))
+            body.append(f"<section><h2>{title}</h2><ul>")
             items = section.get("items")
-            if not isinstance(items, Sequence):
+            if not isinstance(items, Sequence) or isinstance(items, (str, bytes)):
                 continue
             for entry in items:
                 if not isinstance(entry, Mapping):
                     continue
-                summary = escape(str(entry.get("summary") or entry.get("description")))
-                citations = entry.get("citations") or []
-                citation_html = "".join(
-                    f"<li>[{escape(c['doc_id'])}] <span class='quote'>{escape(c['quote'])}</span></li>"
-                    for c in citations
-                )
+                summary_value = entry.get("summary") or entry.get("description") or ""
+                summary = escape(str(summary_value))
+                citations = entry.get("citations")
+                citation_html_parts: list[str] = []
+                if isinstance(citations, Sequence) and not isinstance(citations, (str, bytes)):
+                    for citation in citations:
+                        if not isinstance(citation, Mapping):
+                            continue
+                        doc_id = escape(str(citation.get("doc_id", DEFAULT_CITATION_ID)))
+                        quote = escape(str(citation.get("quote", "")))
+                        citation_html_parts.append(
+                            f"<li>[{doc_id}] <span class='quote'>{quote}</span></li>"
+                        )
+                citation_html = "".join(citation_html_parts)
                 body.append(f"<li>{summary}<ul class='citations'>{citation_html}</ul></li>")
             body.append("</ul></section>")
 
-        if isinstance(bibliography, Sequence):
-            bib_html = "".join(
-                f"<li>{escape(str(c['doc_id']))} ({c['citation_count']} refs)</li>"
-                for c in bibliography
-                if isinstance(c, Mapping)
-                and isinstance(c.get("doc_id"), str)
-                and isinstance(c.get("citation_count"), int)
-            )
+        if isinstance(bibliography, Sequence) and not isinstance(bibliography, (str, bytes)):
+            bib_items: list[str] = []
+            for citation in bibliography:
+                if not isinstance(citation, Mapping):
+                    continue
+                doc_id = escape(str(citation.get("doc_id", DEFAULT_CITATION_ID)))
+                count_value = citation.get("citation_count", 0)
+                try:
+                    count = int(count_value)
+                except (TypeError, ValueError):
+                    count = 0
+                bib_items.append(f"<li>{doc_id} ({count} refs)</li>")
+            bib_html = "".join(bib_items)
             body.append(f"<section><h2>Bibliography</h2><ul>{bib_html}</ul></section>")
         return f"<html><head><style>{self._stylesheet}</style></head><body>{''.join(body)}</body></html>"
 
     def to_pdf(self, payload: Mapping[str, object]) -> bytes:
+        """Return a PDF byte stream, skipping or defaulting missing metadata."""
+
         buffer = io.BytesIO()
         pdf = canvas.Canvas(buffer, pagesize=letter)
         width, height = letter
         y = height - 72
         pdf.setFont("Helvetica-Bold", 16)
-        pdf.drawString(72, y, f"Topic Dossier: {payload['topic']}")
+        topic = str(payload.get("topic", DEFAULT_TOPIC_TITLE))
+        pdf.drawString(72, y, f"Topic Dossier: {topic}")
         y -= 36
         pdf.setFont("Helvetica", 11)
         sections = payload.get("sections")
-        if not isinstance(sections, Sequence):
-            return b""
+        if not isinstance(sections, Sequence) or isinstance(sections, (str, bytes)):
+            sections = []
         for section in sections:
             if not isinstance(section, Mapping):
                 continue
@@ -107,14 +159,20 @@ class BriefingFormatter:
                 y = height - 72
                 pdf.setFont("Helvetica", 11)
             pdf.setFont("Helvetica-Bold", 13)
-            pdf.drawString(72, y, section["title"])
+            title = str(section.get("title", DEFAULT_SECTION_TITLE))
+            pdf.drawString(72, y, title)
             y -= 24
             pdf.setFont("Helvetica", 11)
             items = section.get("items")
-            if not isinstance(items, Sequence):
+            if not isinstance(items, Sequence) or isinstance(items, (str, bytes)):
                 continue
             for entry in items:
-                summary = str(entry.get("summary") or entry.get("description"))
+                if not isinstance(entry, Mapping):
+                    continue
+                summary_value = entry.get("summary") or entry.get("description") or ""
+                summary = str(summary_value)
+                if not summary:
+                    continue
                 pdf.drawString(90, y, summary)
                 y -= 18
                 if y < 100:
@@ -126,6 +184,8 @@ class BriefingFormatter:
         return buffer.getvalue()
 
     def to_docx(self, payload: Mapping[str, object]) -> bytes:
+        """Return a DOCX archive derived from the Markdown representation."""
+
         markdown = self.to_markdown(payload)
         return _markdown_to_docx(markdown)
 

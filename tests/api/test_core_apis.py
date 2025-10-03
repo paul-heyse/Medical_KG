@@ -6,16 +6,15 @@ from typing import Any, Protocol, cast
 
 import pytest
 
-
-class FastAPI(Protocol):  # pragma: no cover - minimal contract for typing
-    state: Any
-
-
 from Medical_KG.api.auth import Authenticator
 from Medical_KG.app import create_app
 from Medical_KG.config.manager import SecretResolver
 from Medical_KG.services.chunks import Chunk
 from Medical_KG.utils.optional_dependencies import HttpxModule, get_httpx_module
+
+
+class FastAPI(Protocol):  # pragma: no cover - minimal contract for typing
+    state: Any
 
 HTTPX: HttpxModule = get_httpx_module()
 ASGITransport = HTTPX.ASGITransport

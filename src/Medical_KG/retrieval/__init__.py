@@ -22,8 +22,6 @@ from .ontology import ConceptCatalogClient, OntologyExpander, OntologyTerm
 from .service import RetrievalService, RetrieverConfig
 
 if TYPE_CHECKING:
-    from fastapi import APIRouter
-
     from .api import create_router
 else:  # pragma: no cover - optional FastAPI dependency
     try:

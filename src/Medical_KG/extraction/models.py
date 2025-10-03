@@ -6,8 +6,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated, Literal
 
-from Medical_KG.facets.models import Code, EvidenceSpan
 from pydantic import BaseModel, Field, model_validator
+
+from Medical_KG.facets.models import Code, EvidenceSpan
 
 
 class ExtractionType(str, Enum):

@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """High-level Cypher query builders for the CDKO-Med graph."""
+
+from __future__ import annotations
 
 import textwrap
 from dataclasses import dataclass

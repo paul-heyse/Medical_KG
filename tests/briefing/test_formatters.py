@@ -3,13 +3,13 @@ from __future__ import annotations
 import io
 import json
 import zipfile
-from io import BytesIO
 
 import pytest
-from pdfminer.high_level import extract_text
 
 from Medical_KG.briefing.formatters import BriefingFormatter
 
+_pdfminer = pytest.importorskip("pdfminer.high_level")
+extract_text = _pdfminer.extract_text
 
 @pytest.fixture
 def formatter() -> BriefingFormatter:
@@ -77,7 +77,7 @@ def test_to_pdf_creates_textual_canvas(
 
     # Verify key PDF markers rather than raw text contents
     assert pdf_bytes.startswith(b"%PDF-")
-    extracted = extract_text(BytesIO(pdf_bytes))
+    extracted = extract_text(io.BytesIO(pdf_bytes))
     assert "Topic Dossier: Lung Cancer" in extracted
 
 
@@ -93,3 +93,65 @@ def test_to_docx_converts_markdown(
 
     assert "Response rate improved" in xml_payload
     assert "Topic Dossier: Lung Cancer" in xml_payload
+
+
+@pytest.fixture
+def partial_payload() -> dict[str, object]:
+    return {
+        "sections": [
+            {
+                "items": [
+                    {
+                        "description": "Observation",  # summary missing
+                        "citations": [
+                            {"quote": "Lines available without identifier"},
+                        ],
+                    },
+                    {
+                        "summary": "Secondary insight",
+                        "citations": [
+                            {"doc_id": None, "quote": "Missing doc id"},
+                        ],
+                    },
+                ]
+            }
+        ],
+        "bibliography": [
+            {"citation_count": "3"},
+            {"doc_id": "doc-2"},
+        ],
+    }
+
+
+def test_to_markdown_handles_partial_payload(
+    formatter: BriefingFormatter, partial_payload: dict[str, object]
+) -> None:
+    markdown_output = formatter.to_markdown(partial_payload)
+
+    assert "# Topic Dossier: Untitled Briefing" in markdown_output
+    assert "## Untitled Section" in markdown_output
+    assert "- Observation" in markdown_output
+    assert "Citations: Unknown" in markdown_output
+    assert "- Unknown (3 references)" in markdown_output
+
+
+def test_to_html_handles_partial_payload(
+    formatter: BriefingFormatter, partial_payload: dict[str, object]
+) -> None:
+    html_output = formatter.to_html(partial_payload)
+
+    assert "Topic Dossier: Untitled Briefing" in html_output
+    assert "<h2>Untitled Section</h2>" in html_output
+    assert "[Unknown]" in html_output
+    assert "(3 refs)" in html_output
+
+
+def test_to_pdf_handles_partial_payload(
+    formatter: BriefingFormatter, partial_payload: dict[str, object]
+) -> None:
+    pdf_bytes = formatter.to_pdf(partial_payload)
+
+    assert pdf_bytes.startswith(b"%PDF-")
+    text = extract_text(io.BytesIO(pdf_bytes))
+    assert "Topic Dossier: Untitled Briefing" in text
+    assert "Untitled Section" in text

@@ -22,6 +22,7 @@ Central index for Medical KG runbooks, contacts, and cadences.
 | Incident response & comms         | `ops/runbooks/05-incident-response.md`       |
 | Catalog refresh / license checks  | `ops/runbooks/06-catalog-refresh.md`         |
 | Datastore failover (Neo4j/OS)     | `ops/runbooks/07-datastore-failover.md`      |
+| Briefing generation gaps          | `ops/runbooks/08-briefing-troubleshooting.md` |
 
 ## Escalation Matrix
 
@@ -46,3 +47,8 @@ Central index for Medical KG runbooks, contacts, and cadences.
 - Quarterly DR drill – execute `ops/release/pipeline.md` on staging + restore from backup.
 
 Refer to `docs/continuous_improvement.md` for KPIs and retrospection process.
+
+## Briefing Exports
+
+- See `docs/briefing.md` for formatter defaults and handling of partial payloads.
+- Escalate persistent placeholder values using `ops/runbooks/08-briefing-troubleshooting.md`.

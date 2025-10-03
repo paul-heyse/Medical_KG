@@ -6,7 +6,6 @@ from dataclasses import asdict
 from typing import Any, Mapping, Sequence
 
 from fastapi import APIRouter
-
 from pydantic import BaseModel, Field, field_validator
 
 from .models import RetrievalRequest, RetrieverTiming

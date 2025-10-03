@@ -11,7 +11,10 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from trace import Trace
 from typing import Any, Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence, cast
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -209,18 +212,17 @@ if "httpx" not in sys.modules:
 
         sys.modules["httpx"] = httpx_module
 
-from trace import Trace
 
-import pytest
-
-from Medical_KG.ingestion.ledger import LedgerEntry
-from Medical_KG.retrieval.models import (
+from Medical_KG.ingestion.ledger import LedgerEntry  # noqa: E402
+from Medical_KG.ingestion.models import Document  # noqa: E402
+from Medical_KG.retrieval.models import (  # noqa: E402
     RetrievalRequest,
     RetrievalResponse,
     RetrievalResult,
     RetrieverScores,
 )
-from Medical_KG.retrieval.types import JSONValue, SearchHit, VectorHit
+from Medical_KG.retrieval.types import JSONValue, SearchHit, VectorHit  # noqa: E402
+from Medical_KG.utils.optional_dependencies import get_httpx_module  # noqa: E402
 
 
 @pytest.fixture
@@ -310,8 +312,6 @@ def pytest_sessionfinish(
         total_covered += len(covered)
         if uncovered:
             missing[rel_path] = uncovered
-
-    overall = total_covered / total_statements if total_statements else 1.0
 
     report_items = {path: lines for path, lines in missing.items() if "ingestion" in str(path)}
 
@@ -719,4 +719,3 @@ def expected_retrieval_response() -> RetrievalResponse:
     )
 
 
-from Medical_KG.utils.optional_dependencies import get_httpx_module

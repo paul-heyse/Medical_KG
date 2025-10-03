@@ -4,6 +4,9 @@ import math
 
 import pytest
 
+pytest.importorskip("fastapi")
+pytest.importorskip("pydantic")
+
 from Medical_KG.briefing import synthesis
 from Medical_KG.briefing.models import (
     AdverseEvent,

@@ -20,12 +20,13 @@ from __future__ import annotations
 
 import random
 
-from typing import Callable
+from Medical_KG.compat import load_locust
 
-try:
-    from locust import HttpUser, between, task
-except Exception as exc:  # pragma: no cover - locust is optional during tests
-    raise RuntimeError("locust must be installed to run load tests") from exc
+locust_primitives = load_locust()
+if locust_primitives is None:  # pragma: no cover - exercised only without locust
+    raise RuntimeError("locust must be installed to run load tests")
+
+HttpUser, between, task = locust_primitives
 
 
 class MedicalKGUser(HttpUser):

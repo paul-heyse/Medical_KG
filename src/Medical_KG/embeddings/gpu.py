@@ -2,20 +2,13 @@
 
 from __future__ import annotations
 
-import importlib.util
 import os
 import subprocess
 import sys
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-import httpx
-
-torch_spec = importlib.util.find_spec("torch")
-if torch_spec is not None:
-    torch = importlib.import_module("torch")
-else:  # pragma: no cover - fallback when torch unavailable
-    torch = None
+from Medical_KG.compat import create_client, load_torch
 
 
 class GPURequirementError(RuntimeError):
@@ -36,7 +29,12 @@ class GPUValidator:
     def validate(self) -> None:
         if not self.should_require_gpu():
             return
-        if torch is None or not bool(getattr(torch, "cuda", None)) or not torch.cuda.is_available():
+        torch_module = load_torch()
+        if (
+            torch_module is None
+            or not bool(getattr(torch_module, "cuda", None))
+            or not torch_module.cuda.is_available()
+        ):
             raise GPURequirementError(
                 "GPU required for embeddings but torch.cuda.is_available() returned False"
             )
@@ -70,12 +68,15 @@ class GPUValidator:
             raise GPURequirementError(f"vLLM health check at {url} returned status {status_code}")
 
 
-def _get(self, url: str) -> int:
-    if self.http_getter:
-        return self.http_getter(url)
-    with httpx.Client(timeout=2.0) as client:
-        response = client.get(url)
-    return response.status_code
+    def _get(self, url: str) -> int:
+        if self.http_getter:
+            return self.http_getter(url)
+        client = create_client(timeout=2.0)
+        try:
+            response = client.get(url)
+            return response.status_code
+        finally:
+            client.close()
 
 
 def enforce_gpu_or_exit(

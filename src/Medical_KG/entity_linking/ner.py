@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence
+from typing import Sequence
+
+from Medical_KG.compat import PipelineProtocol, load_pipeline
 
 
 @dataclass(slots=True)
@@ -15,16 +17,20 @@ class Mention:
 
 class NerPipeline:
     def __init__(self, model: str = "en_core_sci_sm") -> None:
-        try:  # pragma: no cover - optional heavy dependency
-            import spacy
-        except ModuleNotFoundError:  # pragma: no cover - tests may run without spaCy
-            spacy = None
+        try:
+            self._nlp: PipelineProtocol | None = load_pipeline(model)
+        except Exception:  # pragma: no cover - defensive
+            self._nlp = None
 
     def __call__(self, text: str) -> Sequence[Mention]:
-        if self._nlp is None:
+        pipeline = self._nlp
+        if pipeline is None:
             return []
-        doc = self._nlp(text)
-        return [Mention(ent.text, ent.start_char, ent.end_char, ent.label_) for ent in doc.ents]
+        doc = pipeline(text)
+        return [
+            Mention(ent.text, ent.start_char, ent.end_char, ent.label_)
+            for ent in doc.ents
+        ]
 
 
 __all__ = ["Mention", "NerPipeline"]

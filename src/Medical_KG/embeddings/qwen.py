@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 from typing import Callable, List, Sequence
 
-import httpx
+from Medical_KG.compat import ClientProtocol, create_client
 
 
 @dataclass(slots=True)
@@ -23,7 +23,7 @@ class QwenEmbeddingClient:
     api_url: str | None = None
     timeout: float = 10.0
     max_retries: int = 3
-    http_client_factory: Callable[[], httpx.Client] | None = None
+    http_client_factory: Callable[[], ClientProtocol] | None = None
     sleep: Callable[[float], None] = time.sleep
 
     def embed(self, texts: Sequence[str]) -> List[List[float]]:
@@ -53,7 +53,7 @@ class QwenEmbeddingClient:
                 client = (
                     self.http_client_factory()
                     if self.http_client_factory
-                    else httpx.Client(timeout=self.timeout)
+                    else create_client(timeout=self.timeout)
                 )
                 try:
                     response = client.post(self.api_url, json=payload)

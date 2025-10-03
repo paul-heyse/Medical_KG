@@ -10,36 +10,18 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Mapping, MutableMapping, Optional
-from typing import TYPE_CHECKING
+from typing import Any, Dict, Mapping, MutableMapping, Optional, cast
 
 import yaml
 
+from Medical_KG.compat.prometheus import Gauge, GaugeLike
 from .models import Config, PolicyDocument, validate_constraints
 
-if TYPE_CHECKING:
-    from prometheus_client import Gauge
-else:  # pragma: no cover - optional dependency
-    try:
-        from prometheus_client import Gauge
-    except ModuleNotFoundError:
 
-        class Gauge:
-            def __init__(self, *_: Any, **__: Any) -> None:
-                pass
-
-            def labels(self, **_: Any) -> "Gauge":
-                return self
-
-            def set(self, *_: Any, **__: Any) -> None:
-                return None
-
-            def clear(self) -> None:
-                return None
-
-
-CONFIG_INFO = Gauge("config_info", "Current configuration metadata", ["version", "hash"])
-FEATURE_FLAG = Gauge("feature_flag", "Feature flag states", ["name"])
+CONFIG_INFO: GaugeLike = Gauge(
+    "config_info", "Current configuration metadata", ["version", "hash"]
+)
+FEATURE_FLAG: GaugeLike = Gauge("feature_flag", "Feature flag states", ["name"])
 
 ENV_SIMPLE_PATHS: Mapping[str, str] = {
     "VLLM_API_BASE": "embeddings.vllm_api_base",
@@ -191,7 +173,8 @@ class ConfigManager:
         secret_resolver: Optional[SecretResolver] = None,
     ) -> None:
         self.base_path = base_path or Path(__file__).resolve().parent
-        self.env = (env or os.getenv("CONFIG_ENV", "dev")).lower()
+        env_value = env if env is not None else os.getenv("CONFIG_ENV", "dev")
+        self.env = env_value.lower()
         self.secret_resolver = secret_resolver or SecretResolver()
         self.validator = ConfigValidator(self.base_path / "config.schema.json")
         self.policy = self._load_policy()
@@ -311,7 +294,7 @@ class ConfigManager:
             if not isinstance(next_value, MutableMapping):
                 next_value = {}
                 cursor[part] = next_value
-            cursor = next_value
+            cursor = cast(MutableMapping[str, Any], next_value)
         cursor[parts[-1]] = value
 
     def _resolve_placeholders(self, payload: Mapping[str, Any]) -> Dict[str, Any]:

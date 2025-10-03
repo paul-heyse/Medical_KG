@@ -4,32 +4,19 @@ import asyncio
 import random
 from collections import deque
 from contextlib import asynccontextmanager
+import importlib.util
 from dataclasses import dataclass
 from time import time
 from typing import Any, AsyncIterator, Dict, Mapping, MutableMapping
 from urllib.parse import urlparse
 
-import httpx
-
-try:  # pragma: no cover - optional dependency
-    from prometheus_client import Counter, Histogram
-except ModuleNotFoundError:  # pragma: no cover - fallback in tests
-
-    class _NoopMetric:
-        def labels(self, *args: Any, **kwargs: Any) -> "_NoopMetric":
-            return self
-
-        def inc(self, *_args: Any, **_kwargs: Any) -> None:  # pragma: no cover - noop
-            return None
-
-        def observe(self, *_args: Any, **_kwargs: Any) -> None:  # pragma: no cover - noop
-            return None
-
-    def Counter(*_args: Any, **_kwargs: Any) -> _NoopMetric:
-        return _NoopMetric()
-
-    def Histogram(*_args: Any, **_kwargs: Any) -> _NoopMetric:
-        return _NoopMetric()
+from Medical_KG.compat.httpx import (
+    AsyncClientProtocol,
+    HTTPError,
+    ResponseProtocol,
+    create_async_client,
+)
+from Medical_KG.compat.prometheus import Counter, Histogram
 
 
 HTTP_REQUESTS = Counter(
@@ -90,13 +77,10 @@ class AsyncHttpClient:
         default_rate: RateLimit | None = None,
         headers: MutableMapping[str, str] | None = None,
     ) -> None:
-        try:
-            import h2  # noqa: F401
-
-            http2_enabled = True
-        except ImportError:  # pragma: no cover - optional dependency
-            http2_enabled = False
-        self._client = httpx.AsyncClient(timeout=timeout, headers=headers, http2=http2_enabled)
+        http2_enabled = importlib.util.find_spec("h2") is not None
+        self._client: AsyncClientProtocol = create_async_client(
+            timeout=timeout, headers=headers, http2=http2_enabled
+        )
         self._limits = limits or {}
         self._default_rate = default_rate or RateLimit(rate=5, per=1.0)
         self._limiters: Dict[str, _SimpleLimiter] = {}
@@ -111,7 +95,9 @@ class AsyncHttpClient:
             self._limiters[host] = _SimpleLimiter(limit.rate, limit.per)
         return self._limiters[host]
 
-    async def _execute(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+    async def _execute(
+        self, method: str, url: str, **kwargs: Any
+    ) -> ResponseProtocol:
         parsed = urlparse(url)
         limiter = self._get_limiter(parsed.netloc)
 
@@ -126,7 +112,7 @@ class AsyncHttpClient:
                     HTTP_LATENCY.observe(time() - start)
                     response.raise_for_status()
                     return response
-                except httpx.HTTPError as exc:  # pragma: no cover - exercised via tests
+                except HTTPError as exc:  # pragma: no cover - exercised via tests
                     status = getattr(getattr(exc, "response", None), "status_code", None)
                     if status not in {429, 502, 503, 504}:
                         raise
@@ -145,7 +131,7 @@ class AsyncHttpClient:
         *,
         params: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
-    ) -> httpx.Response:
+    ) -> ResponseProtocol:
         return await self._execute("GET", url, params=params, headers=headers)
 
     async def post(
@@ -155,11 +141,13 @@ class AsyncHttpClient:
         data: Any | None = None,
         json: Any | None = None,
         headers: Mapping[str, str] | None = None,
-    ) -> httpx.Response:
+    ) -> ResponseProtocol:
         return await self._execute("POST", url, data=data, json=json, headers=headers)
 
     @asynccontextmanager
-    async def stream(self, method: str, url: str, **kwargs: Any) -> AsyncIterator[httpx.Response]:
+    async def stream(
+        self, method: str, url: str, **kwargs: Any
+    ) -> AsyncIterator[ResponseProtocol]:
         parsed = urlparse(url)
         limiter = self._get_limiter(parsed.netloc)
         async with limiter:

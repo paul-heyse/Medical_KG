@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion.models import Document, IngestionResult
@@ -15,13 +15,16 @@ class AdapterContext:
     ledger: IngestionLedger
 
 
-class BaseAdapter(ABC):
+RawRecordT = TypeVar("RawRecordT")
+
+
+class BaseAdapter(Generic[RawRecordT], ABC):
     source: str
 
     def __init__(self, context: AdapterContext) -> None:
         self.context = context
 
-    async def run(self, *args: Any, **kwargs: Any) -> Iterable[IngestionResult]:
+    async def run(self, *args: object, **kwargs: object) -> Iterable[IngestionResult]:
         results: list[IngestionResult] = []
         async for raw_record in self.fetch(*args, **kwargs):
             document: Document | None = None
@@ -46,11 +49,11 @@ class BaseAdapter(ABC):
         return results
 
     @abstractmethod
-    async def fetch(self, *args: Any, **kwargs: Any) -> AsyncIterator[Any]:
+    async def fetch(self, *args: object, **kwargs: object) -> AsyncIterator[RawRecordT]:
         """Yield raw records from the upstream API."""
 
     @abstractmethod
-    def parse(self, raw: Any) -> Document:
+    def parse(self, raw: RawRecordT) -> Document:
         """Transform a raw record into a :class:`Document`."""
 
     @abstractmethod

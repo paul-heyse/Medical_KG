@@ -1,9 +1,17 @@
+"""Clinical ingestion adapters limit runtime validation to HTTP boundaries.
+
+The fetch methods document the expected API response shapes while the parse
+methods rely on the TypedDict payload contracts introduced in the typed payload
+refactor. Redundant calls to ``ensure_json_*`` inside parse flows have been
+removed so we only coerce external JSON at the network boundary.
+"""
+
 from __future__ import annotations
 
 import json
 import re
 import xml.etree.ElementTree as ET
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Iterable, Sequence as SequenceABC
 from typing import Mapping, MutableMapping, Sequence
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
@@ -26,12 +34,38 @@ from Medical_KG.ingestion.utils import (
     canonical_json,
     ensure_json_mapping,
     ensure_json_sequence,
-    ensure_json_value,
     normalize_text,
 )
 
 _CT_NCT_RE = re.compile(r"^NCT\d{8}$")
 _GTIN14_RE = re.compile(r"^\d{14}$")
+
+
+def _coerce_mapping(value: JSONValue | None) -> MutableMapping[str, JSONValue]:
+    """Return a mutable mapping when the input already has mapping shape."""
+
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _iter_json_mappings(value: JSONValue | None) -> Iterable[JSONMapping]:
+    """Yield child mappings when the upstream JSON value is a sequence."""
+
+    if isinstance(value, SequenceABC) and not isinstance(value, (str, bytes, bytearray)):
+        for item in value:
+            if isinstance(item, Mapping):
+                yield dict(item)
+
+
+def _coerce_json_value(value: object) -> JSONValue:
+    """Coerce loosely typed JSON payload values without runtime validation."""
+
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, Mapping):
+        return dict(value)
+    if isinstance(value, SequenceABC) and not isinstance(value, (str, bytes, bytearray)):
+        return list(value)
+    return str(value)
 
 
 class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
@@ -62,25 +96,36 @@ class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
             if page_token:
                 params["pageToken"] = page_token
             payload = await self.fetch_json(f"{self.api_base}/studies", params=params)
-            payload_map = ensure_json_mapping(payload, context="clinicaltrials response")
+            payload_map = ensure_json_mapping(
+                payload,
+                context="clinicaltrials response",
+            )
+            # ClinicalTrials.gov v2 (2024-01 schema) documents a JSON object
+            # envelope with a ``studies`` array.
             studies_value = payload_map.get("studies", [])
-            for study_value in ensure_json_sequence(studies_value, context="clinicaltrials studies"):
-                study_map = ensure_json_mapping(study_value, context="clinicaltrials study")
-                protocol_section = ensure_json_mapping(
-                    study_map.get("protocolSection"),
-                    context="clinicaltrials protocolSection",
+            # The v2 pagination response documents ``studies`` as an array of
+            # study objects; keep boundary validation in case the API shape
+            # changes.
+            for study_value in ensure_json_sequence(
+                studies_value,
+                context="clinicaltrials studies",
+            ):
+                # Individual study entries remain JSON objects in the v2
+                # pagination response.
+                study_map = ensure_json_mapping(
+                    study_value,
+                    context="clinicaltrials study",
                 )
+                protocol_section_value = study_map.get("protocolSection")
+                if not isinstance(protocol_section_value, Mapping):
+                    continue
+                protocol_section = dict(protocol_section_value)
                 study_payload: ClinicalTrialsStudyPayload = {
                     "protocolSection": dict(protocol_section),
                 }
                 derived_section_value = study_map.get("derivedSection")
                 if isinstance(derived_section_value, Mapping):
-                    study_payload["derivedSection"] = dict(
-                        ensure_json_mapping(
-                            derived_section_value,
-                            context="clinicaltrials derivedSection",
-                        )
-                    )
+                    study_payload["derivedSection"] = dict(derived_section_value)
                 yield study_payload
             next_token_value = payload_map.get("nextPageToken")
             page_token = next_token_value if isinstance(next_token_value, str) and next_token_value else None
@@ -88,72 +133,42 @@ class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
                 break
 
     def parse(self, raw: ClinicalTrialsStudyPayload) -> Document:
-        protocol = ensure_json_mapping(
-            raw.get("protocolSection"),
-            context="clinicaltrials protocol",
-        )
-        identification = ensure_json_mapping(
-            protocol.get("identificationModule", {}),
-            context="clinicaltrials identification",
-        )
+        protocol = _coerce_mapping(raw.get("protocolSection"))
+        identification = _coerce_mapping(protocol.get("identificationModule"))
         nct_id = str(identification.get("nctId", ""))
-        title = normalize_text(str(identification.get("briefTitle", "")))
+        title_value = identification.get("briefTitle")
+        title = normalize_text(title_value) if isinstance(title_value, str) else ""
 
-        status_module = ensure_json_mapping(
-            protocol.get("statusModule", {}),
-            context="clinicaltrials status module",
-        )
+        status_module = _coerce_mapping(protocol.get("statusModule"))
         status_value = status_module.get("overallStatus")
         status = str(status_value) if isinstance(status_value, str) else None
 
-        description_module = ensure_json_mapping(
-            protocol.get("descriptionModule", {}),
-            context="clinicaltrials description module",
-        )
-        summary_value = description_module.get("briefSummary", "")
-        summary = normalize_text(str(summary_value)) if isinstance(summary_value, str) else ""
+        description_module = _coerce_mapping(protocol.get("descriptionModule"))
+        summary_value = description_module.get("briefSummary")
+        summary = normalize_text(summary_value) if isinstance(summary_value, str) else ""
 
-        derived_section_value = raw.get("derivedSection")
-        derived_section = (
-            ensure_json_mapping(derived_section_value, context="clinicaltrials derived section")
-            if isinstance(derived_section_value, Mapping)
-            else {}
-        )
-        misc_info = ensure_json_mapping(
-            derived_section.get("miscInfoModule", {}),
-            context="clinicaltrials misc info",
-        )
-        version = str(misc_info.get("version", "unknown"))
+        derived_section = _coerce_mapping(raw.get("derivedSection"))
+        misc_info = _coerce_mapping(derived_section.get("miscInfoModule"))
+        version_value = misc_info.get("version")
+        version = str(version_value) if version_value else "unknown"
 
-        sponsor_module = ensure_json_mapping(
-            protocol.get("sponsorCollaboratorsModule", {}),
-            context="clinicaltrials sponsor module",
-        )
-        lead_sponsor_mapping = ensure_json_mapping(
-            sponsor_module.get("leadSponsor", {}),
-            context="clinicaltrials lead sponsor",
-        )
+        sponsor_module = _coerce_mapping(protocol.get("sponsorCollaboratorsModule"))
+        lead_sponsor_mapping = _coerce_mapping(sponsor_module.get("leadSponsor"))
         lead_sponsor_name_value = lead_sponsor_mapping.get("name")
-        lead_sponsor_name = str(lead_sponsor_name_value) if isinstance(lead_sponsor_name_value, str) else None
+        lead_sponsor_name = lead_sponsor_name_value if isinstance(lead_sponsor_name_value, str) else None
 
-        design_module = ensure_json_mapping(
-            protocol.get("designModule", {}),
-            context="clinicaltrials design module",
-        )
+        design_module = _coerce_mapping(protocol.get("designModule"))
         phases_value = design_module.get("phases")
         phases: list[str] = []
-        if phases_value is not None:
-            for phase in ensure_json_sequence(phases_value, context="clinicaltrials phases"):
+        if isinstance(phases_value, SequenceABC) and not isinstance(phases_value, (str, bytes, bytearray)):
+            for phase in phases_value:
                 if isinstance(phase, str):
                     phases.append(phase)
-        phase_text = ", ".join(phases)
+        phase_text = ", ".join(phases) or None
         study_type_value = design_module.get("studyType")
-        study_type = str(study_type_value) if isinstance(study_type_value, str) else None
+        study_type = study_type_value if isinstance(study_type_value, str) else None
 
-        enrollment_info = ensure_json_mapping(
-            design_module.get("enrollmentInfo", {}),
-            context="clinicaltrials enrollment",
-        )
+        enrollment_info = _coerce_mapping(design_module.get("enrollmentInfo"))
         enrollment_raw = enrollment_info.get("count")
         enrollment: int | str | None
         if isinstance(enrollment_raw, int):
@@ -163,58 +178,32 @@ class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
         else:
             enrollment = None
 
-        start_date_struct = ensure_json_mapping(
-            status_module.get("startDateStruct", {}),
-            context="clinicaltrials start date",
-        )
+        start_date_struct = _coerce_mapping(status_module.get("startDateStruct"))
         start_date_value = start_date_struct.get("date")
-        start_date = str(start_date_value) if isinstance(start_date_value, str) else None
+        start_date = start_date_value if isinstance(start_date_value, str) else None
 
-        completion_date_struct = ensure_json_mapping(
-            status_module.get("completionDateStruct", {}),
-            context="clinicaltrials completion date",
-        )
+        completion_date_struct = _coerce_mapping(status_module.get("completionDateStruct"))
         completion_date_value = completion_date_struct.get("date")
-        completion_date = str(completion_date_value) if isinstance(completion_date_value, str) else None
+        completion_date = completion_date_value if isinstance(completion_date_value, str) else None
 
-        arms_module = ensure_json_mapping(
-            protocol.get("armsInterventionsModule", {}),
-            context="clinicaltrials arms module",
-        )
-        arms_list: list[JSONMapping] = []
-        arms_value = arms_module.get("arms")
-        if arms_value is not None:
-            for arm in ensure_json_sequence(arms_value, context="clinicaltrials arms"):
-                arms_list.append(ensure_json_mapping(arm, context="clinicaltrials arm"))
+        arms_module = _coerce_mapping(protocol.get("armsInterventionsModule"))
+        arms_list = list(_iter_json_mappings(arms_module.get("arms")))
 
-        eligibility_module = ensure_json_mapping(
-            protocol.get("eligibilityModule", {}),
-            context="clinicaltrials eligibility module",
-        )
-        eligibility_value = ensure_json_value(
-            eligibility_module.get("eligibilityCriteria"),
-            context="clinicaltrials eligibility",
-        )
+        eligibility_module = _coerce_mapping(protocol.get("eligibilityModule"))
+        eligibility = _coerce_json_value(eligibility_module.get("eligibilityCriteria"))
 
-        outcomes_module = ensure_json_mapping(
-            protocol.get("outcomesModule", {}),
-            context="clinicaltrials outcomes module",
-        )
-        outcomes_value = outcomes_module.get("primaryOutcomes")
-        outcomes_list: list[JSONMapping] = []
-        if outcomes_value is not None:
-            for outcome in ensure_json_sequence(outcomes_value, context="clinicaltrials outcomes"):
-                outcomes_list.append(ensure_json_mapping(outcome, context="clinicaltrials outcome"))
-        outcomes_payload: Sequence[JSONMapping] | None = outcomes_list if outcomes_list else None
+        outcomes_module = _coerce_mapping(protocol.get("outcomesModule"))
+        outcomes_list = list(_iter_json_mappings(outcomes_module.get("primaryOutcomes")))
+        outcomes_payload: Sequence[JSONMapping] | None = outcomes_list or None
 
         payload: ClinicalDocumentPayload = {
             "nct_id": nct_id,
             "title": title,
             "status": status,
-            "phase": phase_text or None,
+            "phase": phase_text,
             "study_type": study_type,
             "arms": arms_list,
-            "eligibility": eligibility_value,
+            "eligibility": eligibility,
             "version": version,
             "lead_sponsor": lead_sponsor_name,
             "enrollment": enrollment,
@@ -296,10 +285,23 @@ class OpenFdaAdapter(HttpAdapter[JSONMapping]):
         if self.api_key:
             params["api_key"] = self.api_key
         payload = await self.fetch_json(f"https://api.fda.gov/{resource}.json", params=params)
-        payload_map = ensure_json_mapping(payload, context="openfda response")
+        payload_map = ensure_json_mapping(
+            payload,
+            context="openfda response",
+        )
+        # openFDA device/drug APIs (v1, 2023-11 docs) return a JSON object with
+        # a ``results`` array payload.
         results_value = payload_map.get("results", [])
-        for record_value in ensure_json_sequence(results_value, context="openfda results"):
-            record_map = ensure_json_mapping(record_value, context="openfda record")
+        for record_value in ensure_json_sequence(
+            results_value,
+            context="openfda results",
+        ):
+            # Each ``results`` entry is documented as a JSON object containing a
+            # device or adverse-event record.
+            record_map = ensure_json_mapping(
+                record_value,
+                context="openfda record",
+            )
             yield dict(record_map)
 
     def parse(self, raw: JSONMapping) -> Document:
@@ -314,10 +316,7 @@ class OpenFdaAdapter(HttpAdapter[JSONMapping]):
         identifier = str(identifier_value)
         version_value = raw.get("receivedate") or raw.get("version_number") or raw.get("last_updated")
         version = str(version_value) if version_value else "unknown"
-        record_payload: dict[str, JSONValue] = {
-            key: ensure_json_value(value, context="openfda record field")
-            for key, value in raw.items()
-        }
+        record_payload: dict[str, JSONValue] = dict(raw)
         payload: OpenFdaDocumentPayload = {
             "identifier": identifier,
             "version": version,
@@ -423,10 +422,15 @@ class RxNormAdapter(HttpAdapter[JSONMapping]):
                 yield record
             return
         payload = await self.fetch_json(f"https://rxnav.nlm.nih.gov/REST/rxcui/{rxcui}/properties.json")
-        yield ensure_json_mapping(payload, context="rxnorm response")
+        yield ensure_json_mapping(
+            payload,
+            context="rxnorm response",
+        )
+        # RxNav v1.0 responses wrap the drug properties inside a JSON object with
+        # a ``properties`` payload section.
 
     def parse(self, raw: JSONMapping) -> Document:
-        props = ensure_json_mapping(raw.get("properties", {}), context="rxnorm properties")
+        props = _coerce_mapping(raw.get("properties"))
         rxcui_value = props.get("rxcui")
         if rxcui_value is None:
             raise ValueError("RxNorm payload missing rxcui")
@@ -496,10 +500,15 @@ class AccessGudidAdapter(HttpAdapter[JSONMapping]):
                 yield record
             return
         payload = await self.fetch_json("https://accessgudid.nlm.nih.gov/devices/lookup.json", params={"udi": udi_di})
-        yield ensure_json_mapping(payload, context="accessgudid response")
+        yield ensure_json_mapping(
+            payload,
+            context="accessgudid response",
+        )
+        # AccessGUDID device lookup (2019 API guide) returns a JSON envelope with
+        # an optional ``udi`` object containing device metadata.
 
     def parse(self, raw: JSONMapping) -> Document:
-        udi_mapping = ensure_json_mapping(raw.get("udi", {}), context="accessgudid udi")
+        udi_mapping = _coerce_mapping(raw.get("udi"))
         device_identifier_value = udi_mapping.get("deviceIdentifier") or raw.get("udi_di")
         if device_identifier_value is None:
             raise ValueError("AccessGUDID record missing device identifier")

@@ -42,19 +42,36 @@ def canonical_json(data: Mapping[str, object]) -> bytes:
 
 
 def ensure_json_mapping(value: JSONValue, *, context: str) -> JSONMapping:
+    """Validate external JSON payloads that should be objects.
+
+    These helpers are intended for HTTP boundary parsing where upstream APIs may
+    drift; internal adapter code should rely on TypedDict guarantees instead of
+    re-validating structures.
+    """
+
     if not isinstance(value, Mapping):
         raise TypeError(f"{context} expected a mapping, received {type(value).__name__}")
     return value
 
 
 def ensure_json_sequence(value: JSONValue, *, context: str) -> JSONSequence:
+    """Validate external JSON payloads that should be arrays or sequences.
+
+    Restrict usage to adapter fetch methods so downstream code can assume TypedDict
+    fields already honour their declared sequence types.
+    """
+
     if not isinstance(value, Sequence):
         raise TypeError(f"{context} expected a sequence, received {type(value).__name__}")
     return value
 
 
 def ensure_json_value(value: object, *, context: str) -> JSONValue:
-    """Coerce an arbitrary JSON-like object into a :class:`JSONValue`."""
+    """Coerce arbitrary external JSON into a :class:`JSONValue`.
+
+    Use this helper when parsing HTTP responses so API schema changes surface as
+    type errors; avoid calling it inside TypedDict-backed parse methods.
+    """
 
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value

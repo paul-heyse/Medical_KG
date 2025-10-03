@@ -11,15 +11,46 @@ JSONSequence = Sequence[JSONValue]
 MutableJSONMapping = MutableMapping[str, JSONValue]
 
 
+# Common mixins -----------------------------------------------------------
+
+
+class IdentifierMixin(TypedDict):
+    """Shared identifier field for payloads that expose a canonical id."""
+
+    identifier: str
+
+
+class VersionMixin(TypedDict):
+    """Shared version metadata for payload revisions."""
+
+    version: str
+
+
+class TitleMixin(TypedDict):
+    """Shared human-readable title for document-centric payloads."""
+
+    title: str
+
+
+class SummaryMixin(TypedDict):
+    """Shared summary field used by guideline style payloads."""
+
+    summary: str
+
+
+class RecordMixin(TypedDict):
+    """Shared record container for payloads wrapping arbitrary JSON rows."""
+
+    record: JSONMapping
+
+
 class ClinicalTrialsStudyPayload(TypedDict):
     protocolSection: JSONMapping
     derivedSection: NotRequired[JSONMapping]
 
 
-class ClinicalDocumentPayload(TypedDict):
+class ClinicalDocumentPayload(TitleMixin, VersionMixin):
     nct_id: str
-    title: str
-    version: str
     arms: Sequence[JSONMapping]
     eligibility: JSONValue
     outcomes: Sequence[JSONMapping]
@@ -32,7 +63,7 @@ class ClinicalDocumentPayload(TypedDict):
     completion_date: NotRequired[str | None]
 
 
-class OpenFdaRecordPayload(TypedDict, total=False):
+class OpenFdaRecordPayload(TypedDict):
     safetyreportid: NotRequired[str | None]
     udi_di: NotRequired[str | None]
     setid: NotRequired[str | None]
@@ -42,10 +73,8 @@ class OpenFdaRecordPayload(TypedDict, total=False):
     last_updated: NotRequired[str | None]
 
 
-class OpenFdaDocumentPayload(TypedDict):
-    identifier: str
-    version: str
-    record: JSONMapping
+class OpenFdaDocumentPayload(IdentifierMixin, VersionMixin, RecordMixin):
+    """Structured payload for OpenFDA device records."""
 
 
 class DailyMedSectionPayload(TypedDict):
@@ -53,10 +82,8 @@ class DailyMedSectionPayload(TypedDict):
     loinc: NotRequired[str | None]
 
 
-class DailyMedDocumentPayload(TypedDict):
+class DailyMedDocumentPayload(TitleMixin, VersionMixin):
     setid: str
-    title: str
-    version: str
     sections: Sequence[DailyMedSectionPayload]
 
 
@@ -76,24 +103,20 @@ class AccessGudidDocumentPayload(TypedDict):
     description: NotRequired[str | None]
 
 
-class NiceGuidelineDocumentPayload(TypedDict):
+class NiceGuidelineDocumentPayload(TitleMixin, SummaryMixin):
     uid: str
-    title: str
-    summary: str
     url: NotRequired[str | None]
     licence: NotRequired[str | None]
 
 
-class UspstfDocumentPayload(TypedDict):
-    title: str
+class UspstfDocumentPayload(TitleMixin):
     id: NotRequired[str | None]
     status: NotRequired[str | None]
     url: NotRequired[str | None]
 
 
-class CdcSocrataDocumentPayload(TypedDict):
-    identifier: str
-    record: JSONMapping
+class CdcSocrataDocumentPayload(IdentifierMixin, RecordMixin):
+    ...
 
 
 class CdcWonderDocumentPayload(TypedDict):
@@ -107,14 +130,12 @@ class WhoGhoDocumentPayload(TypedDict):
     year: NotRequired[str | None]
 
 
-class OpenPrescribingDocumentPayload(TypedDict):
-    identifier: str
-    record: JSONMapping
+class OpenPrescribingDocumentPayload(IdentifierMixin, RecordMixin):
+    ...
 
 
-class PubMedDocumentPayload(TypedDict):
+class PubMedDocumentPayload(TitleMixin):
     pmid: str
-    title: str
     abstract: str
     authors: Sequence[str]
     mesh_terms: Sequence[str]
@@ -142,9 +163,8 @@ class PmcReferencePayload(TypedDict):
     citation: str
 
 
-class PmcDocumentPayload(TypedDict):
+class PmcDocumentPayload(TitleMixin):
     pmcid: str
-    title: str
     abstract: str
     sections: Sequence[PmcSectionPayload]
     tables: Sequence[PmcMediaPayload]
@@ -152,9 +172,8 @@ class PmcDocumentPayload(TypedDict):
     references: Sequence[PmcReferencePayload]
 
 
-class MedRxivDocumentPayload(TypedDict):
+class MedRxivDocumentPayload(TitleMixin):
     doi: str
-    title: str
     abstract: str
     date: NotRequired[str | None]
 
@@ -193,21 +212,7 @@ class SnomedDocumentPayload(TypedDict):
     display: NotRequired[str | None]
 
 
-AnyDocumentPayload = Union[
-    ClinicalDocumentPayload,
-    OpenFdaDocumentPayload,
-    DailyMedDocumentPayload,
-    RxNormDocumentPayload,
-    AccessGudidDocumentPayload,
-    NiceGuidelineDocumentPayload,
-    UspstfDocumentPayload,
-    CdcSocrataDocumentPayload,
-    CdcWonderDocumentPayload,
-    WhoGhoDocumentPayload,
-    OpenPrescribingDocumentPayload,
-    PubMedDocumentPayload,
-    PmcDocumentPayload,
-    MedRxivDocumentPayload,
+TerminologyDocumentPayload = Union[
     MeshDocumentPayload,
     UmlsDocumentPayload,
     LoincDocumentPayload,
@@ -216,4 +221,43 @@ AnyDocumentPayload = Union[
 ]
 
 
-DocumentRaw = Union[AnyDocumentPayload, JSONValue]
+ClinicalCatalogDocumentPayload = Union[
+    ClinicalDocumentPayload,
+    OpenFdaDocumentPayload,
+    DailyMedDocumentPayload,
+    RxNormDocumentPayload,
+    AccessGudidDocumentPayload,
+]
+
+
+GuidelineDocumentPayload = Union[
+    NiceGuidelineDocumentPayload,
+    UspstfDocumentPayload,
+]
+
+
+KnowledgeBaseDocumentPayload = Union[
+    CdcSocrataDocumentPayload,
+    CdcWonderDocumentPayload,
+    WhoGhoDocumentPayload,
+    OpenPrescribingDocumentPayload,
+]
+
+
+LiteratureDocumentPayload = Union[
+    PubMedDocumentPayload,
+    PmcDocumentPayload,
+    MedRxivDocumentPayload,
+]
+
+
+AdapterDocumentPayload = Union[
+    TerminologyDocumentPayload,
+    ClinicalCatalogDocumentPayload,
+    GuidelineDocumentPayload,
+    KnowledgeBaseDocumentPayload,
+    LiteratureDocumentPayload,
+]
+
+
+DocumentRaw = AdapterDocumentPayload

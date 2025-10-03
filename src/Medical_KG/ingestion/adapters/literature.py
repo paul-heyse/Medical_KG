@@ -3,14 +3,18 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import AsyncIterator
-from typing import Any, Iterable, TypedDict
+from typing import Any, Iterable, Mapping, cast
 from urllib.parse import urlparse
-from typing import Mapping
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
 from Medical_KG.ingestion.http_client import AsyncHttpClient, RateLimit
 from Medical_KG.ingestion.models import Document
+from Medical_KG.ingestion.types import (
+    MedRxivDocumentPayload,
+    PmcDocumentPayload,
+    PubMedDocumentPayload,
+)
 from Medical_KG.ingestion.utils import canonical_json, normalize_text
 
 PUBMED_SEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
@@ -23,7 +27,7 @@ PMID_RE = re.compile(r"^\d{4,}")
 PMCID_RE = re.compile(r"^PMC\d+")
 
 
-class PubMedAdapter(HttpAdapter):
+class PubMedAdapter(HttpAdapter[Any]):
     source = "pubmed"
 
     def __init__(self, context: AdapterContext, client: AsyncHttpClient, *, api_key: str | None = None) -> None:
@@ -108,7 +112,7 @@ class PubMedAdapter(HttpAdapter):
         uid = str(raw.get("pmid") or raw.get("uid"))
         title = normalize_text(raw.get("title", ""))
         abstract = normalize_text(raw.get("abstract", ""))
-        payload: PubMedPayload = {
+        payload: PubMedDocumentPayload = {
             "pmid": uid,
             "pmcid": raw.get("pmcid"),
             "doi": raw.get("doi"),
@@ -133,7 +137,10 @@ class PubMedAdapter(HttpAdapter):
 
     def validate(self, document: Document) -> None:
         raw = document.raw
-        pmid = raw["pmid"] if isinstance(raw, Mapping) else None
+        if raw is None or not isinstance(raw, dict):
+            raise ValueError("PubMedAdapter document missing typed payload")
+        raw_payload = cast(PubMedDocumentPayload, raw)
+        pmid = raw_payload["pmid"]
         if not isinstance(pmid, (str, int)) or not PMID_RE.match(str(pmid)):
             raise ValueError(f"Invalid PMID: {pmid}")
 
@@ -219,7 +226,7 @@ class PubMedAdapter(HttpAdapter):
         return details
 
 
-class PmcAdapter(HttpAdapter):
+class PmcAdapter(HttpAdapter[Any]):
     source = "pmc"
 
     def __init__(self, context: AdapterContext, client: AsyncHttpClient) -> None:
@@ -266,7 +273,7 @@ class PmcAdapter(HttpAdapter):
         tables = self._collect_table_like(article, "table-wrap")
         figures = self._collect_table_like(article, "fig")
         references = self._collect_references(article)
-        payload = {
+        payload: PmcDocumentPayload = {
             "pmcid": pmcid,
             "title": title,
             "abstract": abstract,
@@ -285,7 +292,10 @@ class PmcAdapter(HttpAdapter):
 
     def validate(self, document: Document) -> None:
         raw = document.raw
-        pmcid = raw["pmcid"] if isinstance(raw, Mapping) else None
+        if raw is None or not isinstance(raw, dict):
+            raise ValueError("PMC document missing typed payload")
+        raw_payload = cast(PmcDocumentPayload, raw)
+        pmcid = raw_payload["pmcid"]
         if not isinstance(pmcid, str) or not PMCID_RE.match(pmcid):
             raise ValueError(f"Invalid PMCID: {pmcid}")
 
@@ -363,7 +373,7 @@ class PmcAdapter(HttpAdapter):
         return refs
 
 
-class MedRxivAdapter(HttpAdapter):
+class MedRxivAdapter(HttpAdapter[Any]):
     source = "medrxiv"
 
     def __init__(
@@ -405,7 +415,7 @@ class MedRxivAdapter(HttpAdapter):
         identifier = raw["doi"]
         title = normalize_text(raw.get("title", ""))
         abstract = normalize_text(raw.get("abstract", ""))
-        payload = {
+        payload: MedRxivDocumentPayload = {
             "doi": identifier,
             "title": title,
             "abstract": abstract,
@@ -418,7 +428,10 @@ class MedRxivAdapter(HttpAdapter):
 
     def validate(self, document: Document) -> None:
         raw = document.raw
-        doi = raw["doi"] if isinstance(raw, Mapping) else None
+        if raw is None or not isinstance(raw, dict):
+            raise ValueError("MedRxiv document missing typed payload")
+        raw_payload = cast(MedRxivDocumentPayload, raw)
+        doi = raw_payload["doi"]
         if not isinstance(doi, str) or "/" not in doi:
             raise ValueError("Invalid DOI")
 

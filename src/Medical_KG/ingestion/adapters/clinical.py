@@ -72,49 +72,52 @@ class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
                 break
 
     def parse(self, raw: ClinicalTrialsStudyPayload) -> Document:
-        protocol = ensure_json_mapping(cast(JSONValue, raw.get("protocolSection", {})), context="clinicaltrials protocol")
+        protocol = ensure_json_mapping(raw.get("protocolSection", {}), context="clinicaltrials protocol")
         identification = ensure_json_mapping(
-            cast(JSONValue, protocol.get("identificationModule", {})),
+            protocol.get("identificationModule", {}),
             context="clinicaltrials identification",
         )
         nct_id = str(identification.get("nctId", ""))
         title = normalize_text(str(identification.get("briefTitle", "")))
 
         status_module = ensure_json_mapping(
-            cast(JSONValue, protocol.get("statusModule", {})), context="clinicaltrials status module"
+            protocol.get("statusModule", {}),
+            context="clinicaltrials status module",
         )
         status_value = status_module.get("overallStatus")
         status = str(status_value) if isinstance(status_value, str) else None
 
         description_module = ensure_json_mapping(
-            cast(JSONValue, protocol.get("descriptionModule", {})),
+            protocol.get("descriptionModule", {}),
             context="clinicaltrials description module",
         )
         summary_value = description_module.get("briefSummary", "")
         summary = normalize_text(str(summary_value)) if isinstance(summary_value, str) else ""
 
         derived_section = ensure_json_mapping(
-            cast(JSONValue, raw.get("derivedSection", {})), context="clinicaltrials derived section"
+            raw.get("derivedSection", {}),
+            context="clinicaltrials derived section",
         )
         misc_info = ensure_json_mapping(
-            cast(JSONValue, derived_section.get("miscInfoModule", {})),
+            derived_section.get("miscInfoModule", {}),
             context="clinicaltrials misc info",
         )
         version = str(misc_info.get("version", "unknown"))
 
         sponsor_module = ensure_json_mapping(
-            cast(JSONValue, protocol.get("sponsorCollaboratorsModule", {})),
+            protocol.get("sponsorCollaboratorsModule", {}),
             context="clinicaltrials sponsor module",
         )
         lead_sponsor_mapping = ensure_json_mapping(
-            cast(JSONValue, sponsor_module.get("leadSponsor", {})),
+            sponsor_module.get("leadSponsor", {}),
             context="clinicaltrials lead sponsor",
         )
         lead_sponsor_name_value = lead_sponsor_mapping.get("name")
         lead_sponsor_name = str(lead_sponsor_name_value) if isinstance(lead_sponsor_name_value, str) else None
 
         design_module = ensure_json_mapping(
-            cast(JSONValue, protocol.get("designModule", {})), context="clinicaltrials design module"
+            protocol.get("designModule", {}),
+            context="clinicaltrials design module",
         )
         phases_value = design_module.get("phases")
         phases: list[str] = []
@@ -127,7 +130,7 @@ class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
         study_type = str(study_type_value) if isinstance(study_type_value, str) else None
 
         enrollment_info = ensure_json_mapping(
-            cast(JSONValue, design_module.get("enrollmentInfo", {})),
+            design_module.get("enrollmentInfo", {}),
             context="clinicaltrials enrollment",
         )
         enrollment_raw = enrollment_info.get("count")
@@ -140,21 +143,21 @@ class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
             enrollment = None
 
         start_date_struct = ensure_json_mapping(
-            cast(JSONValue, status_module.get("startDateStruct", {})),
+            status_module.get("startDateStruct", {}),
             context="clinicaltrials start date",
         )
         start_date_value = start_date_struct.get("date")
         start_date = str(start_date_value) if isinstance(start_date_value, str) else None
 
         completion_date_struct = ensure_json_mapping(
-            cast(JSONValue, status_module.get("completionDateStruct", {})),
+            status_module.get("completionDateStruct", {}),
             context="clinicaltrials completion date",
         )
         completion_date_value = completion_date_struct.get("date")
         completion_date = str(completion_date_value) if isinstance(completion_date_value, str) else None
 
         arms_module = ensure_json_mapping(
-            cast(JSONValue, protocol.get("armsInterventionsModule", {})),
+            protocol.get("armsInterventionsModule", {}),
             context="clinicaltrials arms module",
         )
         arms_list: list[JSONMapping] = []
@@ -164,13 +167,13 @@ class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
                 arms_list.append(ensure_json_mapping(arm, context="clinicaltrials arm"))
 
         eligibility_module = ensure_json_mapping(
-            cast(JSONValue, protocol.get("eligibilityModule", {})),
+            protocol.get("eligibilityModule", {}),
             context="clinicaltrials eligibility module",
         )
         eligibility_value = eligibility_module.get("eligibilityCriteria")
 
         outcomes_module = ensure_json_mapping(
-            cast(JSONValue, protocol.get("outcomesModule", {})),
+            protocol.get("outcomesModule", {}),
             context="clinicaltrials outcomes module",
         )
         outcomes_value = outcomes_module.get("primaryOutcomes")
@@ -222,11 +225,14 @@ class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
         )
 
     def validate(self, document: Document) -> None:
-        raw_payload = document.raw if isinstance(document.raw, Mapping) else {}
-        nct_id = raw_payload.get("nct_id")
+        raw_payload = document.raw
+        if raw_payload is None or not isinstance(raw_payload, dict):
+            raise ValueError("ClinicalTrials document missing typed payload")
+        clinical_payload = cast(ClinicalDocumentPayload, raw_payload)
+        nct_id = clinical_payload.get("nct_id")
         if not isinstance(nct_id, str) or not _CT_NCT_RE.match(nct_id):
             raise ValueError(f"Invalid NCT ID: {nct_id}")
-        outcomes = raw_payload.get("outcomes", [])
+        outcomes = clinical_payload.get("outcomes", [])
         if outcomes and not isinstance(outcomes, list):
             raise ValueError("Outcomes must be a list")
 
@@ -333,16 +339,20 @@ class DailyMedAdapter(HttpAdapter[str]):
 
     def parse(self, raw: str) -> Document:
         root = ET.fromstring(raw)
-        setid = root.find("setid").attrib.get("root") if root.find("setid") is not None else "unknown"
+        setid_elem = root.find("setid")
+        setid_attr = setid_elem.get("root") if setid_elem is not None else None
+        setid = str(setid_attr) if isinstance(setid_attr, str) else "unknown"
         title = normalize_text(root.findtext("title", default=""))
         sections: list[DailyMedSectionPayload] = []
         for section in root.findall("section"):
             code_elem = section.find("code")
-            loinc = code_elem.attrib.get("code") if code_elem is not None else None
+            loinc_attr = code_elem.get("code") if code_elem is not None else None
+            loinc = str(loinc_attr) if isinstance(loinc_attr, str) else None
             text = normalize_text(section.findtext("text", default=""))
             sections.append({"loinc": loinc, "text": text})
         effective = root.find("effectiveTime")
-        version = effective.attrib.get("value") if effective is not None else "unknown"
+        version_attr = effective.get("value") if effective is not None else None
+        version = str(version_attr) if isinstance(version_attr, str) else "unknown"
         payload: DailyMedDocumentPayload = {
             "setid": setid,
             "title": title,
@@ -389,8 +399,7 @@ class RxNormAdapter(HttpAdapter[JSONMapping]):
         yield ensure_json_mapping(payload, context="rxnorm response")
 
     def parse(self, raw: JSONMapping) -> Document:
-        props_value = raw.get("properties", {})
-        props = ensure_json_mapping(cast(JSONValue, props_value), context="rxnorm properties")
+        props = ensure_json_mapping(raw.get("properties", {}), context="rxnorm properties")
         rxcui_value = props.get("rxcui")
         if rxcui_value is None:
             raise ValueError("RxNorm payload missing rxcui")
@@ -459,7 +468,7 @@ class AccessGudidAdapter(HttpAdapter[JSONMapping]):
         yield ensure_json_mapping(payload, context="accessgudid response")
 
     def parse(self, raw: JSONMapping) -> Document:
-        udi_mapping = ensure_json_mapping(cast(JSONValue, raw.get("udi", {})), context="accessgudid udi")
+        udi_mapping = ensure_json_mapping(raw.get("udi", {}), context="accessgudid udi")
         device_identifier_value = udi_mapping.get("deviceIdentifier") or raw.get("udi_di")
         if device_identifier_value is None:
             raise ValueError("AccessGUDID record missing device identifier")

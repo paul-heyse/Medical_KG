@@ -51,7 +51,7 @@ groups:
         annotations:
           summary: "OpenSearch has unassigned shards"
           description: "OpenSearch cluster has {{ $value }} unassigned shards"
-          runbook: "https://docs.medkg.example.com/runbooks/opensearch-shard-unassigned"
+          runbook: "https://docs.medkg.example.com/runbooks/datastore-failover#opensearch"
 
       - alert: OpenSearchDiskSpaceHigh
         expr: (opensearch_disk_used_bytes / opensearch_disk_total_bytes) > 0.85
@@ -85,7 +85,7 @@ groups:
         annotations:
           summary: "Neo4j core nodes down"
           description: "Only {{ $value }} Neo4j core nodes available (< 3)"
-          runbook: "https://docs.medkg.example.com/runbooks/neo4j-failover"
+          runbook: "https://docs.medkg.example.com/runbooks/datastore-failover#neo4j"
 
       - alert: Neo4jHighVectorSearchLatency
         expr: histogram_quantile(0.95, rate(neo4j_vector_latency_ms_bucket[5m])) > 300

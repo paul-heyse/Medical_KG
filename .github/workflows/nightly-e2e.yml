@@ -1,0 +1,44 @@
+name: Nightly E2E Verification
+
+on:
+  schedule:
+    - cron: '30 5 * * *'
+  workflow_dispatch:
+
+jobs:
+  e2e-offline:
+    name: Offline pipeline verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install minimal dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install \
+            beautifulsoup4==4.14.2 \
+            httpx==0.28.1 \
+            pyyaml==6.0.3 \
+            reportlab==4.4.4
+
+      - name: Run offline verification
+        env:
+          PYTHONPATH: src
+        run: |
+          python ops/e2e/run_verification.py \
+            --mode offline \
+            --fixtures ops/e2e/fixtures/pipeline.json \
+            --budget ops/e2e/fixtures/budget.json \
+            --report ops/e2e/reports/nightly.json
+
+      - name: Upload verification report
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-e2e-report
+          path: ops/e2e/reports/nightly.json

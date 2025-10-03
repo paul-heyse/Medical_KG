@@ -1,0 +1,30 @@
+# ILM policy for OpenSearch cost optimisation
+policy:
+  _meta:
+    description: "Medical KG log index lifecycle policy"
+  phases:
+    hot:
+      min_age: 0d
+      actions:
+        rollover:
+          max_age: 7d
+          max_primary_shard_size: 50gb
+    warm:
+      min_age: 7d
+      actions:
+        allocate:
+          number_of_replicas: 0
+        forcemerge:
+          max_num_segments: 1
+        set_priority:
+          priority: 50
+    cold:
+      min_age: 30d
+      actions:
+        freeze: {}
+        set_priority:
+          priority: 25
+    delete:
+      min_age: 90d
+      actions:
+        delete: {}

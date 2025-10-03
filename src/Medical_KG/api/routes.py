@@ -17,6 +17,8 @@ from Medical_KG.api.models import (
     FacetGenerationRequest,
     FacetGenerationResponse,
     HealthResponse,
+    KgWriteRequest,
+    KgWriteResponse,
     RetrieveRequest,
     RetrieveResponse,
     RetrieveResult,
@@ -30,6 +32,7 @@ from Medical_KG.facets.service import FacetService
 from Medical_KG.services.chunks import ChunkRepository
 from Medical_KG.services.retrieval import RetrievalResult as RetrievalResultModel
 from Medical_KG.services.retrieval import RetrievalService
+from Medical_KG.kg.service import KgWriteFailure, KgWriteService
 
 
 class IdempotencyConflict(RuntimeError):
@@ -110,6 +113,7 @@ class ApiRouter(APIRouter):
         facet_service: FacetService | None = None,
         extraction_service: ClinicalExtractionService | None = None,
         retrieval_service: RetrievalService | None = None,
+        kg_service: KgWriteService | None = None,
     ) -> None:
         super().__init__()
         self._authenticator = authenticator or build_default_authenticator()
@@ -117,6 +121,7 @@ class ApiRouter(APIRouter):
         self._facets = facet_service or FacetService()
         self._extractions = extraction_service or ClinicalExtractionService()
         self._retrieval = retrieval_service or RetrievalService()
+        self._kg = kg_service or KgWriteService()
         self._idempotency = IdempotencyCache()
         self._rate_limiter = RateLimiter(limit=30, window_seconds=60)
         self._register_routes()
@@ -310,6 +315,32 @@ class ApiRouter(APIRouter):
             envelope = self._extractions.extract_many(chunks)
             filtered = self._filter_envelope(envelope, allowed={ExtractionType.ELIGIBILITY})
             return ExtractionResponse(envelope=filtered)
+
+        @self.post("/kg/write", response_model=KgWriteResponse, tags=["kg"])
+        async def write_kg(
+            payload: KgWriteRequest,
+            response: Response,
+            principal: Principal = Depends(self._require_scope("kg:write")),
+        ) -> KgWriteResponse:
+            self._apply_rate_limit(principal, response)
+            try:
+                result = self._kg.write(payload.model_dump(mode="json"))
+            except KgWriteFailure as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail={
+                        "code": "kg_validation_failed",
+                        "message": "Knowledge graph payload failed validation",
+                        "issues": [
+                            {"reason": issue.reason, "payload_hash": issue.payload_hash}
+                            for issue in exc.issues
+                        ],
+                    },
+                ) from exc
+            return KgWriteResponse(
+                written_nodes=result.written_nodes,
+                written_relationships=result.written_relationships,
+            )
 
         @self.get("/health", response_model=HealthResponse, tags=["meta"])
         async def healthcheck() -> HealthResponse:

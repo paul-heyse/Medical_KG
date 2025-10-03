@@ -42,6 +42,11 @@ check_prerequisites() {
         exit 1
     fi
 
+    if [[ "${CHAOS_APPROVED:-0}" != "1" ]]; then
+        error "Set CHAOS_APPROVED=1 to acknowledge chaos testing blast radius"
+        exit 1
+    fi
+
     log "Prerequisites OK (context: $CURRENT_CONTEXT)"
 }
 
@@ -168,18 +173,46 @@ chaos_kill_vllm_pod() {
 ##############################################################################
 chaos_network_opensearch() {
     log "=== Chaos Test: Network Partition to OpenSearch ==="
-    log "Expected: Retrieval returns 503, clients retry"
+    log "Expected: Retrieval returns 5xx, alerts fire, rollback restores connectivity"
 
-    # This requires network policies or tools like Chaos Mesh
-    # Simplified version: just verify error handling
+    local policy_name="deny-opensearch-$RANDOM"
+    cat <<EOF | kubectl apply -n "$NAMESPACE" -f -
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ${policy_name}
+spec:
+  podSelector:
+    matchLabels:
+      app: retrieval
+  policyTypes:
+  - Egress
+  egress: []
+EOF
 
-    log "⚠️  Full network partition requires Chaos Mesh or NetworkPolicy"
-    log "Simulating by checking retrieval error handling..."
+    log "NetworkPolicy ${policy_name} applied to block retrieval egress"
+    sleep 30
 
-    # Test retrieval API response to unavailable OpenSearch
-    # (requires manual OpenSearch shutdown or NetworkPolicy)
+    if [[ -n "${API_URL:-}" ]]; then
+        set +e
+        curl -sf "$API_URL/retrieve" \
+            -H "Authorization: Bearer ${API_KEY:-test-key}" \
+            -H "Content-Type: application/json" \
+            -d '{"query": "metformin", "topK": 5}' >/dev/null
+        local status=$?
+        set -e
+        if [[ $status -eq 0 ]]; then
+            log "⚠️ Retrieval succeeded during partition; verify network selectors"
+        else
+            log "✅ Retrieval degraded as expected during partition"
+        fi
+    else
+        log "API_URL not provided; validate impact via monitoring"
+    fi
 
-    log "TODO: Implement with Chaos Mesh or Litmus Chaos"
+    kubectl delete networkpolicy "$policy_name" -n "$NAMESPACE" --ignore-not-found
+    log "NetworkPolicy ${policy_name} removed"
+    sleep 20
     log "=== Chaos Test Complete: Network Partition ==="
 }
 
@@ -190,17 +223,20 @@ chaos_fill_neo4j_disk() {
     log "=== Chaos Test: Fill Neo4j Disk ==="
     log "Expected: Writes fail, alerts trigger, ops add capacity"
 
-    log "⚠️  Disk fill test requires manual intervention or Chaos Engineering tool"
-    log "Recommended: Use Chaos Mesh with IOChaos to simulate disk full"
+    local neo4j_pod
+    neo4j_pod=$(kubectl get pods -n "$NAMESPACE" -l app=neo4j -o jsonpath='{.items[0].metadata.name}')
+    if [[ -z "$neo4j_pod" ]]; then
+        error "Neo4j pod not found"
+        return 1
+    fi
 
-    log "Manual test procedure:"
-    log "1. SSH to Neo4j node"
-    log "2. Create large file: dd if=/dev/zero of=/mnt/neo4j/fill bs=1M count=10000"
-    log "3. Verify writes fail with disk full error"
-    log "4. Verify alert triggers"
-    log "5. Remove file: rm /mnt/neo4j/fill"
-    log "6. Verify writes resume"
-
+    log "Filling disk on $neo4j_pod"
+    kubectl exec -n "$NAMESPACE" "$neo4j_pod" -- bash -c 'fallocate -l 1G /var/lib/neo4j/data/.chaos-fill'
+    sleep 20
+    kubectl exec -n "$NAMESPACE" "$neo4j_pod" -- bash -c 'df -h /var/lib/neo4j/data'
+    kubectl exec -n "$NAMESPACE" "$neo4j_pod" -- bash -c 'rm -f /var/lib/neo4j/data/.chaos-fill'
+    log "Disk pressure released"
+    sleep 20
     log "=== Chaos Test Complete: Fill Disk ==="
 }
 

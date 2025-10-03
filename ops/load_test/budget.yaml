@@ -1,0 +1,67 @@
+# Latency, throughput, and error budgets for Locust load testing profiles.
+# Values are expressed in milliseconds for latency and requests/second for throughput.
+
+defaults:
+  latency_ms:
+    p50: 350
+    p95: 900
+    p99: 1500
+  error_rate: 0.01
+
+profiles:
+  burst:
+    aggregated:
+      latency_ms:
+        p50: 320
+        p95: 900
+        p99: 1500
+      error_rate: 0.01
+      rps: 45
+  steady:
+    aggregated:
+      latency_ms:
+        p50: 300
+        p95: 800
+        p99: 1200
+      error_rate: 0.005
+      rps: 10
+
+endpoints:
+  "/retrieve [endpoint]":
+    latency_ms:
+      p95: 900
+      p99: 1500
+  "/retrieve [ae]":
+    latency_ms:
+      p95: 900
+      p99: 1500
+  "/retrieve [dose]":
+    latency_ms:
+      p95: 900
+      p99: 1500
+  "/retrieve [eligibility]":
+    latency_ms:
+      p95: 900
+      p99: 1500
+  "/retrieve [general]":
+    latency_ms:
+      p95: 900
+      p99: 1500
+  "/extract/pico":
+    latency_ms:
+      p95: 2000
+      p99: 2600
+  "/extract/effects":
+    latency_ms:
+      p95: 2000
+      p99: 2600
+  "/facets/generate":
+    latency_ms:
+      p95: 1800
+      p99: 2400
+  "/health":
+    latency_ms:
+      p95: 100
+  "/version":
+    latency_ms:
+      p95: 150

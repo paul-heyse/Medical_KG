@@ -22,6 +22,12 @@ locust -f ops/load_test/locustfile.py \
     --run-time 2m \
     --host https://api-staging.medkg.example.com \
     --html ops/load_test/reports/burst_report.html
+
+# Validate against burst profile SLOs
+python ops/load_test/check_thresholds.py \
+    ops/load_test/reports/burst_report.html \
+    --budget ops/load_test/budget.yaml \
+    --profile burst
 ```
 
 **Expected Metrics**:
@@ -43,6 +49,12 @@ locust -f ops/load_test/locustfile.py \
     --run-time 1h \
     --host https://api-staging.medkg.example.com \
     --html ops/load_test/reports/steady_report.html
+
+# Validate against steady profile SLOs
+python ops/load_test/check_thresholds.py \
+    ops/load_test/reports/steady_report.html \
+    --budget ops/load_test/budget.yaml \
+    --profile steady
 ```
 
 **Expected Metrics**:
@@ -113,6 +125,19 @@ locust -f ops/load_test/locustfile.py \
 - GPU: 80-90% utilization under load
 
 ## Analyzing Results
+
+### Automated SLO Validation
+
+Run the threshold checker after each load test to assert performance budgets:
+
+```bash
+python ops/load_test/check_thresholds.py \
+  ops/load_test/reports/burst_report.html \
+  --budget ops/load_test/budget.yaml \
+  --profile burst
+```
+
+The script supports both HTML (`--html` flag from Locust) and CSV (`--csv stats`) outputs. It enforces latency, error-rate, and throughput targets defined in [`budget.yaml`](./budget.yaml) and exits non-zero on violations.
 
 ### Locust HTML Report
 
@@ -255,9 +280,10 @@ jobs:
 
       - name: Check Performance
         run: |
-          # Parse report and fail if P95 > threshold
-          # (implementation depends on output format)
-          python ops/load_test/check_thresholds.py load_test_report.html
+          python ops/load_test/check_thresholds.py \
+            load_test_report.html \
+            --budget ops/load_test/budget.yaml \
+            --profile burst
 ```
 
 ## Related

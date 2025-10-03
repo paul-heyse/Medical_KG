@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from Medical_KG.extraction.models import ExtractionEnvelope
 from Medical_KG.facets.models import FacetModel
@@ -84,3 +84,31 @@ class VersionResponse(BaseModel):
     api_version: str
     component_versions: Dict[str, str]
     model_versions: Dict[str, str] = Field(default_factory=dict)
+
+
+class KgNode(BaseModel):
+    """Flexible KG node representation accepting arbitrary properties."""
+
+    id: str
+    label: str
+    model_config = ConfigDict(extra="allow")
+
+
+class KgRelationship(BaseModel):
+    """Relationship between two KG nodes."""
+
+    type: str
+    start_id: str = Field(alias="start_id")
+    end_id: str = Field(alias="end_id")
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+
+class KgWriteRequest(BaseModel):
+    nodes: List[KgNode] = Field(default_factory=list)
+    relationships: List[KgRelationship] = Field(default_factory=list)
+    graph: Dict[str, Any] | None = None
+
+
+class KgWriteResponse(BaseModel):
+    written_nodes: int
+    written_relationships: int

@@ -9,7 +9,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Mapping, MutableMapping, Sequence
+from types import FrameType
+from typing import Any, Mapping, Sequence, cast
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 PACKAGE_ROOT = SRC / "Medical_KG"
@@ -22,15 +23,8 @@ from trace import Trace
 
 import pytest
 
-from Medical_KG.ingestion.ledger import LedgerEntry
-from Medical_KG.ingestion.models import Document
-from Medical_KG.retrieval.models import (
-    RetrievalRequest,
-    RetrievalResponse,
-    RetrievalResult,
-    RetrieverScores,
-)
-from Medical_KG.utils.optional_dependencies import get_httpx_module
+from Medical_KG.retrieval.models import RetrievalRequest, RetrievalResponse, RetrievalResult, RetrieverScores
+from Medical_KG.retrieval.types import JSONValue, SearchHit, VectorHit
 
 
 @pytest.fixture
@@ -39,9 +33,13 @@ def monkeypatch_fixture(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
 
 _TRACE = Trace(count=True, trace=False)
 
+
 def _activate_tracing() -> None:  # pragma: no cover - instrumentation only
-    sys.settrace(_TRACE.globaltrace)
-    threading.settrace(_TRACE.globaltrace)
+    trace_func = cast(Any, _TRACE.globaltrace)
+    if trace_func is None:
+        return
+    sys.settrace(trace_func)
+    threading.settrace(trace_func)
 
 
 if os.environ.get("DISABLE_COVERAGE_TRACE") != "1":
@@ -50,7 +48,7 @@ if os.environ.get("DISABLE_COVERAGE_TRACE") != "1":
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # pragma: no cover - instrumentation only
     sys.settrace(None)
-    threading.settrace(None)
+    threading.settrace(cast(Any, None))
     if os.environ.get("DISABLE_COVERAGE_TRACE") == "1":
         return
     results = _TRACE.results()
@@ -262,26 +260,32 @@ class FakeSpladeEncoder:
 class FakeOpenSearchClient:
     """In-memory OpenSearch facade keyed by index name."""
 
-    hits_by_index: Mapping[str, Sequence[Mapping[str, Any]]]
-    executed: list[tuple[str, Dict[str, Any]]] = field(default_factory=list)
+    hits_by_index: Mapping[str, Sequence[SearchHit]]
+    executed: list[tuple[str, dict[str, JSONValue]]] = field(default_factory=list)
 
-    def search(self, *, index: str, body: Mapping[str, Any], size: int) -> Sequence[Mapping[str, Any]]:
+    def search(
+        self,
+        *,
+        index: str,
+        body: Mapping[str, JSONValue],
+        size: int,
+    ) -> Sequence[SearchHit]:
         self.executed.append((index, dict(body)))
         hits = list(self.hits_by_index.get(index, ()))
-        return [dict(hit) for hit in hits[:size]]
+        return [cast(SearchHit, dict(hit)) for hit in hits[:size]]
 
 
 @dataclass
 class FakeVectorClient:
     """Vector store returning pre-seeded hits regardless of embedding."""
 
-    hits: Sequence[Mapping[str, Any]]
+    hits: Sequence[VectorHit]
     queries: list[Sequence[float]] = field(default_factory=list)
 
-    def query(self, *, index: str, embedding: Sequence[float], top_k: int) -> Sequence[Mapping[str, Any]]:
+    def query(self, *, index: str, embedding: Sequence[float], top_k: int) -> Sequence[VectorHit]:
         _ = index
         self.queries.append(tuple(embedding))
-        return [dict(hit) for hit in self.hits[:top_k]]
+        return [cast(VectorHit, dict(hit)) for hit in self.hits[:top_k]]
 
 
 @dataclass
@@ -322,8 +326,8 @@ def fake_splade_encoder() -> FakeSpladeEncoder:
 
 
 @pytest.fixture
-def fake_vector_hits() -> Sequence[Mapping[str, Any]]:
-    return (
+def fake_vector_hits() -> Sequence[VectorHit]:
+    hits: list[VectorHit] = [
         {
             "chunk_id": "chunk-dense-1",
             "doc_id": "doc-10",
@@ -338,17 +342,18 @@ def fake_vector_hits() -> Sequence[Mapping[str, Any]]:
             "score": 0.88,
             "metadata": {"cosine": 0.88},
         },
-    )
+    ]
+    return hits
 
 
 @pytest.fixture
-def fake_vector_client(fake_vector_hits: Sequence[Mapping[str, Any]]) -> FakeVectorClient:
+def fake_vector_client(fake_vector_hits: Sequence[VectorHit]) -> FakeVectorClient:
     return FakeVectorClient(hits=fake_vector_hits)
 
 
 @pytest.fixture
-def fake_opensearch_hits() -> Mapping[str, Sequence[Mapping[str, Any]]]:
-    shared = [
+def fake_opensearch_hits() -> Mapping[str, Sequence[SearchHit]]:
+    shared: list[SearchHit] = [
         {
             "chunk_id": "chunk-bm25-1",
             "doc_id": "doc-1",
@@ -364,7 +369,7 @@ def fake_opensearch_hits() -> Mapping[str, Sequence[Mapping[str, Any]]]:
             "metadata": {"cosine": 0.89},
         },
     ]
-    splade = [
+    splade: list[SearchHit] = [
         {
             "chunk_id": "chunk-splade-1",
             "doc_id": "doc-3",
@@ -373,7 +378,7 @@ def fake_opensearch_hits() -> Mapping[str, Sequence[Mapping[str, Any]]]:
             "metadata": {},
         }
     ]
-    graph = [
+    graph: list[SearchHit] = [
         {
             "chunk_id": "chunk-graph-1",
             "doc_id": "doc-neo4j",
@@ -390,7 +395,7 @@ def fake_opensearch_hits() -> Mapping[str, Sequence[Mapping[str, Any]]]:
 
 
 @pytest.fixture
-def fake_opensearch_client(fake_opensearch_hits: Mapping[str, Sequence[Mapping[str, Any]]]) -> FakeOpenSearchClient:
+def fake_opensearch_client(fake_opensearch_hits: Mapping[str, Sequence[SearchHit]]) -> FakeOpenSearchClient:
     return FakeOpenSearchClient(hits_by_index=fake_opensearch_hits)
 
 

@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Any, Iterable, Mapping, Protocol, Sequence
+from typing import Iterable, Mapping, Protocol, Sequence, cast
 
 from .models import RetrievalResult, RetrieverScores
-from .types import EmbeddingVector, SearchHit, VectorHit
+from .types import EmbeddingVector, JSONValue, SearchHit, VectorHit
 
 
 class OpenSearchClient(Protocol):  # pragma: no cover - interface definition
-    def search(self, *, index: str, body: Mapping[str, Any], size: int) -> Sequence[SearchHit]:
+    def search(self, *, index: str, body: Mapping[str, JSONValue], size: int) -> Sequence[SearchHit]:
         ...
 
 
@@ -43,7 +43,7 @@ class InMemorySearchHit:
     score: float = 0.0
     start: int | None = None
     end: int | None = None
-    metadata: Mapping[str, Any] | None = None
+    metadata: Mapping[str, JSONValue] | None = None
 
     def to_result(self, *, source: str) -> RetrievalResult:
         scores = RetrieverScores(**{source: self.score})
@@ -57,7 +57,7 @@ class InMemorySearchHit:
             scores=scores,
             start=self.start,
             end=self.end,
-            metadata=self.metadata or {},
+            metadata=dict(self.metadata) if self.metadata is not None else {},
         )
 
 
@@ -67,9 +67,13 @@ class InMemorySearch(OpenSearchClient):
     def __init__(self, hits: Iterable[InMemorySearchHit]):
         self._hits = list(hits)
 
-    def search(self, *, index: str, body: Mapping[str, Any], size: int) -> Sequence[Mapping[str, Any]]:
+    def search(self, *, index: str, body: Mapping[str, JSONValue], size: int) -> Sequence[SearchHit]:
         _ = index, body
-        return [asdict(hit) for hit in self._hits[:size]]
+        hits: list[SearchHit] = []
+        for hit in self._hits[:size]:
+            payload = asdict(hit)
+            hits.append(cast(SearchHit, payload))
+        return hits
 
 
 class InMemoryVector(VectorSearchClient):
@@ -80,7 +84,11 @@ class InMemoryVector(VectorSearchClient):
 
     def query(self, *, index: str, embedding: EmbeddingVector, top_k: int) -> Sequence[VectorHit]:
         _ = index, embedding
-        return [asdict(hit) for hit in self._hits[:top_k]]
+        vector_hits: list[VectorHit] = []
+        for hit in self._hits[:top_k]:
+            payload = asdict(hit)
+            vector_hits.append(cast(VectorHit, payload))
+        return vector_hits
 
 
 class PassthroughEncoder(SpladeEncoder):

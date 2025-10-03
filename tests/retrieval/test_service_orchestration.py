@@ -3,14 +3,17 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import replace
+from typing import Mapping, Sequence, cast
 
 import pytest
 
 from Medical_KG.retrieval.models import RetrievalRequest, RetrievalResult
 from Medical_KG.retrieval.service import RetrievalService, RetrieverConfig
 from Medical_KG.retrieval.intent import IntentRule
+from Medical_KG.retrieval.ontology import OntologyExpander
+from Medical_KG.retrieval.types import JSONValue, SearchHit, VectorHit
 
-from conftest import (
+from tests.conftest import (
     FakeOpenSearchClient,
     FakeQwenEmbedder,
     FakeSpladeEncoder,
@@ -22,22 +25,32 @@ class FakeReranker:
     def __init__(self) -> None:
         self.calls: list[tuple[str, list[str]]] = []
 
-    async def rerank(self, query: str, candidates: list[RetrievalResult]) -> list[RetrievalResult]:
+    async def rerank(self, query: str, candidates: Sequence[RetrievalResult]) -> list[RetrievalResult]:
         self.calls.append((query, [candidate.chunk_id for candidate in candidates]))
         if not candidates:
-            return candidates
-        top = candidates[0].clone_with_score(candidates[0].score + 0.5, rerank=candidates[0].score + 0.5)
-        return [top, *candidates[1:]]
+            return list(candidates)
+        lead = candidates[0]
+        top = lead.clone_with_score(lead.score + 0.5, rerank=lead.score + 0.5)
+        return [top, *list(candidates[1:])]
 
 
-class StubOntology:
+class StubOntology(OntologyExpander):
     def __init__(self, expansions: dict[str, dict[str, float]] | None = None) -> None:
+        super().__init__()
         self._expansions = expansions or {}
         self.calls: list[str] = []
 
     def expand(self, query: str) -> dict[str, float]:
         self.calls.append(query)
         return dict(self._expansions.get(query, {}))
+
+
+def make_search_hits(data: Mapping[str, Sequence[Mapping[str, object]]]) -> Mapping[str, Sequence[SearchHit]]:
+    return {index: [cast(SearchHit, dict(hit)) for hit in hits] for index, hits in data.items()}
+
+
+def make_vector_hits(items: Sequence[Mapping[str, object]]) -> Sequence[VectorHit]:
+    return [cast(VectorHit, dict(hit)) for hit in items]
 
 
 @pytest.fixture
@@ -135,7 +148,7 @@ async def test_graph_results_merge_into_response(
 
 @pytest.mark.asyncio
 async def test_hybrid_fusion_falls_back_to_rrf(
-    fake_opensearch_hits: dict[str, list[dict[str, object]]],
+    fake_opensearch_hits: Mapping[str, Sequence[SearchHit]],
     fake_vector_client: FakeVectorClient,
     fake_query_embedder: FakeQwenEmbedder,
     fake_splade_encoder: FakeSpladeEncoder,
@@ -180,26 +193,28 @@ async def test_rank_normalization_and_deduplication(
     fake_splade_encoder: FakeSpladeEncoder,
     retrieval_rules: list[IntentRule],
 ) -> None:
-    duplicate_hits = {
-        "bm25-index": [
-            {
-                "chunk_id": "shared-chunk",
-                "doc_id": "doc-a",
-                "text": "Primary chunk",
-                "score": 1.0,
-                "metadata": {"cosine": 0.95},
-            }
-        ],
-        "splade-index": [
-            {
-                "chunk_id": "shared-chunk",
-                "doc_id": "doc-a",
-                "text": "Primary chunk",
-                "score": 0.4,
-                "metadata": {},
-            }
-        ],
-    }
+    duplicate_hits = make_search_hits(
+        {
+            "bm25-index": [
+                {
+                    "chunk_id": "shared-chunk",
+                    "doc_id": "doc-a",
+                    "text": "Primary chunk",
+                    "score": 1.0,
+                    "metadata": {"cosine": 0.95},
+                }
+            ],
+            "splade-index": [
+                {
+                    "chunk_id": "shared-chunk",
+                    "doc_id": "doc-a",
+                    "text": "Primary chunk",
+                    "score": 0.4,
+                    "metadata": {},
+                }
+            ],
+        }
+    )
     config = RetrieverConfig(
         bm25_index="bm25-index",
         splade_index="splade-index",
@@ -240,18 +255,20 @@ def test_bm25_handles_date_range_and_invalid_hits(
     fake_splade_encoder: FakeSpladeEncoder,
     retrieval_rules: list[IntentRule],
 ) -> None:
-    hits = {
-        "bm25-index": [
-            {"doc_id": "missing-chunk", "text": "ignored", "score": 0.1},
-            {
-                "chunk_id": "valid-chunk",
-                "doc_id": "doc-1",
-                "text": "valid",
-                "score": 1.0,
-                "metadata": {},
-            },
-        ]
-    }
+    hits = make_search_hits(
+        {
+            "bm25-index": [
+                {"doc_id": "missing-chunk", "text": "ignored", "score": 0.1},
+                {
+                    "chunk_id": "valid-chunk",
+                    "doc_id": "doc-1",
+                    "text": "valid",
+                    "score": 1.0,
+                    "metadata": {},
+                },
+            ]
+        }
+    )
     opensearch = FakeOpenSearchClient(hits_by_index=hits)
     service = RetrievalService(
         opensearch=opensearch,
@@ -289,7 +306,9 @@ def test_bm25_handles_date_range_and_invalid_hits(
     )
     assert [result.chunk_id for result in results] == ["valid-chunk"]
     executed_body = opensearch.executed[0][1]
-    filters = executed_body["query"]["bool"]["filter"]
+    query_clause = cast(dict[str, JSONValue], executed_body["query"])
+    bool_clause = cast(dict[str, JSONValue], query_clause["bool"])
+    filters = cast(list[JSONValue], bool_clause["filter"])
     assert {"range": {"publication_date": {"gte": "2024-01-01"}}} in filters
 
 
@@ -299,8 +318,8 @@ def test_splade_and_dense_skip_invalid_hits(
     fake_splade_encoder: FakeSpladeEncoder,
     retrieval_rules: list[IntentRule],
 ) -> None:
-    opensearch = FakeOpenSearchClient(hits_by_index={"splade-index": [{"doc_id": "doc"}]})
-    vector = FakeVectorClient(hits=[{"doc_id": "doc"}])
+    opensearch = FakeOpenSearchClient(hits_by_index=make_search_hits({"splade-index": [{"doc_id": "doc"}]}))
+    vector = FakeVectorClient(hits=make_vector_hits([{"doc_id": "doc"}]))
     service = RetrievalService(
         opensearch=opensearch,
         vector=vector,

@@ -5,7 +5,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Sequence
+from typing import Iterable, Mapping, Sequence
 
 from .caching import TTLCache
 from .clients import EmbeddingClient, OpenSearchClient, Reranker, SpladeEncoder, VectorSearchClient
@@ -23,6 +23,7 @@ from .models import (
 )
 from .neighbor import NeighborMerger
 from .ontology import OntologyExpander
+from .types import FusionScores, JSONValue, MultiGranularityConfig, NeighborMergeConfig
 
 
 @dataclass(slots=True)
@@ -35,12 +36,12 @@ class RetrieverConfig:
     rrf_k: int
     rerank_top_n: int
     weights: Mapping[str, float]
-    neighbor_merge: Mapping[str, Any]
+    neighbor_merge: NeighborMergeConfig
     query_cache_seconds: int
     embedding_cache_seconds: int
     expansion_cache_seconds: int
     slo_ms: float
-    multi_granularity: Mapping[str, Any]
+    multi_granularity: MultiGranularityConfig
 
 
 class RetrievalService:
@@ -113,7 +114,7 @@ class RetrievalService:
         index: str,
         expanded_terms: Mapping[str, float],
         granularity: str = "chunk",
-    ) -> List[RetrievalResult]:
+    ) -> list[RetrievalResult]:
         boosts = context.boosts or {}
         expanded_text = " ".join(expanded_terms.keys()) if expanded_terms else ""
         lexical_query = f"{query} {expanded_text}".strip()
@@ -127,7 +128,9 @@ class RetrievalService:
             ],
             "type": "best_fields",
         }
-        body: dict[str, Any] = {"query": {"bool": {"must": [{"multi_match": multi_match}]}}}
+        bool_clause: dict[str, JSONValue] = {"must": [{"multi_match": multi_match}]}
+        query_clause: dict[str, JSONValue] = {"bool": bool_clause}
+        body: dict[str, JSONValue] = {"query": query_clause}
         filters = [
             {"terms": {field: value}}
             for field, value in context.filters.items()
@@ -137,9 +140,9 @@ class RetrievalService:
         if isinstance(date_range, Mapping):
             filters.append({"range": {"publication_date": date_range}})
         if filters:
-            body["query"]["bool"]["filter"] = filters
+            bool_clause["filter"] = filters
         hits = self._os.search(index=index, body=body, size=context.top_k)
-        results: List[RetrievalResult] = []
+        results: list[RetrievalResult] = []
         for hit in hits:
             chunk_id = hit.get("chunk_id")
             doc_id = hit.get("doc_id")
@@ -148,9 +151,10 @@ class RetrievalService:
             text = str(hit.get("text", ""))
             title_path = hit.get("title_path") if isinstance(hit.get("title_path"), str) else None
             section = hit.get("section") if isinstance(hit.get("section"), str) else None
-            metadata_raw = hit.get("metadata", {})
-            metadata = metadata_raw if isinstance(metadata_raw, Mapping) else {}
-            score = float(hit.get("score", 0.0))
+            metadata_raw = hit.get("metadata")
+            metadata = dict(metadata_raw) if isinstance(metadata_raw, Mapping) else {}
+            score_raw = hit.get("score")
+            score = float(score_raw) if isinstance(score_raw, (int, float)) else 0.0
             result = RetrievalResult(
                 chunk_id=chunk_id,
                 doc_id=doc_id,
@@ -166,24 +170,31 @@ class RetrievalService:
             results.append(result)
         return results
 
-    def _splade(self, query: str, context: RetrieverContext) -> List[RetrievalResult]:
+    def _splade(self, query: str, context: RetrieverContext) -> list[RetrievalResult]:
         expanded = self._splade_encoder.expand(query)
-        should = []
+        should: list[JSONValue] = []
         for term, weight in expanded.items():
-            should.append({"rank_feature": {"field": "splade_terms", "boost": float(weight), "term": term}})
+            feature: dict[str, JSONValue] = {
+                "field": "splade_terms",
+                "boost": float(weight),
+                "term": term,
+            }
+            should.append({"rank_feature": feature})
         if not should:
             return []
-        body = {"query": {"bool": {"should": should, "minimum_should_match": 1}}}
+        bool_clause: dict[str, JSONValue] = {"should": should, "minimum_should_match": 1}
+        body: dict[str, JSONValue] = {"query": {"bool": bool_clause}}
         hits = self._os.search(index=self._config.splade_index, body=body, size=context.top_k)
-        results: List[RetrievalResult] = []
+        results: list[RetrievalResult] = []
         for hit in hits:
             chunk_id = hit.get("chunk_id")
             doc_id = hit.get("doc_id")
             if not isinstance(chunk_id, str) or not isinstance(doc_id, str):
                 continue
-            score = float(hit.get("score", 0.0))
-            metadata_raw = hit.get("metadata", {})
-            metadata = metadata_raw if isinstance(metadata_raw, Mapping) else {}
+            score_raw = hit.get("score")
+            score = float(score_raw) if isinstance(score_raw, (int, float)) else 0.0
+            metadata_raw = hit.get("metadata")
+            metadata = dict(metadata_raw) if isinstance(metadata_raw, Mapping) else {}
             result = RetrievalResult(
                 chunk_id=chunk_id,
                 doc_id=doc_id,
@@ -199,7 +210,7 @@ class RetrievalService:
             results.append(result)
         return results
 
-    def _dense(self, query: str, context: RetrieverContext) -> List[RetrievalResult]:
+    def _dense(self, query: str, context: RetrieverContext) -> list[RetrievalResult]:
         embedding = self._embed(query)
         hits = self._vector.query(index=self._config.dense_index, embedding=embedding, top_k=context.top_k)
         results: list[RetrievalResult] = []
@@ -208,8 +219,9 @@ class RetrievalService:
             doc_id = hit.get("doc_id")
             if not isinstance(chunk_id, str) or not isinstance(doc_id, str):
                 continue
-            score = float(hit.get("score", 0.0))
-            metadata_raw = hit.get("metadata", {})
+            score_raw = hit.get("score")
+            score = float(score_raw) if isinstance(score_raw, (int, float)) else 0.0
+            metadata_raw = hit.get("metadata")
             metadata = dict(metadata_raw) if isinstance(metadata_raw, Mapping) else {}
             metadata.setdefault("cosine", score)
             result = RetrievalResult(
@@ -227,12 +239,14 @@ class RetrievalService:
             results.append(result)
         return results
 
-    async def _maybe_rerank(self, query: str, fused: List[RetrievalResult], context: RetrieverContext) -> List[RetrievalResult]:
+    async def _maybe_rerank(
+        self, query: str, fused: list[RetrievalResult], context: RetrieverContext
+    ) -> list[RetrievalResult]:
         if not context.rerank_enabled or not self._reranker:
             return fused
         top_candidates = fused[: context.rerank_top_n]
         reranked = await self._reranker.rerank(query, top_candidates)
-        merged: List[RetrievalResult] = []
+        merged: list[RetrievalResult] = []
         rerank_scores = {result.chunk_id: result.score for result in reranked}
         for result in fused:
             if result.chunk_id in rerank_scores:
@@ -251,14 +265,14 @@ class RetrievalService:
         started = perf_counter()
         context = self._context(request)
         intent = request.intent or self._intent.detect(request.query)
-        timings: List[RetrieverTiming] = []
+        timings: list[RetrieverTiming] = []
 
         def record(component: str, elapsed: float) -> None:
             timings.append(RetrieverTiming(component=component, duration_ms=elapsed * 1000))
 
-        bm25_results: List[RetrievalResult]
-        splade_results: List[RetrievalResult]
-        dense_results: List[RetrievalResult]
+        bm25_results: list[RetrievalResult]
+        splade_results: list[RetrievalResult]
+        dense_results: list[RetrievalResult]
 
         expanded_terms = self._expand(request.query)
 
@@ -270,8 +284,13 @@ class RetrievalService:
             expanded_terms=expanded_terms,
             granularity="chunk",
         )
-        if context.multi_granularity.get("enabled"):
-            indexes = context.multi_granularity.get("indexes", {})
+        multi_config = context.multi_granularity
+        if multi_config.get("enabled", False):
+            indexes_value = multi_config.get("indexes", {})
+            if isinstance(indexes_value, Mapping):
+                indexes = {str(key): str(value) for key, value in indexes_value.items()}
+            else:
+                indexes = {}
             for granularity, index in indexes.items():
                 if granularity == "chunk" or not index:
                     continue
@@ -293,11 +312,15 @@ class RetrievalService:
         dense_results = self._dense(request.query, context)
         record("dense", perf_counter() - dense_start)
 
-        pools = {"bm25": bm25_results, "splade": splade_results, "dense": dense_results}
-        fused_scores = weighted_fusion(pools, context.weights)
+        pools: dict[str, Sequence[RetrievalResult]] = {
+            "bm25": bm25_results,
+            "splade": splade_results,
+            "dense": dense_results,
+        }
+        fused_scores: FusionScores = weighted_fusion(pools, context.weights)
         if not fused_scores:
             fused_scores = reciprocal_rank_fusion({k: list(v) for k, v in pools.items()}, k=context.rrf_k)
-        fused_results: Dict[str, RetrievalResult] = {}
+        fused_results: dict[str, RetrievalResult] = {}
         for collection in pools.values():
             for result in collection:
                 fused_results.setdefault(result.chunk_id, result)
@@ -312,9 +335,12 @@ class RetrievalService:
         fused_list = await self._maybe_rerank(request.query, fused_list, context)
         record("rerank", perf_counter() - rerank_start)
 
+        neighbor_config = context.neighbor_merge
+        min_cosine = float(neighbor_config["min_cosine"])
+        max_tokens = int(neighbor_config["max_tokens"])
         neighbor_merger = NeighborMerger(
-            min_cosine=float(context.neighbor_merge.get("min_cosine", 0.85)),
-            max_tokens=int(context.neighbor_merge.get("max_tokens", 2000)),
+            min_cosine=min_cosine,
+            max_tokens=max_tokens,
         )
         merged_results = neighbor_merger.merge(fused_list)
         size = context.top_k

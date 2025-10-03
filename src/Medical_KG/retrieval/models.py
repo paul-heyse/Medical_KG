@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Mapping, MutableMapping
+from typing import Mapping
+
+from .types import JSONValue, MultiGranularityConfig, NeighborMergeConfig
 
 
 @dataclass(slots=True)
@@ -46,7 +48,7 @@ class RetrievalResult:
     scores: RetrieverScores = field(default_factory=RetrieverScores)
     start: int | None = None
     end: int | None = None
-    metadata: Mapping[str, Any] = field(default_factory=dict)
+    metadata: dict[str, JSONValue] = field(default_factory=dict)
 
     def clone_with_score(self, score: float, *, rerank: float | None = None) -> "RetrievalResult":
         updated_scores = RetrieverScores(
@@ -75,7 +77,7 @@ class RetrievalRequest:
     query: str
     top_k: int = 20
     from_: int = 0
-    filters: Mapping[str, Any] = field(default_factory=dict)
+    filters: Mapping[str, JSONValue] = field(default_factory=dict)
     intent: str | None = None
     rerank_enabled: bool | None = None
     explain: bool = False
@@ -90,12 +92,12 @@ class RetrievalResponse:
     latency_ms: float
     from_: int
     size: int
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, JSONValue] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
 class CachedItem:
-    value: Any
+    value: object
     expires_at: datetime
 
 
@@ -104,27 +106,27 @@ class RetrieverContext:
     """Contextual knobs derived from configuration and runtime intent."""
 
     boosts: Mapping[str, float]
-    filters: Mapping[str, Any]
+    filters: Mapping[str, JSONValue]
     top_k: int
     weights: Mapping[str, float]
     rrf_k: int
     rerank_top_n: int
     rerank_enabled: bool
-    neighbor_merge: Mapping[str, Any]
-    multi_granularity: Mapping[str, Any]
+    neighbor_merge: NeighborMergeConfig
+    multi_granularity: MultiGranularityConfig
 
 
-def merge_metadata(*items: Mapping[str, Any]) -> dict[str, Any]:
-    merged: dict[str, Any] = {}
+def merge_metadata(*items: Mapping[str, JSONValue]) -> dict[str, JSONValue]:
+    merged: dict[str, JSONValue] = {}
     for item in items:
         merged.update({k: v for k, v in item.items() if v is not None})
     return merged
 
 
-def normalize_filters(filters: Mapping[str, Any] | None) -> dict[str, Any]:
+def normalize_filters(filters: Mapping[str, JSONValue] | None) -> dict[str, JSONValue]:
     if not filters:
         return {}
-    normalized: dict[str, Any] = {}
+    normalized: dict[str, JSONValue] = {}
     for key, value in filters.items():
         if value is None:
             continue

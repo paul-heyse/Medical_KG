@@ -26,6 +26,7 @@ if TYPE_CHECKING:  # pragma: no cover - import-time typing help only
     import httpx
     import locust
     import prometheus_client
+    import redis.asyncio as redis_async
     import spacy
     import tiktoken
     import torch
@@ -198,9 +199,6 @@ class HttpxAsyncClient(Protocol):
     async def request(self, method: str, url: str, **kwargs: Any) -> HttpxResponseProtocol:
         ...
 
-    async def aclose(self) -> None:
-        ...
-
     def stream(self, method: str, url: str, **kwargs: Any) -> AsyncContextManager[HttpxResponseProtocol]:
         ...
 
@@ -222,7 +220,7 @@ class HttpxAsyncClient(Protocol):
     ) -> HttpxResponseProtocol:
         ...
 
-    async def __aenter__(self) -> HttpxAsyncClient:
+    async def __aenter__(self) -> "HttpxAsyncClient":
         ...
 
     async def __aexit__(
@@ -231,6 +229,22 @@ class HttpxAsyncClient(Protocol):
         exc: BaseException | None,
         tb: Any,
     ) -> None:
+        ...
+
+
+class RedisClientProtocol(Protocol):
+    """Async Redis interactions used by caching layers."""
+
+    async def get(self, key: str) -> bytes | None:
+        ...
+
+    async def setex(self, key: str, seconds: int, value: bytes) -> bool:
+        ...
+
+    async def delete(self, *keys: str) -> int:
+        ...
+
+    async def aclose(self) -> None:
         ...
 
 
@@ -292,6 +306,12 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
     _LocustHttpUser = None
     _locust_between = None
     _locust_task = None
+
+
+try:  # pragma: no cover - optional dependency wiring
+    from redis.asyncio import Redis as _RedisClient  # type: ignore[import-not-found]
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    _RedisClient = None
 
 
 def get_tiktoken_encoding(name: str = "cl100k_base") -> TokenEncoder | None:
@@ -374,6 +394,16 @@ def get_httpx_module() -> HttpxModule:
     return cast(HttpxModule, _httpx)
 
 
+def build_redis_client(**kwargs: Any) -> RedisClientProtocol:
+    """Instantiate a typed Redis client or raise when unavailable."""
+
+    if _RedisClient is None:
+        raise ModuleNotFoundError(
+            "redis is required but not installed. Install it before enabling Redis-backed caches."
+        )
+    return cast(RedisClientProtocol, _RedisClient(**kwargs))
+
+
 def load_locust() -> LocustFacade:
     """Return typed locust helpers, raising when the dependency is absent."""
 
@@ -408,6 +438,7 @@ __all__ = [
     "build_counter",
     "build_gauge",
     "build_histogram",
+    "build_redis_client",
     "get_httpx_module",
     "get_tiktoken_encoding",
     "get_torch_module",

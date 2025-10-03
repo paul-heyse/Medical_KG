@@ -1,13 +1,16 @@
-"""Fusion utilities for combining retriever outputs."""
+"""Score fusion helpers for retrieval ensembles."""
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Dict, Iterable, List, Mapping, MutableMapping
+from typing import Iterable, Mapping, MutableMapping, Sequence
 
 from .models import RetrievalResult
+from .types import FusionScores
 
 
-def min_max_normalize(results: Iterable[RetrievalResult]) -> Dict[str, float]:
+def min_max_normalize(results: Iterable[RetrievalResult]) -> dict[str, float]:
+    """Normalize scores to a 0-1 range while preserving ordering."""
+
     scores = {result.chunk_id: result.score for result in results}
     if not scores:
         return {}
@@ -24,23 +27,29 @@ def min_max_normalize(results: Iterable[RetrievalResult]) -> Dict[str, float]:
 def weighted_fusion(
     pools: Mapping[str, Iterable[RetrievalResult]],
     weights: Mapping[str, float],
-) -> Dict[str, float]:
-    normalized: Dict[str, Dict[str, float]] = {}
+) -> FusionScores:
+    """Combine retriever scores using configured weights."""
+
+    normalized: dict[str, dict[str, float]] = {}
     for retriever, results in pools.items():
         normalized[retriever] = min_max_normalize(results)
-    fused: Dict[str, float] = defaultdict(float)
+    fused: MutableMapping[str, float] = defaultdict(float)
     for retriever, scores in normalized.items():
         weight = weights.get(retriever, 0.0)
+        if weight == 0.0:
+            continue
         for chunk_id, score in scores.items():
             fused[chunk_id] += score * weight
     return dict(fused)
 
 
 def reciprocal_rank_fusion(
-    ranked_lists: Mapping[str, List[RetrievalResult]],
+    ranked_lists: Mapping[str, Sequence[RetrievalResult]],
     *,
     k: int,
-) -> Dict[str, float]:
+) -> dict[str, float]:
+    """Apply reciprocal-rank fusion when weighted scores are unavailable."""
+
     fused: MutableMapping[str, float] = defaultdict(float)
     for results in ranked_lists.values():
         for index, result in enumerate(results, start=1):

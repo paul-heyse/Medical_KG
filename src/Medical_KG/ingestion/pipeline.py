@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import os
 import time
 import traceback
 from collections.abc import AsyncIterator, Iterable, Sequence
@@ -54,9 +53,6 @@ class AdapterRegistry(Protocol):
 _DEFAULT_BUFFER_SIZE = 100
 _DEFAULT_PROGRESS_INTERVAL = 100
 _DEFAULT_CHECKPOINT_INTERVAL = 1000
-_LEGACY_WARNING_ENV = "MEDICAL_KG_SUPPRESS_PIPELINE_DEPRECATION"
-
-
 LOGGER = logging.getLogger(__name__)
 
 PIPELINE_EVENT_COUNTER: CounterProtocol = build_counter(
@@ -134,7 +130,7 @@ class IngestionPipeline:
                 event_transformer=None,
                 completed_ids=None,
                 total_estimated=None,
-                consumption_mode="run_sync",
+                consumption_mode="run_async",
             )
         )
 
@@ -215,52 +211,11 @@ class IngestionPipeline:
                 event_transformer=event_transformer,
                 completed_ids=completed_ids,
                 total_estimated=total_estimated,
-                _consumption_mode="iter_results",
             ):
                 if isinstance(event, DocumentCompleted):
                     yield event.document
 
         return _generator()
-
-    async def run_async_legacy(
-        self,
-        source: str,
-        *,
-        params: Iterable[dict[str, Any]] | None = None,
-        resume: bool = False,
-    ) -> list[PipelineResult]:
-        """Legacy eager execution wrapper (deprecated).
-
-        The legacy wrapper preserves the historic return signature while
-        logging usage. Set the ``MEDICAL_KG_SUPPRESS_PIPELINE_DEPRECATION``
-        environment variable to silence the warning in automated contexts. The
-        wrapper will be removed after the six-month migration window.
-        """
-
-        if os.getenv(_LEGACY_WARNING_ENV) != "1":
-            import warnings
-
-            warnings.warn(
-                "IngestionPipeline.run_async_legacy is deprecated and will be removed after the migration window. "
-                "Use stream_events() or the run_async helper instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        results = await self._collect_results(
-            source,
-            params=params,
-            resume=resume,
-            buffer_size=_DEFAULT_BUFFER_SIZE,
-            progress_interval=_DEFAULT_PROGRESS_INTERVAL,
-            checkpoint_interval=_DEFAULT_CHECKPOINT_INTERVAL,
-            event_filter=None,
-            event_transformer=None,
-            completed_ids=None,
-            total_estimated=None,
-            consumption_mode="run_async_legacy",
-        )
-        self._log_legacy_usage(source)
-        return results
 
     async def _collect_results(
         self,
@@ -338,7 +293,7 @@ class IngestionPipeline:
         ``event_transformer`` callbacks to declaratively tailor the stream.
         """
 
-        mode = _consumption_mode or "stream"
+        mode = _consumption_mode or "stream_events"
         self._record_consumption(mode, source)
         pipeline_id = build_pipeline_id(source)
         queue: asyncio.Queue[PipelineEvent | object] = asyncio.Queue(maxsize=max(buffer_size, 1))
@@ -634,14 +589,6 @@ class IngestionPipeline:
     @staticmethod
     def _utcnow() -> datetime:
         return datetime.now(timezone.utc)
-
-    @staticmethod
-    def _log_legacy_usage(source: str) -> None:
-        import logging
-
-        logging.getLogger(__name__).info(
-            "run_async_legacy invoked for adapter %s", source
-        )
 
     @staticmethod
     def _record_consumption(mode: str, adapter: str) -> None:

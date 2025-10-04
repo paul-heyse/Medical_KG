@@ -5,7 +5,7 @@ from typing import Dict, Mapping
 
 import pytest
 
-from Medical_KG.ingestion.ledger import LedgerAuditRecord, LedgerState, coerce_state
+from Medical_KG.ingestion.ledger import LedgerAuditRecord, LedgerState
 from Medical_KG.pdf.mineru import MinerUArtifacts, MinerURunResult
 from Medical_KG.pdf.postprocess import TextBlock
 from Medical_KG.pdf.qa import QaGates, QaMetrics
@@ -29,10 +29,16 @@ class RecordingLedger:
         metadata: Mapping[str, object] | None = None,
         **_: object,
     ) -> LedgerAuditRecord:
+        if not isinstance(state, LedgerState):
+            raise TypeError("state must be a LedgerState instance")
+        previous_state = next(
+            (entry_state for key, entry_state, _ in reversed(self.records) if key == doc_key),
+            state,
+        )
         self.records.append((doc_key, state, metadata))
         return LedgerAuditRecord(
             doc_id=doc_key,
-            old_state=LedgerState.LEGACY,
+            old_state=previous_state,
             new_state=state,
             timestamp=0.0,
             adapter=None,
@@ -40,10 +46,9 @@ class RecordingLedger:
         )
 
     def record(
-        self, doc_key: str, state: str, metadata: Mapping[str, object] | None = None
+        self, doc_key: str, state: LedgerState, metadata: Mapping[str, object] | None = None
     ) -> LedgerAuditRecord:
-        coerced = coerce_state(state)
-        return self.update_state(doc_key, coerced, metadata=metadata)
+        return self.update_state(doc_key, state, metadata=metadata)
 
 
 class RecordingArtifactStore(ArtifactStore):

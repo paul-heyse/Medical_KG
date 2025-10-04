@@ -27,7 +27,7 @@ Retry loop: any retryable state -> [RETRYING] -> [FETCHING]
 Failure: any stage can fall back to [FAILED]
 ```
 
-- **State semantics** – PDF ingestion now emits `ir_building` during MinerU execution, `ir_ready` when artifacts are persisted, and `embedding` when downstream processors are triggered. Legacy string values (`pdf_downloaded`, `mineru_inflight`, `auto_done`, …) are coerced automatically for historical records but emit deprecation warnings when observed at runtime.
+- **State semantics** – PDF ingestion emits `ir_building` during MinerU execution, `ir_ready` when artifacts are persisted, and `embedding` when downstream processors are triggered. Ledger transitions must use the `LedgerState` enum; attempting to pass raw strings raises a `TypeError`.
 
 ### Snapshots and Compaction
 
@@ -41,7 +41,6 @@ Failure: any stage can fall back to [FAILED]
 - `med ledger stats` prints the live document count per state, matching the Prometheus gauge `med_ledger_documents_by_state`.
 - `med ledger stuck --hours 12` surfaces documents lingering in non-terminal states beyond the threshold and logs a warning for alerting systems.
 - `med ledger history <doc_id>` renders the structured audit timeline pulled from the JSONL delta log.
-- `med ledger migrate` wraps the migration helper and can perform dry runs (`--dry-run`) before writing enum-based audit records.
 
 ### Metrics and Alerting
 
@@ -49,12 +48,6 @@ Failure: any stage can fall back to [FAILED]
 - Gauges: `med_ledger_documents_by_state`, `med_ledger_stuck_documents` (non-terminal backlog).
 - Histogram: `med_ledger_state_duration_seconds` observes time spent in each state prior to transition.
 - Dashboard recommendations: chart distribution, track retry loops, and alert on sustained growth in `failed`/`retrying` buckets.
-
-### Migration Process
-
-- Use `scripts/migrate_ledger_to_state_machine.py --input ledger.jsonl --output migrated.jsonl --progress 1000` to convert legacy rows. The tool backs up the original file (`.bak`) unless `--no-backup` is supplied and validates the result by instantiating `IngestionLedger`.
-- Dry runs (`--dry-run`) parse the legacy ledger, apply state coercion, and report invalid historical transitions without touching disk.
-- After migration, run `med ledger validate --ledger-path migrated.jsonl` to confirm the new audit log loads cleanly before swapping into production.
 
 ## Runbooks for Common Failures
 
@@ -93,7 +86,7 @@ Running `med ingest --help` lists all adapters discovered in the registry and hi
 
 ## Batch & Auto Modes
 
-- The CLI (`med ingest`) supports `--auto` to stream ingested `doc_id`s and advance the ledger to `auto_done`.
+- The CLI (`med ingest`) supports `--auto` to stream ingested `doc_id`s and advance the ledger to `LedgerState.COMPLETED`.
 - Provide `--batch path.ndjson` with one JSON object per line to run targeted re-ingestion campaigns.
 - Large NDJSON payloads are processed incrementally using a configurable `--chunk-size` (default 1000 records). The CLI loads
   only a single chunk in memory, preventing OOM events for million-record replays.

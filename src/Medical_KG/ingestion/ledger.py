@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -77,9 +76,8 @@ class _JsonLinesWriter(Protocol):
 class LedgerState(str, Enum):
     """Enumeration of all valid ledger states.
 
-    The state machine captures the canonical ingestion pipeline phases. All
-    states are serialisable as their string value for backwards compatibility
-    with the historical JSONL ledger.
+    The state machine captures the canonical ingestion pipeline phases. Ledger
+    states serialise to their enum name for audit records and snapshots.
     """
 
     PENDING = "pending"
@@ -127,23 +125,6 @@ class LedgerState(str, Enum):
     SKIPPED = "skipped"
     """Processing skipped (manually or because the document is obsolete)."""
 
-    LEGACY = "legacy"
-    """Historical state retained for unmapped legacy string values."""
-
-
-LEGACY_STATE_ALIASES: Mapping[str, LedgerState] = {
-    "auto_done": LedgerState.COMPLETED,
-    "auto_failed": LedgerState.FAILED,
-    "auto_inflight": LedgerState.FETCHING,
-    "mineru_failed": LedgerState.FAILED,
-    "mineru_inflight": LedgerState.IR_BUILDING,
-    "pdf_downloaded": LedgerState.FETCHED,
-    "pdf_ir_ready": LedgerState.IR_READY,
-    "ir_exists": LedgerState.IR_READY,
-    "ir_written": LedgerState.IR_READY,
-    "postpdf_started": LedgerState.EMBEDDING,
-}
-
 
 VALID_TRANSITIONS: Mapping[LedgerState, set[LedgerState]] = {
     LedgerState.PENDING: {LedgerState.FETCHING, LedgerState.SKIPPED},
@@ -173,7 +154,19 @@ VALID_TRANSITIONS: Mapping[LedgerState, set[LedgerState]] = {
     LedgerState.FAILED: {LedgerState.RETRYING, LedgerState.FAILED},
     LedgerState.SKIPPED: set(),
     LedgerState.COMPLETED: set(),
-    LedgerState.LEGACY: set(LedgerState),
+}
+
+_PERSISTED_STATE_ALIASES: Mapping[str, LedgerState] = {
+    "auto_done": LedgerState.COMPLETED,
+    "auto_failed": LedgerState.FAILED,
+    "auto_inflight": LedgerState.FETCHING,
+    "mineru_failed": LedgerState.FAILED,
+    "mineru_inflight": LedgerState.IR_BUILDING,
+    "pdf_downloaded": LedgerState.FETCHED,
+    "pdf_ir_ready": LedgerState.IR_READY,
+    "ir_exists": LedgerState.IR_READY,
+    "ir_written": LedgerState.IR_READY,
+    "postpdf_started": LedgerState.EMBEDDING,
 }
 
 TERMINAL_STATES: set[LedgerState] = {
@@ -218,6 +211,50 @@ State Machine:
 """.strip()
 
 
+def _ensure_ledger_state(value: object, *, argument: str) -> LedgerState:
+    if isinstance(value, LedgerState):
+        return value
+    raise TypeError(
+        f"{argument} must be a LedgerState instance (received {value!r}). "
+        "Use the LedgerState enum, e.g. LedgerState.COMPLETED."
+    )
+
+
+def _decode_state(
+    raw: JSONValue,
+    *,
+    context: str,
+    legacy_fallback: LedgerState | None = None,
+) -> LedgerState:
+    if isinstance(raw, LedgerState):
+        return raw
+    if isinstance(raw, str):
+        token = raw.strip()
+        if not token:
+            raise LedgerCorruption(f"{context} is missing a ledger state")
+        alias = _PERSISTED_STATE_ALIASES.get(token.lower())
+        if alias is not None:
+            return alias
+        upper_token = token.upper()
+        try:
+            return LedgerState[upper_token]
+        except KeyError:
+            lower_token = token.lower()
+            if lower_token == "legacy":
+                if legacy_fallback is not None:
+                    return legacy_fallback
+                raise LedgerCorruption(
+                    f"{context} references removed legacy state without fallback"
+                )
+            try:
+                return LedgerState(lower_token)
+            except ValueError as exc:
+                raise LedgerCorruption(
+                    f"{context} contains unknown ledger state: {token!r}"
+                ) from exc
+    raise LedgerCorruption(f"{context} is not a valid ledger state")
+
+
 def get_valid_next_states(current: LedgerState) -> set[LedgerState]:
     """Return the allowed next states for ``current``."""
 
@@ -239,14 +276,12 @@ def is_retryable_state(state: LedgerState) -> bool:
 def validate_transition(old: LedgerState, new: LedgerState) -> None:
     """Validate the ``old`` -> ``new`` transition.
 
-    ``LedgerState.LEGACY`` acts as a permissive origin for historical data.
     The function tolerates no-op transitions and raises
-    :class:`InvalidStateTransition` otherwise.
+    :class:`InvalidStateTransition` when the transition is not declared in
+    :data:`VALID_TRANSITIONS`.
     """
 
     if old == new:
-        return
-    if old is LedgerState.LEGACY:
         return
     allowed = VALID_TRANSITIONS.get(old, set())
     if new not in allowed:
@@ -277,8 +312,8 @@ class LedgerAuditRecord:
 
         payload: JSONMapping = {
             "doc_id": self.doc_id,
-            "old_state": self.old_state.value,
-            "new_state": self.new_state.value,
+            "old_state": self.old_state.name,
+            "new_state": self.new_state.name,
             "timestamp": self.timestamp,
             "adapter": self.adapter,
             "error_type": self.error_type,
@@ -296,8 +331,12 @@ class LedgerAuditRecord:
         """Rehydrate an audit record from a JSON mapping."""
 
         try:
-            old_state = LedgerState(str(payload["old_state"]))
-            new_state = LedgerState(str(payload["new_state"]))
+            new_state = _decode_state(payload["new_state"], context="audit new_state")
+            old_state = _decode_state(
+                payload["old_state"],
+                context="audit old_state",
+                legacy_fallback=new_state,
+            )
         except (KeyError, ValueError) as exc:  # pragma: no cover - defensive guard
             raise LedgerCorruption("Ledger audit record has invalid state") from exc
         timestamp_raw = payload.get("timestamp")
@@ -347,19 +386,6 @@ class LedgerDocumentState:
 
         reference = as_of or datetime.now(timezone.utc)
         return (reference - self.updated_at).total_seconds()
-
-
-def coerce_state(value: LedgerState | str) -> LedgerState:
-    if isinstance(value, LedgerState):
-        return value
-    lower = value.lower()
-    if lower in LEGACY_STATE_ALIASES:
-        return LEGACY_STATE_ALIASES[lower]
-    try:
-        return LedgerState(lower)
-    except ValueError:
-        LOGGER.warning("Unmapped ledger state encountered; defaulting to LEGACY", extra={"state": value})
-        return LedgerState.LEGACY
 
 
 def _as_float(value: object, default: float = 0.0) -> float:
@@ -433,8 +459,10 @@ class IngestionLedger:
                             audit.doc_id,
                             LedgerDocumentState(
                                 doc_id=audit.doc_id,
-                                state=LedgerState.LEGACY,
-                                updated_at=datetime.fromtimestamp(audit.timestamp, tz=timezone.utc),
+                                state=audit.old_state,
+                                updated_at=datetime.fromtimestamp(
+                                    audit.timestamp, tz=timezone.utc
+                                ),
                             ),
                         )
                         self._apply_audit(state, audit)
@@ -469,7 +497,6 @@ class IngestionLedger:
         for doc_id, payload in raw_states.items():
             if not isinstance(payload, Mapping):  # pragma: no cover - defensive
                 continue
-            state_value = coerce_state(str(payload.get("state", LedgerState.LEGACY.value)))
             updated_at_raw = payload.get("updated_at")
             updated_at = datetime.fromisoformat(str(updated_at_raw)) if updated_at_raw else created_at
             metadata_value = ensure_json_value(payload.get("metadata", {}), context="snapshot metadata")
@@ -479,6 +506,21 @@ class IngestionLedger:
                 metadata = cast(MutableJSONMapping, {})
             retry_count = _as_int(payload.get("retry_count"), default=0) or 0
             adapter_value = payload.get("adapter")
+            history_payload = payload.get("history", [])
+            audits: list[LedgerAuditRecord] = []
+            if isinstance(history_payload, Sequence):
+                for entry in history_payload:
+                    if isinstance(entry, Mapping):
+                        audits.append(LedgerAuditRecord.from_dict(entry))
+            state_raw = payload.get("state")
+            if state_raw is None and audits:
+                state_value = audits[-1].new_state
+            else:
+                state_value = _decode_state(
+                    state_raw,
+                    context=f"snapshot state for {doc_id}",
+                    legacy_fallback=audits[-1].new_state if audits else None,
+                )
             document_state = LedgerDocumentState(
                 doc_id=str(doc_id),
                 state=state_value,
@@ -487,12 +529,7 @@ class IngestionLedger:
                 metadata=metadata,
                 retry_count=retry_count,
             )
-            history_payload = payload.get("history", [])
-            audits: list[LedgerAuditRecord] = []
-            if isinstance(history_payload, Sequence):
-                for entry in history_payload:
-                    if isinstance(entry, Mapping):
-                        audits.append(LedgerAuditRecord.from_dict(entry))
+            if audits:
                 document_state.history.extend(audits)
             states[document_state.doc_id] = document_state
             if audits:
@@ -508,7 +545,7 @@ class IngestionLedger:
                     audit.doc_id,
                     LedgerDocumentState(
                         doc_id=audit.doc_id,
-                        state=LedgerState.LEGACY,
+                        state=audit.old_state,
                         updated_at=datetime.fromtimestamp(audit.timestamp, tz=timezone.utc),
                     ),
                 )
@@ -543,23 +580,27 @@ class IngestionLedger:
     ) -> LedgerAuditRecord:
         """Transition ``doc_id`` to ``new_state`` and persist audit trail."""
 
+        new_state = _ensure_ledger_state(new_state, argument="new_state")
         with self._lock:
             document = self._documents.get(doc_id)
-            old_state = document.state if document else LedgerState.LEGACY
-            try:
-                validate_transition(old_state, new_state)
-            except InvalidStateTransition:
-                ERROR_COUNTER.labels(type="invalid_transition").inc()
-                LOGGER.error(
-                    "Invalid ledger transition",
-                    extra={
-                        "doc_id": doc_id,
-                        "old_state": old_state.value,
-                        "new_state": new_state.value,
-                        "adapter": adapter,
-                    },
-                )
-                raise
+            if document is None:
+                old_state = new_state
+            else:
+                old_state = document.state
+                try:
+                    validate_transition(old_state, new_state)
+                except InvalidStateTransition:
+                    ERROR_COUNTER.labels(type="invalid_transition").inc()
+                    LOGGER.error(
+                        "Invalid ledger transition",
+                        extra={
+                            "doc_id": doc_id,
+                            "old_state": old_state.value,
+                            "new_state": new_state.value,
+                            "adapter": adapter,
+                        },
+                    )
+                    raise
             now = datetime.now(timezone.utc)
             timestamp = now.timestamp()
             resolved_error_type = error_type
@@ -647,7 +688,7 @@ class IngestionLedger:
     def record(
         self,
         doc_id: str,
-        state: LedgerState | str,
+        state: LedgerState,
         metadata: Mapping[str, JSONValue] | None = None,
         *,
         adapter: str | None = None,
@@ -656,15 +697,9 @@ class IngestionLedger:
         duration_seconds: float | None = None,
         parameters: Mapping[str, JSONValue] | None = None,
     ) -> LedgerAuditRecord:
-        """Backwards compatible alias for :meth:`update_state` accepting strings."""
+        """Alias for :meth:`update_state` requiring :class:`LedgerState`."""
 
-        if isinstance(state, str):
-            warnings.warn(
-                "String ledger states are deprecated; use LedgerState enum instead",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        coerced = coerce_state(state)
+        coerced = _ensure_ledger_state(state, argument="state")
         return self.update_state(
             doc_id,
             coerced,
@@ -683,14 +718,15 @@ class IngestionLedger:
         document = self._documents.get(doc_id)
         return document.state if document else None
 
-    def entries(self, *, state: LedgerState | str | None = None) -> Iterable[LedgerDocumentState]:
+    def entries(self, *, state: LedgerState | None = None) -> Iterable[LedgerDocumentState]:
         if state is None:
             return list(self._documents.values())
-        coerced = coerce_state(state)
+        coerced = _ensure_ledger_state(state, argument="state")
         return [document for document in self._documents.values() if document.state == coerced]
 
     def get_documents_by_state(self, state: LedgerState) -> list[LedgerDocumentState]:
-        return [document for document in self._documents.values() if document.state == state]
+        coerced = _ensure_ledger_state(state, argument="state")
+        return [document for document in self._documents.values() if document.state == coerced]
 
     def get_state_history(self, doc_id: str) -> list[LedgerAuditRecord]:
         return list(self._history.get(doc_id, []))
@@ -740,7 +776,7 @@ class IngestionLedger:
         states_payload: dict[str, JSONMapping] = {}
         for doc in self._documents.values():
             states_payload[doc.doc_id] = {
-                "state": doc.state.value,
+                "state": doc.state.name,
                 "updated_at": doc.updated_at.isoformat(),
                 "adapter": doc.adapter,
                 "metadata": doc.metadata,
@@ -832,7 +868,6 @@ __all__ = [
     "STATE_MACHINE_DOC",
     "TERMINAL_STATES",
     "RETRYABLE_STATES",
-    "coerce_state",
     "get_valid_next_states",
     "is_retryable_state",
     "is_terminal_state",

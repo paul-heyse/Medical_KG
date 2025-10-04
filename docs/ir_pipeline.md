@@ -26,11 +26,10 @@ To extend the system, create a new builder subclassing `IrBuilder`, call `super(
 
 ### Typed Payload Integration
 
-- `IrBuilder.build()` accepts an optional `raw: AdapterDocumentPayload` argument. When provided, the builder derives canonical text, blocks, and provenance directly from the typed ingestion payload.
+- `IrBuilder.build()` **requires** a typed `raw: AdapterDocumentPayload` argument. Calls that omit the payload raise `ValueError`, surfacing adapters that have not migrated to the typed contract.
 - Literature payloads (PubMed, PMC, MedRxiv) emit title/abstract blocks, section hierarchies, and Mesh term provenance without JSON casting.
 - Clinical trial payloads surface eligibility text, arm/outcome blocks, and populate the document provenance with the canonical NCT identifier.
 - Guideline payloads (NICE, USPSTF) expose summary paragraphs and retain source URLs/licensing metadata in provenance.
-- Callers that do not yet provide typed payloads can continue passing text/metadata only; the builder preserves backwards compatibility by skipping payload extraction when `raw` is `None`.
 
 ## Validation Rules
 
@@ -49,4 +48,4 @@ Validation failures raise `ValidationError` with contextual error messages; test
 1. Normalise text with `TextNormalizer` (UTF-8, NFC, whitespace collapse, dictionary de-hyphenation, language detection).
 2. Build IR via the appropriate builder; attach provenance metadata to ensure traceability.
 3. Persist through `IrStorage.write`, which content-addresses records and records ledger state transitions.
-4. Validate using `IRValidator` before downstream ingestion into the knowledge graph. Pass `raw=document.raw` when available so payload-aware checks (e.g., PubMed PMID/PMCID or clinical NCT ID provenance) run alongside schema validation.
+4. Validate using `IRValidator` before downstream ingestion into the knowledge graph. Pass `raw=document.raw` so payload-aware checks (e.g., PubMed PMID/PMCID or clinical NCT ID provenance) run alongside schema validation.

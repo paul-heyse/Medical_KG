@@ -299,41 +299,41 @@ AdapterDocumentPayload = Union[
 DocumentRaw = AdapterDocumentPayload
 
 
-def _is_payload_dict(raw: DocumentRaw | None) -> TypeGuard[dict[str, Any]]:
+def _is_payload_dict(raw: object) -> TypeGuard[dict[str, Any]]:
     return isinstance(raw, dict)
 
 
-def is_mesh_payload(raw: DocumentRaw | None) -> TypeGuard[MeshDocumentPayload]:
+def is_mesh_payload(raw: object) -> TypeGuard[MeshDocumentPayload]:
     if not _is_payload_dict(raw):
         return False
     return "terms" in raw and "descriptor_id" in raw
 
 
-def is_umls_payload(raw: DocumentRaw | None) -> TypeGuard[UmlsDocumentPayload]:
+def is_umls_payload(raw: object) -> TypeGuard[UmlsDocumentPayload]:
     if not _is_payload_dict(raw):
         return False
     return "synonyms" in raw and "cui" in raw
 
 
-def is_loinc_payload(raw: DocumentRaw | None) -> TypeGuard[LoincDocumentPayload]:
+def is_loinc_payload(raw: object) -> TypeGuard[LoincDocumentPayload]:
     if not _is_payload_dict(raw):
         return False
     return "property" in raw and "system" in raw and "method" in raw
 
 
-def is_icd11_payload(raw: DocumentRaw | None) -> TypeGuard[Icd11DocumentPayload]:
+def is_icd11_payload(raw: object) -> TypeGuard[Icd11DocumentPayload]:
     if not _is_payload_dict(raw):
         return False
     return "code" in raw and "uri" in raw
 
 
-def is_snomed_payload(raw: DocumentRaw | None) -> TypeGuard[SnomedDocumentPayload]:
+def is_snomed_payload(raw: object) -> TypeGuard[SnomedDocumentPayload]:
     if not _is_payload_dict(raw):
         return False
     return "designation" in raw and "code" in raw
 
 
-def is_terminology_payload(raw: DocumentRaw | None) -> TypeGuard[TerminologyDocumentPayload]:
+def is_terminology_payload(raw: object) -> TypeGuard[TerminologyDocumentPayload]:
     return bool(
         is_mesh_payload(raw)
         or is_umls_payload(raw)
@@ -343,37 +343,37 @@ def is_terminology_payload(raw: DocumentRaw | None) -> TypeGuard[TerminologyDocu
     )
 
 
-def is_clinical_document_payload(raw: DocumentRaw | None) -> TypeGuard[ClinicalDocumentPayload]:
+def is_clinical_document_payload(raw: object) -> TypeGuard[ClinicalDocumentPayload]:
     if not _is_payload_dict(raw):
         return False
     return "nct_id" in raw and "arms" in raw and "eligibility" in raw
 
 
-def is_openfda_payload(raw: DocumentRaw | None) -> TypeGuard[OpenFdaDocumentPayload]:
+def is_openfda_payload(raw: object) -> TypeGuard[OpenFdaDocumentPayload]:
     if not _is_payload_dict(raw):
         return False
     return "identifier" in raw and "version" in raw and "record" in raw
 
 
-def is_dailymed_payload(raw: DocumentRaw | None) -> TypeGuard[DailyMedDocumentPayload]:
+def is_dailymed_payload(raw: object) -> TypeGuard[DailyMedDocumentPayload]:
     if not _is_payload_dict(raw):
         return False
     return "setid" in raw and "sections" in raw
 
 
-def is_rxnorm_payload(raw: DocumentRaw | None) -> TypeGuard[RxNormDocumentPayload]:
+def is_rxnorm_payload(raw: object) -> TypeGuard[RxNormDocumentPayload]:
     if not _is_payload_dict(raw):
         return False
     return "rxcui" in raw
 
 
-def is_access_gudid_payload(raw: DocumentRaw | None) -> TypeGuard[AccessGudidDocumentPayload]:
+def is_access_gudid_payload(raw: object) -> TypeGuard[AccessGudidDocumentPayload]:
     if not _is_payload_dict(raw):
         return False
     return "udi_di" in raw
 
 
-def is_clinical_payload(raw: DocumentRaw | None) -> TypeGuard[ClinicalCatalogDocumentPayload]:
+def is_clinical_payload(raw: object) -> TypeGuard[ClinicalCatalogDocumentPayload]:
     return bool(
         is_clinical_document_payload(raw)
         or is_openfda_payload(raw)
@@ -383,19 +383,19 @@ def is_clinical_payload(raw: DocumentRaw | None) -> TypeGuard[ClinicalCatalogDoc
     )
 
 
-def is_nice_guideline_payload(raw: DocumentRaw | None) -> TypeGuard[NiceGuidelineDocumentPayload]:
+def is_nice_guideline_payload(raw: object) -> TypeGuard[NiceGuidelineDocumentPayload]:
     if not _is_payload_dict(raw):
         return False
     return "uid" in raw and "summary" in raw
 
 
-def is_uspstf_payload(raw: DocumentRaw | None) -> TypeGuard[UspstfDocumentPayload]:
+def is_uspstf_payload(raw: object) -> TypeGuard[UspstfDocumentPayload]:
     if not _is_payload_dict(raw):
         return False
     return "title" in raw and "status" in raw
 
 
-def is_guideline_payload(raw: DocumentRaw | None) -> TypeGuard[GuidelineDocumentPayload]:
+def is_guideline_payload(raw: object) -> TypeGuard[GuidelineDocumentPayload]:
     return bool(is_nice_guideline_payload(raw) or is_uspstf_payload(raw))
 
 

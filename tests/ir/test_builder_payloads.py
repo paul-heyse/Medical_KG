@@ -1,5 +1,7 @@
 """Integration tests for ``IrBuilder`` payload handling."""
 
+import pytest
+
 from Medical_KG.ingestion.types import (
     ClinicalDocumentPayload,
     PmcDocumentPayload,
@@ -112,11 +114,10 @@ def test_ir_builder_extracts_clinical_payload() -> None:
 
 def test_ir_builder_without_payload() -> None:
     builder = IrBuilder()
-    document = builder.build(
-        doc_id="doc:1",
-        source="generic",
-        uri="https://example.org/doc/1",
-        text="Plain text content",
-    )
-    assert document.text == "Plain text content"
-    IRValidator().validate_document(document)
+    with pytest.raises(ValueError, match="raw"):
+        builder.build(
+            doc_id="doc:1",
+            source="generic",
+            uri="https://example.org/doc/1",
+            text="Plain text content",
+        )

@@ -21,7 +21,9 @@ please follow the steps below before sending a pull request.
    - `mypy --strict src/Medical_KG`
    - `pytest -q`
 5. **Update docs** – if you add new patterns or optional integrations, document the
-   approach in [`docs/type_safety.md`](./docs/type_safety.md).
+   approach in [`docs/type_safety.md`](./docs/type_safety.md) and reference the unified
+   ingestion CLI (`med ingest <adapter>`) for examples. Historical migration material lives
+   under [`docs/archive/cli_unification/`](./docs/archive/cli_unification/).
 
 ## Coding Standards
 

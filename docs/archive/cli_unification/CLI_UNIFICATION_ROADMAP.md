@@ -1,4 +1,6 @@
-# CLI Unification Roadmap
+# ARCHIVED: CLI Unification Roadmap
+
+_Archived 2025-10-04 – Unified CLI migration complete._
 
 ## Executive Summary
 

@@ -84,8 +84,7 @@ _INGEST_HELP = textwrap.dedent(
 
 _INGEST_EPILOG = textwrap.dedent(
     """
-    See also: docs/ingestion_runbooks.md, docs/ingestion_cli_reference.md,
-    docs/ingestion_cli_migration_guide.md
+    See also: docs/ingestion_runbooks.md and docs/ingestion_cli_reference.md
     """
 )
 

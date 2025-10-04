@@ -38,7 +38,7 @@
 
 ## Recommended Improvements
 1. **Defensive dossier formatting** – ✅ Completed in `fix-ruff-config-defensive-formatting`. `BriefingFormatter` now falls back to sensible defaults ("Untitled Briefing", "Untitled Section", citation ID "Unknown", count `0`) and guards every section/item/citation lookup so partial payloads no longer raise `KeyError`. Additional briefing tests cover these cases.【F:src/Medical_KG/briefing/formatters.py†L1-L154】【F:tests/briefing/test_formatters.py†L1-L170】
-2. **Unify ingestion CLIs** – The legacy `med ingest` command in `Medical_KG.cli` reimplements batching, adapter invocation, and JSON parsing separately from the new Typer-based CLI, still lacking the richer validation we just added. Consolidating both entrypoints on shared helpers (or delegating to `ingestion.cli.ingest`) would prevent future drift and ensure consistent error handling and resume semantics across tooling.【F:src/Medical_KG/cli.py†L224-L315】【F:src/Medical_KG/ingestion/cli.py†L25-L97】
+2. **Unify ingestion CLIs** – ✅ Completed via the CLI unification rollout; see the archived plan in `docs/archive/cli_unification/` for historical context.
 3. **Modernize Ruff configuration** – ✅ Completed in `fix-ruff-config-defensive-formatting`. Ruff lint configuration now lives under `[tool.ruff.lint]`, eliminating the extend-select deprecation warning on every lint run.【F:pyproject.toml†L150-L155】
 4. **Document lint/type overrides** – Large `mypy` ignore blocks (e.g., the blanket `ignore_errors` for `Medical_KG.briefing.*` and `retrieval.*`) make it harder to track real typing debt. Audit these overrides and replace them with targeted fixes or module-level TODO comments so future contributors understand the remaining gaps.【F:pyproject.toml†L164-L195】
 

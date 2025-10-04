@@ -1,4 +1,6 @@
-# Unified Ingestion CLI Validation Report
+# ARCHIVED: Unified Ingestion CLI Validation Report
+
+_Archived 2025-10-04 – Validation tracked during migration._
 
 ## 16.1 Full Test Suite
 - `ruff check src tests`

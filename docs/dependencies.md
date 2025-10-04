@@ -39,6 +39,7 @@ lists, install hints, and documentation links.
   - `pypdf==6.1.1`
   - `pdfminer.six==20250506`
   - `pypdfium2==4.30.0`
+  - `fast-langdetect>=0.2.3,<0.3.0` *(indirect via MinerU; range chosen to match upstream constraints)*
 - **Install**: `pip install medical-kg[pdf]`
 
 ## Embeddings

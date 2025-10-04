@@ -21,7 +21,7 @@ med ingest ADAPTER [OPTIONS]
 | `--output text|json|table` | `-o` | Select output format (text default, JSON for automation, Rich table for operators). |
 | `--summary-only` | – | Emit aggregated summary without per-result lines. |
 | `--stream` | – | Emit NDJSON event stream to stdout (summary written to stderr). |
-| `--no-stream` | – | Use legacy eager execution (returns full `PipelineResult` list). |
+| `--no-stream` | – | Use eager execution (returns full `PipelineResult` list). |
 | `--show-timings` | – | Include run duration in summaries. |
 | `--schema PATH` | – | Validate NDJSON records against JSON Schema (requires `jsonschema`). |
 | `--dry-run` | – | Validate inputs and ledger state without invoking adapters. |
@@ -64,6 +64,6 @@ med ingest ADAPTER [OPTIONS]
 ## Related Documentation
 
 - `docs/ingestion_runbooks.md` – Operational runbooks and examples.
-- `docs/ingestion_cli_migration_guide.md` – Migration playbook and communication template.
+- `docs/archive/README.md#cli-unification` – Historical migration playbooks and timelines.
 - `docs/ingestion_cli_troubleshooting.md` – Extended troubleshooting recipes.
 

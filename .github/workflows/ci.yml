@@ -26,11 +26,6 @@ jobs:
         shell: bash -l {0}
         run: |
           python scripts/validate_all_configs.py --no-color
-      - name: Check for legacy ingestion commands
-        shell: bash -l {0}
-        continue-on-error: true
-        run: |
-          python scripts/cli_migration/check_ci_commands.py
       - name: Run tests
         shell: bash -l {0}
         run: |

@@ -1,4 +1,6 @@
-# Unified Ingestion CLI Migration Guide
+# ARCHIVED: Unified Ingestion CLI Migration Guide
+
+_Archived 2025-10-04 – Migration completed and tooling retired._
 
 The legacy ingestion entry points (`med ingest --source ...` and `med-ingest ...`) now delegate to the unified Typer-based CLI. Use this guide to update scripts, CI jobs, and operator runbooks.
 
@@ -58,4 +60,3 @@ Medical KG Platform
 - **Week 4** – Expect >75% of automation migrated; monitor CI checker output.
 - **Week 8** – Target 95% adoption; escalate stragglers via operations stand-up. Begin tracking streaming adoption via the migration script.
 - **Week 12** – Remove delegates as part of `remove-legacy-ingestion-cli` change (see roadmap).
-

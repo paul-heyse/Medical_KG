@@ -1,4 +1,6 @@
-# CLI Unification Initiative - Summary
+# ARCHIVED: CLI Unification Initiative - Summary
+
+_Archived 2025-10-04 – Retained for historical context._
 
 ## Overview
 

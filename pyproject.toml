@@ -200,7 +200,6 @@ models = [
 
 [project.scripts]
 med = "Medical_KG.cli:main"
-med-ingest-legacy = "Medical_KG.cli:main"
 
 [tool.black]
 line-length = 100

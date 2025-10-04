@@ -75,6 +75,22 @@ Running `med ingest --help` lists all adapters discovered in the registry and hi
 - For operational audits capture `rich` progress output and ledger deltas; both reflect chunk boundaries which simplifies
   diagnosing partial failures.
 
+### Pipeline event stream
+
+- `IngestionPipeline.stream_events()` emits typed `PipelineEvent` objects that describe document lifecycle milestones,
+  adapter state transitions, failures, and progress snapshots.
+- Event types include:
+  - `DocumentStarted` / `DocumentCompleted` / `DocumentFailed` for per-document lifecycle tracking
+  - `BatchProgress` for aggregated counts, ETA estimation, queue depth, and backpressure statistics
+  - `AdapterStateChange` whenever an adapter transitions between initialising, invocation, completion, or failure states
+- Supply `event_filter` or `event_transformer` callbacks to declaratively tailor which events reach the consumer (for example
+  only failures) or to enrich payloads before downstream fan-out.
+- The event queue is bounded (`buffer_size`, default 100) to provide backpressure; when consumers are slower than the producer,
+  `BatchProgress` carries `backpressure_wait_seconds`/`backpressure_wait_count` so you can alert on the build-up.
+- Example patterns:
+  - `event_filter=errors_only` to forward only `DocumentFailed` events into incident pipelines
+  - `event_transformer=lambda event: enrich(event)` to attach SLA metadata before publishing to SSE or WebSocket clients
+
 ## Licensing Requirements
 
 - **UMLS** – downstream use requires the annual UMLS acceptance; document user accounts with the NLM.

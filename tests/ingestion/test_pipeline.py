@@ -4,10 +4,16 @@ import asyncio
 from pathlib import Path
 from typing import Any, Iterable
 
-import pytest
-
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
-from Medical_KG.ingestion.events import BatchProgress, DocumentCompleted, DocumentStarted
+from Medical_KG.ingestion.events import (
+    AdapterStateChange,
+    BatchProgress,
+    DocumentCompleted,
+    DocumentFailed,
+    DocumentStarted,
+    PipelineEvent,
+    errors_only,
+)
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion.models import Document, IngestionResult
 from Medical_KG.ingestion.pipeline import IngestionPipeline, PipelineResult
@@ -137,7 +143,11 @@ def test_pipeline_run_async_supports_event_loops(tmp_path: Path) -> None:
         loop.close()
 
     assert len(results) == 1
-    assert results[0].doc_ids == ["doc-async"]
+    result = results[0]
+    assert result.doc_ids == ["doc-async"]
+    assert result.success_count == 1
+    assert result.failure_count == 0
+    assert result.duration_seconds >= 0.0
 
 
 def test_pipeline_iter_results_streams_documents(tmp_path: Path) -> None:
@@ -176,16 +186,26 @@ def test_stream_events_emit_lifecycle_events(tmp_path: Path) -> None:
         client_factory=lambda: _NoopClient(),
     )
 
-    async def _collect() -> list[type[object]]:
-        events = []
+    async def _collect() -> list[object]:
+        events: list[object] = []
         async for event in pipeline.stream_events("stub", progress_interval=1):
-            events.append(type(event))
+            events.append(event)
         return events
 
-    event_types = asyncio.run(_collect())
-    assert event_types.count(DocumentStarted) == 2
-    assert event_types.count(DocumentCompleted) == 2
-    assert any(event_type is BatchProgress for event_type in event_types)
+    events = asyncio.run(_collect())
+    assert sum(isinstance(event, DocumentStarted) for event in events) == 2
+    assert sum(isinstance(event, DocumentCompleted) for event in events) == 2
+    assert any(isinstance(event, AdapterStateChange) for event in events)
+    started_ids = [event.doc_id for event in events if isinstance(event, DocumentStarted)]
+    completed_ids = [event.document.doc_id for event in events if isinstance(event, DocumentCompleted)]
+    assert started_ids == completed_ids
+    progress_events = [event for event in events if isinstance(event, BatchProgress)]
+    assert progress_events, "expected at least one BatchProgress event"
+    last_progress = progress_events[-1]
+    assert last_progress.completed_count == 2
+    assert last_progress.failed_count == 0
+    assert last_progress.buffer_size >= 1
+    assert last_progress.in_flight_count == 0
 
 
 def test_pipeline_iter_results_closes_client_on_cancel(tmp_path: Path) -> None:
@@ -228,3 +248,89 @@ def test_pipeline_iter_results_closes_client_on_cancel(tmp_path: Path) -> None:
 
     closed = asyncio.run(_consume_one())
     assert closed is True
+
+
+def test_stream_events_supports_filters_and_transformers(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "ledger.jsonl"
+    ledger = IngestionLedger(ledger_path)
+    records = [
+        {"id": "doc-1", "content": "ok"},
+        {"id": "doc-2", "content": "retry", "fail_once": True},
+    ]
+    adapter = _StubAdapter(AdapterContext(ledger), records=records)
+    pipeline = IngestionPipeline(
+        ledger,
+        registry=_Registry(adapter),
+        client_factory=lambda: _NoopClient(),
+    )
+
+    async def _collect_errors() -> list[DocumentFailed]:
+        events: list[DocumentFailed] = []
+        async for event in pipeline.stream_events(
+            "stub",
+            event_filter=errors_only,
+        ):
+            assert isinstance(event, DocumentFailed)
+            events.append(event)
+        return events
+
+    failures = asyncio.run(_collect_errors())
+    assert len(failures) == 1
+    assert failures[0].error_type == "RuntimeError"
+
+    async def _collect_transformed() -> list[DocumentCompleted]:
+        transformed: list[DocumentCompleted] = []
+
+        def _transform(event: PipelineEvent) -> PipelineEvent | None:
+            if isinstance(event, DocumentCompleted):
+                return DocumentCompleted(
+                    timestamp=event.timestamp,
+                    pipeline_id=event.pipeline_id,
+                    document=event.document,
+                    duration=event.duration,
+                    adapter_metadata={"transformed": True},
+                )
+            return event
+
+        async for event in pipeline.stream_events(
+            "stub",
+            resume=True,
+            event_transformer=_transform,
+        ):
+            if isinstance(event, DocumentCompleted):
+                transformed.append(event)
+        return transformed
+
+    transformed_events = asyncio.run(_collect_transformed())
+    assert transformed_events
+    assert transformed_events[0].adapter_metadata == {"transformed": True}
+
+
+def test_stream_events_reports_backpressure_metrics(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "ledger.jsonl"
+    ledger = IngestionLedger(ledger_path)
+    records = [{"id": f"doc-{index}", "content": "ok"} for index in range(3)]
+    adapter = _StubAdapter(AdapterContext(ledger), records=records)
+    pipeline = IngestionPipeline(
+        ledger,
+        registry=_Registry(adapter),
+        client_factory=lambda: _NoopClient(),
+    )
+
+    async def _consume_with_delays() -> list[BatchProgress]:
+        progress_events: list[BatchProgress] = []
+        async for event in pipeline.stream_events(
+            "stub",
+            buffer_size=1,
+            progress_interval=1,
+        ):
+            if isinstance(event, BatchProgress):
+                progress_events.append(event)
+            await asyncio.sleep(0.01)
+        return progress_events
+
+    progress_events = asyncio.run(_consume_with_delays())
+    assert progress_events
+    tail = progress_events[-1]
+    assert tail.backpressure_wait_count >= 1
+    assert tail.backpressure_wait_seconds >= 0.0

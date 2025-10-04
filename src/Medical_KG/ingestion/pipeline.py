@@ -1,14 +1,28 @@
-"""Pipeline utilities orchestrating adapter execution and resume workflows."""
-
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import os
+import time
+import traceback
 from collections.abc import AsyncIterator, Iterable
-from dataclasses import dataclass
-from typing import Any, Protocol
+from datetime import datetime, timezone
+from typing import Any, Callable, Protocol
 
 from Medical_KG.ingestion import registry as ingestion_registry
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
+from Medical_KG.ingestion.events import (
+    AdapterStateChange,
+    BatchProgress,
+    DocumentCompleted,
+    DocumentFailed,
+    DocumentStarted,
+    EventFilter,
+    EventTransformer,
+    PipelineEvent,
+    PipelineResult,
+    build_pipeline_id,
+)
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion.models import Document
@@ -26,12 +40,10 @@ class AdapterRegistry(Protocol):
     def available_sources(self) -> list[str]: ...
 
 
-@dataclass(slots=True)
-class PipelineResult:
-    """Summarised ingestion execution details."""
-
-    source: str
-    doc_ids: list[str]
+_DEFAULT_BUFFER_SIZE = 100
+_DEFAULT_PROGRESS_INTERVAL = 100
+_DEFAULT_CHECKPOINT_INTERVAL = 1000
+_LEGACY_WARNING_ENV = "MEDICAL_KG_SUPPRESS_PIPELINE_DEPRECATION"
 
 
 class IngestionPipeline:
@@ -55,7 +67,7 @@ class IngestionPipeline:
         *,
         resume: bool = False,
     ) -> list[PipelineResult]:
-        """Execute an adapter for the supplied source synchronously."""
+        """Execute an adapter synchronously."""
 
         return asyncio.run(self.run_async(source, params=params, resume=resume))
 
@@ -65,26 +77,52 @@ class IngestionPipeline:
         *,
         params: Iterable[dict[str, Any]] | None = None,
         resume: bool = False,
+        buffer_size: int = _DEFAULT_BUFFER_SIZE,
+        progress_interval: int = _DEFAULT_PROGRESS_INTERVAL,
+        checkpoint_interval: int = _DEFAULT_CHECKPOINT_INTERVAL,
+        event_filter: EventFilter | None = None,
+        event_transformer: EventTransformer | None = None,
+        completed_ids: Iterable[str] | None = None,
+        total_estimated: int | None = None,
     ) -> list[PipelineResult]:
         """Execute an adapter within an existing asyncio event loop."""
 
-        outputs: list[PipelineResult] = []
-        async with self._client_factory() as client:
-            adapter = self._resolve_adapter(source, client)
-            if params is None:
-                doc_ids = [
-                    result.document.doc_id async for result in adapter.iter_results(resume=resume)
-                ]
-                outputs.append(PipelineResult(source=source, doc_ids=doc_ids))
-            else:
-                for entry in params:
-                    invocation_params = dict(entry)
-                    doc_ids = [
-                        result.document.doc_id
-                        async for result in adapter.iter_results(**invocation_params, resume=resume)
-                    ]
-                    outputs.append(PipelineResult(source=source, doc_ids=doc_ids))
-        return outputs
+        invocations = self._normalise_params(params)
+        results: list[PipelineResult] = []
+        for invocation in invocations:
+            documents: list[Document] = []
+            failures: list[DocumentFailed] = []
+            started_at_dt = self._utcnow()
+            stream = self.stream_events(
+                source,
+                params=None if invocation is None else [invocation],
+                resume=resume,
+                buffer_size=buffer_size,
+                progress_interval=progress_interval,
+                checkpoint_interval=checkpoint_interval,
+                event_filter=event_filter,
+                event_transformer=event_transformer,
+                completed_ids=completed_ids,
+                total_estimated=total_estimated,
+            )
+            async for event in stream:
+                if isinstance(event, DocumentCompleted):
+                    documents.append(event.document)
+                elif isinstance(event, DocumentFailed):
+                    failures.append(event)
+            completed_at_dt = self._utcnow()
+            results.append(
+                PipelineResult(
+                    source=source,
+                    documents=documents,
+                    errors=failures,
+                    success_count=len(documents),
+                    failure_count=len(failures),
+                    started_at=started_at_dt,
+                    completed_at=completed_at_dt,
+                )
+            )
+        return results
 
     def status(self) -> dict[str, list[dict[str, Any]]]:
         summary: dict[str, list[dict[str, Any]]] = {}
@@ -100,27 +138,317 @@ class IngestionPipeline:
         *,
         params: Iterable[dict[str, Any]] | None = None,
         resume: bool = False,
+        buffer_size: int = _DEFAULT_BUFFER_SIZE,
+        progress_interval: int = _DEFAULT_PROGRESS_INTERVAL,
+        checkpoint_interval: int = _DEFAULT_CHECKPOINT_INTERVAL,
+        event_filter: EventFilter | None = None,
+        event_transformer: EventTransformer | None = None,
+        completed_ids: Iterable[str] | None = None,
+        total_estimated: int | None = None,
     ) -> AsyncIterator[Document]:
         """Stream :class:`Document` instances as they are produced."""
 
         async def _generator() -> AsyncIterator[Document]:
-            async with self._client_factory() as client:
-                adapter = self._resolve_adapter(source, client)
-                if params is None:
-                    async for result in adapter.iter_results(resume=resume):
-                        yield result.document
-                else:
-                    for entry in params:
-                        invocation_params = dict(entry)
-                        async for result in adapter.iter_results(
-                            **invocation_params, resume=resume
-                        ):
-                            yield result.document
+            async for event in self.stream_events(
+                source,
+                params=params,
+                resume=resume,
+                buffer_size=buffer_size,
+                progress_interval=progress_interval,
+                checkpoint_interval=checkpoint_interval,
+                event_filter=event_filter,
+                event_transformer=event_transformer,
+                completed_ids=completed_ids,
+                total_estimated=total_estimated,
+            ):
+                if isinstance(event, DocumentCompleted):
+                    yield event.document
 
         return _generator()
 
+    async def run_async_legacy(
+        self,
+        source: str,
+        *,
+        params: Iterable[dict[str, Any]] | None = None,
+        resume: bool = False,
+    ) -> list[PipelineResult]:
+        """Legacy eager execution wrapper (deprecated)."""
+
+        if os.getenv(_LEGACY_WARNING_ENV) != "1":
+            import warnings
+
+            warnings.warn(
+                "IngestionPipeline.run_async_legacy is deprecated and will be removed after the migration window. "
+                "Use stream_events() or run_async() instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        results = await self.run_async(source, params=params, resume=resume)
+        self._log_legacy_usage(source)
+        return results
+
+    async def stream_events(
+        self,
+        source: str,
+        *,
+        params: Iterable[dict[str, Any]] | None = None,
+        resume: bool = False,
+        buffer_size: int = _DEFAULT_BUFFER_SIZE,
+        progress_interval: int = _DEFAULT_PROGRESS_INTERVAL,
+        checkpoint_interval: int = _DEFAULT_CHECKPOINT_INTERVAL,
+        event_filter: EventFilter | None = None,
+        event_transformer: EventTransformer | None = None,
+        completed_ids: Iterable[str] | None = None,
+        total_estimated: int | None = None,
+    ) -> AsyncIterator[PipelineEvent]:
+        """Stream structured pipeline events with backpressure support."""
+
+        pipeline_id = build_pipeline_id(source)
+        queue: asyncio.Queue[PipelineEvent | object] = asyncio.Queue(maxsize=max(buffer_size, 1))
+        sentinel = object()
+        filter_fn: Callable[[PipelineEvent], bool]
+        transform_fn: Callable[[PipelineEvent], PipelineEvent | None]
+        filter_fn = event_filter or (lambda event: True)
+        transform_fn = event_transformer or (lambda event: event)
+        completed_total = 0
+        failed_total = 0
+        checkpoint_target = checkpoint_interval if checkpoint_interval > 0 else None
+        completed_checkpoint = 0
+        estimated_total = total_estimated
+        completed_skip = set(completed_ids or [])
+        start_time = time.perf_counter()
+
+        async def emit(event: PipelineEvent) -> None:
+            transformed = transform_fn(event)
+            if transformed is None:
+                return
+            if not filter_fn(transformed):
+                return
+            await queue.put(transformed)
+
+        async def producer() -> None:
+            nonlocal completed_total, failed_total, completed_checkpoint
+            state = "initial"
+            await emit(
+                AdapterStateChange(
+                    timestamp=time.time(),
+                    pipeline_id=pipeline_id,
+                    adapter=source,
+                    old_state=state,
+                    new_state="initialising",
+                    reason=None,
+                )
+            )
+            state = "initialising"
+            try:
+                async with self._client_factory() as client:
+                    adapter = self._resolve_adapter(source, client)
+                    await emit(
+                        AdapterStateChange(
+                            timestamp=time.time(),
+                            pipeline_id=pipeline_id,
+                            adapter=adapter.source,
+                            old_state=state,
+                            new_state="ready",
+                            reason=None,
+                        )
+                    )
+                    state = "ready"
+                    for invocation in self._normalise_params(params):
+                        invocation_params = dict(invocation or {})
+                        await emit(
+                            AdapterStateChange(
+                                timestamp=time.time(),
+                                pipeline_id=pipeline_id,
+                                adapter=adapter.source,
+                                old_state=state,
+                                new_state="invocation_started",
+                                reason=None,
+                            )
+                        )
+                        state = "invocation_started"
+                        keyword_args = dict(invocation_params)
+                        if resume:
+                            keyword_args.setdefault("resume", resume)
+                        try:
+                            async for result in adapter.iter_results(**keyword_args):
+                                document = result.document
+                                if document.doc_id in completed_skip:
+                                    continue
+                                doc_started = time.perf_counter()
+                                await emit(
+                                    DocumentStarted(
+                                        timestamp=time.time(),
+                                        pipeline_id=pipeline_id,
+                                        doc_id=document.doc_id,
+                                        adapter=adapter.source,
+                                        parameters=dict(invocation_params),
+                                    )
+                                )
+                                duration = max(time.perf_counter() - doc_started, 0.0)
+                                await emit(
+                                    DocumentCompleted(
+                                        timestamp=time.time(),
+                                        pipeline_id=pipeline_id,
+                                        document=document,
+                                        duration=duration,
+                                        adapter_metadata=dict(result.metadata),
+                                    )
+                                )
+                                completed_total += 1
+                                completed_checkpoint += 1
+                                if progress_interval > 0 and completed_total % progress_interval == 0:
+                                    await emit(
+                                        self._build_progress_event(
+                                            pipeline_id,
+                                            completed_total,
+                                            failed_total,
+                                            estimated_total,
+                                            start_time,
+                                        )
+                                    )
+                                if (
+                                    checkpoint_target is not None
+                                    and completed_checkpoint >= checkpoint_target
+                                ):
+                                    completed_checkpoint = 0
+                                    await emit(
+                                        self._build_progress_event(
+                                            pipeline_id,
+                                            completed_total,
+                                            failed_total,
+                                            estimated_total,
+                                            start_time,
+                                        )
+                                    )
+                        except Exception as exc:  # pragma: no cover - defensive
+                            failed_total += 1
+                            completed_checkpoint += 1
+                            await emit(
+                                DocumentFailed(
+                                    timestamp=time.time(),
+                                    pipeline_id=pipeline_id,
+                                    doc_id=getattr(exc, "doc_id", None),
+                                    error=str(exc),
+                                    retry_count=getattr(exc, "retry_count", 0),
+                                    is_retryable=bool(getattr(exc, "is_retryable", False)),
+                                    error_type=exc.__class__.__name__,
+                                    traceback=traceback.format_exc(),
+                                )
+                            )
+                            await emit(
+                                AdapterStateChange(
+                                    timestamp=time.time(),
+                                    pipeline_id=pipeline_id,
+                                    adapter=adapter.source,
+                                    old_state=state,
+                                    new_state="failed",
+                                    reason=str(exc),
+                                )
+                            )
+                            return
+                        await emit(
+                            AdapterStateChange(
+                                timestamp=time.time(),
+                                pipeline_id=pipeline_id,
+                                adapter=adapter.source,
+                                old_state=state,
+                                new_state="invocation_completed",
+                                reason=None,
+                            )
+                        )
+                        state = "invocation_completed"
+                await emit(
+                    AdapterStateChange(
+                        timestamp=time.time(),
+                        pipeline_id=pipeline_id,
+                        adapter=source,
+                        old_state=state,
+                        new_state="completed",
+                        reason=None,
+                    )
+                )
+            finally:
+                await emit(
+                    self._build_progress_event(
+                        pipeline_id,
+                        completed_total,
+                        failed_total,
+                        estimated_total,
+                        start_time,
+                    )
+                )
+                await queue.put(sentinel)
+
+        producer_task = asyncio.create_task(producer())
+
+        try:
+            while True:
+                item = await queue.get()
+                if item is sentinel:
+                    break
+                yield item  # type: ignore[misc]
+        finally:
+            if not producer_task.done():
+                producer_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await producer_task
+
     def _resolve_adapter(self, source: str, client: AsyncHttpClient) -> BaseAdapter[Any]:
         return self._registry.get_adapter(source, AdapterContext(ledger=self.ledger), client)
+
+    @staticmethod
+    def _normalise_params(
+        params: Iterable[dict[str, Any]] | None,
+    ) -> list[dict[str, Any] | None]:
+        if params is None:
+            return [None]
+        normalised: list[dict[str, Any] | None] = []
+        for entry in params:
+            normalised.append(dict(entry))
+        if not normalised:
+            normalised.append({})
+        return normalised
+
+    @staticmethod
+    def _build_progress_event(
+        pipeline_id: str,
+        completed_total: int,
+        failed_total: int,
+        estimated_total: int | None,
+        start_time: float,
+    ) -> BatchProgress:
+        elapsed = max(time.perf_counter() - start_time, 0.0)
+        processed = completed_total + failed_total
+        eta_seconds: float | None = None
+        remaining: int | None = None
+        if estimated_total is not None:
+            remaining = max(estimated_total - processed, 0)
+            if processed and elapsed > 0:
+                rate = processed / elapsed
+                if rate > 0:
+                    eta_seconds = remaining / rate
+        return BatchProgress(
+            timestamp=time.time(),
+            pipeline_id=pipeline_id,
+            completed_count=completed_total,
+            failed_count=failed_total,
+            remaining=remaining,
+            eta_seconds=eta_seconds,
+        )
+
+    @staticmethod
+    def _utcnow() -> datetime:
+        return datetime.now(timezone.utc)
+
+    @staticmethod
+    def _log_legacy_usage(source: str) -> None:
+        import logging
+
+        logging.getLogger(__name__).info(
+            "run_async_legacy invoked for adapter %s", source
+        )
 
 
 __all__ = [

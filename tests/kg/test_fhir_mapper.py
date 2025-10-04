@@ -26,7 +26,7 @@ def test_map_patient_creates_identifier_relationships(mapper: FhirGraphMapper) -
         "extension": [{"url": "ethnicity", "valueString": "Hispanic"}],
         "identifier": [
             {"system": "http://hospital", "value": "123"},
-            {"value": "legacy"},
+            {"value": "historic"},
         ],
     }
     mapping = mapper.map_patient(patient)

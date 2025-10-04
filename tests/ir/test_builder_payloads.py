@@ -120,3 +120,31 @@ def test_ir_builder_without_payload() -> None:
     )
     assert document.text == "Plain text content"
     IRValidator().validate_document(document)
+
+
+def test_ir_builder_smoke_uses_typed_payload_text() -> None:
+    builder = IrBuilder()
+    raw: PubMedDocumentPayload = {
+        "pmid": "99999",
+        "title": "Typed Title",
+        "abstract": "Typed abstract body.",
+        "authors": ["Author"],
+        "mesh_terms": ["Term"],
+        "pub_types": ["Journal Article"],
+        "pmcid": "PMC99999",
+        "doi": "10.1000/typed",
+        "journal": "Typed Journal",
+        "pub_year": "2024",
+        "pubdate": "2024-05-01",
+    }
+    document = builder.build(
+        doc_id="pubmed:99999",
+        source="pubmed",
+        uri="https://pubmed.ncbi.nlm.nih.gov/99999/",
+        text="Placeholder text should be replaced",
+        raw=raw,
+    )
+    assert document.text.startswith("Typed Title")
+    assert "Typed abstract body." in document.text
+    assert document.provenance["pubmed"]["pmid"] == "99999"
+    IRValidator().validate_document(document, raw=raw)

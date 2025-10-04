@@ -26,7 +26,6 @@
 - Resume & auto pipelines: `--resume`, `--auto`, `--page-size`, `--start-date`, `--end-date`, and `--rate-limit` control long-running fetches.
 - Validation toggles: `--strict-validation`, `--skip-validation`, `--fail-fast`, and `--dry-run` manage payload hygiene without rewriting adapters.
 - Logging & UX: `--progress/--no-progress`, `--quiet`, `--verbose`, `--log-level`, `--log-file`, and `--error-log` tailor operator feedback.
-- Deprecation path: `med ingest-legacy` delegates with a warning; set `MEDICAL_KG_SUPPRESS_INGEST_DEPRECATED=1` to silence the notice during scripted migrations.
 
 ## Batch & Auto Modes
 
@@ -41,7 +40,7 @@
 
 ### Shared CLI Helper Module
 
-- Import `Medical_KG.ingestion.cli_helpers` to keep both the legacy `med ingest` and Typer ingestion CLIs in sync.
+- Import `Medical_KG.ingestion.cli_helpers` to share ingestion orchestration logic between the unified CLI and automation scripts.
 - `load_ndjson_batch(path_or_stream, *, progress=None)` parses NDJSON safely, skips blank lines, and optionally reports a running count for progress bars.
 - `invoke_adapter_sync(source, ledger, params=None, resume=False)` resolves the adapter, manages the shared HTTP client, and returns `PipelineResult` summaries for each parameter set.
 - `handle_ledger_resume(ledger_path_or_instance, candidate_doc_ids=None)` inspects the ingestion ledger to compute resume statistics (skipped vs. pending) and provides the filtered ID list for dry-run previews.

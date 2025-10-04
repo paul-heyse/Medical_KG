@@ -10,6 +10,10 @@ Baseline template for Python projects in Cursor on Ubuntu.
 
 See `.cursor/rules`, `.vscode/*`, and `environment.yml` for configuration details.
 
+## Command-line interface
+
+- Use `med ingest <adapter> [options]` for all ingestion workflows. The legacy `med ingest-legacy` alias was removed in version 2.0.0.
+
 ## Testing & Coverage
 
 - Run `pytest -q` to execute the offline suite. A trace-based hook enforces at

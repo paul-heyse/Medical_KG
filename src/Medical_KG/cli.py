@@ -1,16 +1,13 @@
 """Simple command-line interface for configuration management."""
-
 from __future__ import annotations
 
 import argparse
 import importlib
 import json
-import logging
-import os
 import sys
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Iterable, Protocol, cast
+from typing import Protocol, cast
 
 from Medical_KG.config.manager import ConfigError, ConfigManager, ConfigValidator, mask_secrets
 from Medical_KG.config.models import PdfPipelineSettings
@@ -219,130 +216,12 @@ def _command_postpdf(args: argparse.Namespace) -> int:
     return 0
 
 
-LEGACY_FLAG_ALIASES: dict[str, str] = {
-    "--batch": "--batch",
-    "--batch-file": "--batch",
-    "--continue-from-ledger": "--resume",
-    "--ledger": "--ledger",
-    "--max-records": "--limit",
-    "--format": "--output",
-    "--quiet": "--quiet",
-    "--verbose": "--verbose",
-    "--auto": "--auto",
-    "--resume": "--resume",
-    "--chunk-size": "--chunk-size",
-    "--skip-validation": "--skip-validation",
-    "--strict-validation": "--strict-validation",
-    "--fail-fast": "--fail-fast",
-}
-
-SHORT_FLAG_ALIASES: dict[str, str] = {
-    "-b": "--batch",
-    "-o": "--output",
-    "-n": "--limit",
-    "-r": "--resume",
-    "-q": "--quiet",
-    "-v": "--verbose",
-}
-
-BOOLEAN_FLAGS = {
-    "--resume",
-    "--auto",
-    "--quiet",
-    "--verbose",
-    "--fail-fast",
-    "--skip-validation",
-    "--strict-validation",
-}
-
-
-def _translate_legacy_args(argv: list[str]) -> tuple[list[str], bool]:
-    tokens = list(argv)
-    if not tokens:
-        return [], False
-    if tokens == ["--help"] or tokens == ["-h"]:
-        return ["--help"], False
-    adapter_from_source: str | None = None
-    translated: list[str] = []
-    used_legacy = False
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if token in {"--help", "-h"}:
-            return ["--help"], used_legacy
-        if token == "--source":
-            used_legacy = True
-            if index + 1 < len(tokens):
-                adapter_from_source = tokens[index + 1]
-                index += 2
-            else:
-                index += 1
-            continue
-        if token == "--ids":
-            used_legacy = True
-            if index + 1 < len(tokens):
-                for part in tokens[index + 1].split(","):
-                    value = part.strip()
-                    if value:
-                        translated.extend(["--id", value])
-                index += 2
-            else:
-                index += 1
-            continue
-        alias = LEGACY_FLAG_ALIASES.get(token) or SHORT_FLAG_ALIASES.get(token)
-        if alias:
-            if alias != token:
-                used_legacy = True
-            translated.append(alias)
-            if alias in BOOLEAN_FLAGS:
-                index += 1
-                continue
-            if index + 1 < len(tokens):
-                translated.append(tokens[index + 1])
-                index += 2
-            else:
-                index += 1
-            continue
-        translated.append(token)
-        index += 1
-    if adapter_from_source:
-        if not translated or translated[0] != adapter_from_source:
-            translated.insert(0, adapter_from_source)
-    return translated, used_legacy
-
-
-def _emit_deprecation_warning(command: str) -> None:
-    if os.environ.get("MEDICAL_KG_SUPPRESS_INGEST_DEPRECATED"):
-        return
-    message = (
-        f"`{command}` is deprecated and delegates to the unified ingestion CLI. "
-        "Use `med ingest <adapter>` instead."
-    )
-    print(f"Warning: {message}", file=sys.stderr)
-
-
-def _run_unified_cli(argv: list[str], *, log_usage: bool) -> int:
+def _command_ingest(args: argparse.Namespace) -> int:
     from Medical_KG.ingestion import cli as ingestion_cli
 
-    normalized = list(argv) or ["--help"]
-    if log_usage:
-        logging.getLogger("Medical_KG.cli").warning("Delegating ingestion command: %s", " ".join(normalized))
+    argv = list(getattr(args, "argv", []))
+    normalized = argv or ["--help"]
     return ingestion_cli.main(["ingest", *normalized])
-
-
-def _command_ingest(args: argparse.Namespace) -> int:
-    argv = list(getattr(args, "argv", []))
-    translated, used_legacy = _translate_legacy_args(argv)
-    if used_legacy:
-        _emit_deprecation_warning("med ingest")
-    return _run_unified_cli(translated, log_usage=used_legacy)
-
-
-def _command_ingest_legacy(args: argparse.Namespace) -> int:
-    argv = list(getattr(args, "argv", []))
-    translated, _ = _translate_legacy_args(argv)
-    _emit_deprecation_warning("med ingest-legacy")
-    return _run_unified_cli(translated, log_usage=True)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -399,19 +278,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ingest.set_defaults(func=_command_ingest)
 
-    ingest_legacy = subparsers.add_parser(
-        "ingest-legacy",
-        help="Deprecated ingestion command (delegates to unified CLI)",
-        add_help=False,
-    )
-    ingest_legacy.set_defaults(func=_command_ingest_legacy)
-
     original_parse_known_args = parser.parse_known_args
 
-    def _parse_args(args: list[str] | None = None, namespace: argparse.Namespace | None = None) -> argparse.Namespace:
+    def _parse_args(
+        args: list[str] | None = None,
+        namespace: argparse.Namespace | None = None,
+    ) -> argparse.Namespace:
         namespace_obj, remainder = original_parse_known_args(args, namespace)
         command = getattr(namespace_obj, "command", None)
-        if command in {"ingest", "ingest-legacy"}:
+        if command == "ingest":
             setattr(namespace_obj, "argv", remainder)
         elif remainder:
             parser.error(f"unrecognized arguments: {' '.join(remainder)}")

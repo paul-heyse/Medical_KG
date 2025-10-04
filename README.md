@@ -7,12 +7,15 @@ Baseline template for Python projects in Cursor on Ubuntu.
 2. Open folder in Cursor (`cursor .`).
 3. Ensure interpreter shows `.venv/bin/python`.
 4. Run target tasks: **pytest**, **lint**, **format**.
+5. Invoke the unified ingestion CLI: `med ingest <adapter> --help` for an overview, then run batch jobs such as `med ingest demo --batch samples.ndjson --schema schemas/demo.json`.
 
 See `.cursor/rules`, `.vscode/*`, and `environment.yml` for configuration details.
 
-## Command-line interface
+## Unified Ingestion CLI
 
-- Use `med ingest <adapter> [options]` for all ingestion workflows. The legacy `med ingest-legacy` alias was removed in version 2.0.0.
+- Primary entry point: `med ingest ADAPTER [OPTIONS]`.
+- Highlights: dynamic adapter listing in help output, JSON Schema validation via `--schema`, Rich-powered progress bars, and JSON/table summaries.
+- Migration tooling lives under `scripts/cli_migration/` (see `docs/ingestion_cli_migration_guide.md`).
 
 ## Testing & Coverage
 

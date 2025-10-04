@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Iterable
 
 import pytest
 
+import Medical_KG.ingestion.cli_helpers as cli_helpers
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
 from Medical_KG.ingestion.cli_helpers import (
     AdapterInvocationError,
@@ -16,6 +18,7 @@ from Medical_KG.ingestion.cli_helpers import (
     handle_ledger_resume,
     invoke_adapter_sync,
     load_ndjson_batch,
+    should_display_progress,
 )
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion.models import Document, IngestionResult
@@ -157,6 +160,30 @@ def test_handle_ledger_resume_missing_file(tmp_path: Path) -> None:
     plan = handle_ledger_resume(ledger_path)
     assert plan.resume_ids == []
     assert plan.stats == LedgerResumeStats(total=0, skipped=0, remaining=0)
+
+
+def test_should_display_progress_defaults_to_tty(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli_helpers, "Progress", object())
+
+    class _Stream:
+        def isatty(self) -> bool:
+            return True
+
+    monkeypatch.setattr(cli_helpers, "sys", SimpleNamespace(stderr=_Stream()))
+    assert should_display_progress(force=None, quiet=False) is True
+
+
+def test_should_display_progress_respects_force(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli_helpers, "Progress", object())
+
+    class _Stream:
+        def isatty(self) -> bool:
+            return False
+
+    monkeypatch.setattr(cli_helpers, "sys", SimpleNamespace(stderr=_Stream()))
+    assert should_display_progress(force=True, quiet=False) is True
+    assert should_display_progress(force=False, quiet=False) is False
+    assert should_display_progress(force=None, quiet=True) is False
 
 
 def test_format_results_jsonl() -> None:

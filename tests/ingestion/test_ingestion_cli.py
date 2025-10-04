@@ -157,3 +157,172 @@ def test_dry_run_skips_pipeline_execution(
     assert outcome.exit_code == 0
     assert pipeline.calls == []
     assert "Processed documents: 0" in outcome.stdout
+
+
+def test_command_parsing_handles_multiple_flags(
+    tmp_path: Path, make_pipeline: Callable[[list[PipelineResult]], FakePipeline]
+) -> None:
+    results = [PipelineResult(source="demo", doc_ids=["doc-1"])]
+    pipeline = make_pipeline(results)
+    batch = tmp_path / "params.ndjson"
+    batch.write_text(json.dumps({"param": "value"}))
+
+    outcome = runner.invoke(
+        cli.app,
+        [
+            "demo",
+            "--batch",
+            str(batch),
+            "--resume",
+            "--limit",
+            "1",
+            "--auto",
+            "--summary-only",
+            "--output",
+            "text",
+        ],
+    )
+
+    assert outcome.exit_code == 0, outcome.stdout
+    assert pipeline.calls == [
+        {
+            "source": "demo",
+            "params": [{"param": "value"}],
+            "resume": True,
+        }
+    ]
+
+
+def test_unknown_adapter_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "_available_sources", lambda: ["other"])
+
+    outcome = runner.invoke(cli.app, ["demo"])
+
+    assert outcome.exit_code == 2
+    assert "Unknown source" in outcome.stderr
+
+
+def test_help_text_includes_examples() -> None:
+    outcome = runner.invoke(cli.app, ["--help"])
+
+    assert outcome.exit_code == 0
+    assert "Unified ingestion interface" in outcome.stdout
+    assert "Examples" in outcome.stdout
+    assert "med ingest demo" in outcome.stdout
+    assert "See also" in outcome.stdout
+
+
+def test_adapter_help_lists_available_sources(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "_available_sources", lambda: ["demo", "umls"])
+
+    outcome = runner.invoke(cli.app, ["--help"])
+
+    assert "Available adapters: demo, umls" in outcome.stdout
+
+
+def test_schema_validation_success(
+    tmp_path: Path, make_pipeline: Callable[[list[PipelineResult]], FakePipeline]
+) -> None:
+    make_pipeline([PipelineResult(source="demo", doc_ids=["doc-1"])] )
+    batch = tmp_path / "params.ndjson"
+    schema = tmp_path / "schema.json"
+    batch.write_text(json.dumps({"param": "value"}))
+    schema.write_text(json.dumps({"type": "object", "required": ["param"]}))
+
+    outcome = runner.invoke(
+        cli.app,
+        ["demo", "--batch", str(batch), "--schema", str(schema), "--summary-only"],
+    )
+
+    assert outcome.exit_code == 0, outcome.stdout
+    assert "validated against provided JSON schema" in outcome.stdout
+
+
+def test_schema_validation_failure(tmp_path: Path) -> None:
+    batch = tmp_path / "params.ndjson"
+    schema = tmp_path / "schema.json"
+    batch.write_text(json.dumps({"wrong": "value"}))
+    schema.write_text(json.dumps({"type": "object", "required": ["param"]}))
+
+    outcome = runner.invoke(
+        cli.app,
+        ["demo", "--batch", str(batch), "--schema", str(schema)],
+    )
+
+    assert outcome.exit_code == 2
+    assert "Schema validation failed" in outcome.stderr
+
+
+def test_resume_sets_flag_on_pipeline(
+    tmp_path: Path, make_pipeline: Callable[[list[PipelineResult]], FakePipeline]
+) -> None:
+    pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=["doc-1"])] )
+    batch = tmp_path / "params.ndjson"
+    batch.write_text(json.dumps({"param": "value"}))
+
+    outcome = runner.invoke(
+        cli.app,
+        ["demo", "--batch", str(batch), "--resume", "--summary-only"],
+    )
+
+    assert outcome.exit_code == 0
+    assert pipeline.calls[0]["resume"] is True
+
+
+def test_table_output_uses_rich_table(
+    tmp_path: Path, make_pipeline: Callable[[list[PipelineResult]], FakePipeline]
+) -> None:
+    make_pipeline([PipelineResult(source="demo", doc_ids=["doc-1", "doc-2"])] )
+    batch = tmp_path / "params.ndjson"
+    batch.write_text(json.dumps({"param": "value"}))
+
+    outcome = runner.invoke(
+        cli.app,
+        ["demo", "--batch", str(batch), "--output", "table"],
+    )
+
+    assert outcome.exit_code == 0, outcome.stdout
+    assert "Processed documents" in outcome.stdout
+    assert "doc-1" in outcome.stdout
+
+
+def test_progress_reporting_advances(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[int] = []
+
+    class _Progress:
+        def __enter__(self) -> "_Progress":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def advance(self, task_id: int, value: int) -> None:
+            calls.append(value)
+
+    def _fake_create_progress(description: str, total: int | None) -> tuple[_Progress, int]:
+        return _Progress(), 1
+
+    monkeypatch.setattr(cli, "create_progress", _fake_create_progress)
+    monkeypatch.setattr(cli, "should_display_progress", lambda force, quiet: True)
+
+    pipeline = FakePipeline([
+        PipelineResult(source="demo", doc_ids=["doc-1"]),
+        PipelineResult(source="demo", doc_ids=["doc-2"]),
+    ])
+    monkeypatch.setattr(cli, "_build_pipeline", lambda _ledger: pipeline)
+
+    batch = tmp_path / "batch.ndjson"
+    batch.write_text(json.dumps({"param": "value"}))
+
+    runner.invoke(cli.app, ["demo", "--batch", str(batch), "--summary-only"])
+
+    assert calls, "progress advance should be invoked"
+
+
+def test_error_for_missing_batch_file() -> None:
+    outcome = runner.invoke(cli.app, ["demo", "--batch", "missing.ndjson"])
+
+    assert outcome.exit_code == 2
+    assert "Invalid value" in outcome.stderr

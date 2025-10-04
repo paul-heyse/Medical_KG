@@ -7,6 +7,7 @@ from typing import Any, Iterable
 import pytest
 
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
+from Medical_KG.ingestion.events import BatchProgress, DocumentCompleted, DocumentStarted
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion.models import Document, IngestionResult
 from Medical_KG.ingestion.pipeline import IngestionPipeline, PipelineResult
@@ -88,8 +89,9 @@ def test_pipeline_resume_skips_completed(tmp_path: Path) -> None:
         ledger, registry=_Registry(adapter), client_factory=lambda: _NoopClient()
     )
 
-    with pytest.raises(RuntimeError):
-        pipeline.run("stub")
+    initial_results = pipeline.run("stub")
+    assert initial_results[0].doc_ids == ["doc-1"]
+    assert initial_results[0].failure_count == 1
     entry = ledger.get("doc-1")
     assert entry and entry.state == "auto_done"
     failed_entry = ledger.get("doc-2")
@@ -98,6 +100,7 @@ def test_pipeline_resume_skips_completed(tmp_path: Path) -> None:
     # Resume should process only the previously failed record.
     results = pipeline.run("stub", resume=True)
     assert results[0].doc_ids == ["doc-2"]
+    assert results[0].failure_count == 0
     assert adapter.parsed.count("doc-2") == 2
 
 
@@ -133,7 +136,8 @@ def test_pipeline_run_async_supports_event_loops(tmp_path: Path) -> None:
     finally:
         loop.close()
 
-    assert results == [PipelineResult(source="stub", doc_ids=["doc-async"])]
+    assert len(results) == 1
+    assert results[0].doc_ids == ["doc-async"]
 
 
 def test_pipeline_iter_results_streams_documents(tmp_path: Path) -> None:
@@ -156,6 +160,32 @@ def test_pipeline_iter_results_streams_documents(tmp_path: Path) -> None:
 
     doc_ids = asyncio.run(_collect())
     assert doc_ids == ["doc-1", "doc-2"]
+
+
+def test_stream_events_emit_lifecycle_events(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "ledger.jsonl"
+    ledger = IngestionLedger(ledger_path)
+    records = [
+        {"id": "doc-1", "content": "ok"},
+        {"id": "doc-2", "content": "ok"},
+    ]
+    adapter = _StubAdapter(AdapterContext(ledger), records=records)
+    pipeline = IngestionPipeline(
+        ledger,
+        registry=_Registry(adapter),
+        client_factory=lambda: _NoopClient(),
+    )
+
+    async def _collect() -> list[type[object]]:
+        events = []
+        async for event in pipeline.stream_events("stub", progress_interval=1):
+            events.append(type(event))
+        return events
+
+    event_types = asyncio.run(_collect())
+    assert event_types.count(DocumentStarted) == 2
+    assert event_types.count(DocumentCompleted) == 2
+    assert any(event_type is BatchProgress for event_type in event_types)
 
 
 def test_pipeline_iter_results_closes_client_on_cancel(tmp_path: Path) -> None:

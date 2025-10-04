@@ -3,11 +3,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, Generic, TypeVar
+from typing import Any, Callable, Generic, TypeVar
 
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion.models import Document, IngestionResult
 from Medical_KG.ingestion.utils import generate_doc_id
+from Medical_KG.ingestion.events import PipelineEvent
 
 
 @dataclass(slots=True)
@@ -23,6 +24,7 @@ class BaseAdapter(Generic[RawPayloadT], ABC):
 
     def __init__(self, context: AdapterContext) -> None:
         self.context = context
+        self._emit_event: Callable[[PipelineEvent], None] | None = None
 
     async def iter_results(self, *args: object, **kwargs: object) -> AsyncIterator[IngestionResult]:
         """Yield ingestion results as they are produced."""
@@ -49,6 +51,9 @@ class BaseAdapter(Generic[RawPayloadT], ABC):
                 result = await self.write(document)
             except Exception as exc:  # pragma: no cover - surfaced to caller
                 doc_id = document.doc_id if document else str(raw_record)
+                setattr(exc, "doc_id", doc_id)
+                setattr(exc, "retry_count", getattr(exc, "retry_count", 0))
+                setattr(exc, "is_retryable", getattr(exc, "is_retryable", False))
                 self.context.ledger.record(
                     doc_id=doc_id,
                     state="auto_failed",
@@ -81,3 +86,13 @@ class BaseAdapter(Generic[RawPayloadT], ABC):
 
     def build_doc_id(self, *, identifier: str, version: str, content: bytes) -> str:
         return generate_doc_id(self.source, identifier, version, content)
+
+    def bind_event_emitter(self, emitter: Callable[[PipelineEvent], None] | None) -> None:
+        """Register a callback used to forward custom adapter events."""
+
+        self._emit_event = emitter
+
+    def emit_event(self, event: PipelineEvent) -> None:
+        if self._emit_event is None:
+            return
+        self._emit_event(event)

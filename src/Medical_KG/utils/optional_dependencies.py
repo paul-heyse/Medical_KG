@@ -9,17 +9,264 @@ existing lazy imports and graceful fallbacks when packages are not installed.
 from __future__ import annotations
 
 import importlib
+import importlib.util
 from dataclasses import dataclass
+from types import ModuleType
 from typing import (
     TYPE_CHECKING,
     Any,
     AsyncContextManager,
     Callable,
+    Iterable,
     Mapping,
     Protocol,
     Sequence,
     cast,
 )
+
+
+@dataclass(frozen=True)
+class MissingDependencyError(ImportError):
+    """Structured import error for optional feature dependencies.
+
+    Parameters mirror the dependency registry so call sites can attach
+    actionable context::
+
+        try:
+            httpx = optional_import("httpx", feature_name="http")
+        except MissingDependencyError as exc:
+            logger.error("%s", exc)
+            raise
+
+    Attributes
+    ----------
+    feature_name:
+        Human readable name of the feature the caller attempted to use.
+    package_name:
+        Package (or packages) that must be installed to enable the feature.
+    extras_group:
+        Optional extras group in ``pyproject.toml`` that installs the dependency.
+    install_hint:
+        Concrete shell command to resolve the missing dependency.
+    docs_url:
+        Optional URL pointing to feature documentation.
+    """
+
+    feature_name: str
+    package_name: str
+    extras_group: str | None
+    install_hint: str
+    docs_url: str | None = None
+
+    def __str__(self) -> str:
+        base = (
+            f"Feature '{self.feature_name}' requires package '{self.package_name}'.\n"
+            f"Install with: {self.install_hint}"
+        )
+        if self.docs_url:
+            return f"{base}\nDocumentation: {self.docs_url}"
+        return base
+
+
+@dataclass(frozen=True)
+class DependencyGroup:
+    """Registry entry describing optional dependency relationships."""
+
+    packages: tuple[str, ...]
+    extras_group: str | None
+    docs_url: str | None = None
+    modules: tuple[str, ...] | None = None
+
+    @property
+    def install_hint(self) -> str:
+        if self.extras_group:
+            return f"pip install medical-kg[{self.extras_group}]"
+        packages = " ".join(self.packages)
+        return f"pip install {packages}"
+
+    def package_label(self) -> str:
+        if len(self.packages) == 1:
+            return self.packages[0]
+        return ", ".join(self.packages)
+
+    def import_targets(self) -> tuple[str, ...]:
+        if self.modules is not None:
+            return self.modules
+        targets: list[str] = []
+        for package in self.packages:
+            normalized = package.replace("-", "_")
+            target = normalized.split(".")[0]
+            targets.append(target)
+        return tuple(targets)
+
+
+@dataclass(frozen=True)
+class DependencyStatus:
+    """Computed installation status for an optional dependency group."""
+
+    feature_name: str
+    packages: tuple[str, ...]
+    extras_group: str | None
+    installed: bool
+    missing_packages: tuple[str, ...]
+    install_hint: str
+    docs_url: str | None
+
+
+DEPENDENCY_REGISTRY: dict[str, DependencyGroup] = {
+    "observability": DependencyGroup(
+        packages=(
+            "prometheus-client",
+            "opentelemetry-api",
+            "opentelemetry-sdk",
+            "opentelemetry-instrumentation-fastapi",
+            "opentelemetry-instrumentation-httpx",
+        ),
+        extras_group="observability",
+        docs_url="docs/dependencies.md#observability",
+        modules=(
+            "prometheus_client",
+            "opentelemetry",
+            "opentelemetry.sdk",
+            "opentelemetry.instrumentation.fastapi",
+            "opentelemetry.instrumentation.httpx",
+        ),
+    ),
+    "pdf_processing": DependencyGroup(
+        packages=("pypdf", "pdfminer.six"),
+        extras_group="pdf",
+        docs_url="docs/dependencies.md#pdf-processing",
+        modules=("pypdf", "pdfminer"),
+    ),
+    "embeddings": DependencyGroup(
+        packages=("sentence-transformers", "faiss-cpu"),
+        extras_group="embeddings",
+        docs_url="docs/dependencies.md#embeddings",
+        modules=("sentence_transformers", "faiss"),
+    ),
+    "tokenization": DependencyGroup(
+        packages=("tiktoken",),
+        extras_group="tokenization",
+        docs_url="docs/dependencies.md#tokenization",
+        modules=("tiktoken",),
+    ),
+    "nlp": DependencyGroup(
+        packages=("spacy",),
+        extras_group="nlp",
+        docs_url="docs/dependencies.md#natural-language-processing",
+        modules=("spacy",),
+    ),
+    "gpu": DependencyGroup(
+        packages=("torch",),
+        extras_group="gpu",
+        docs_url="docs/dependencies.md#gpu",
+        modules=("torch",),
+    ),
+    "http": DependencyGroup(
+        packages=("httpx",),
+        extras_group="http",
+        docs_url="docs/dependencies.md#http-clients",
+        modules=("httpx",),
+    ),
+    "caching": DependencyGroup(
+        packages=("redis",),
+        extras_group="caching",
+        docs_url="docs/dependencies.md#caching",
+        modules=("redis.asyncio",),
+    ),
+    "load_testing": DependencyGroup(
+        packages=("locust",),
+        extras_group="load-testing",
+        docs_url="docs/dependencies.md#load-testing",
+        modules=("locust",),
+    ),
+}
+
+
+def _missing_modules(targets: Iterable[str]) -> tuple[str, ...]:
+    missing: list[str] = []
+    for module_name in targets:
+        try:
+            spec = importlib.util.find_spec(module_name)
+        except ModuleNotFoundError:
+            missing.append(module_name)
+            continue
+        if spec is None:
+            missing.append(module_name)
+    return tuple(missing)
+
+
+def iter_dependency_statuses() -> Iterable[DependencyStatus]:
+    """Yield installation status for each optional dependency group."""
+
+    for feature_name, group in DEPENDENCY_REGISTRY.items():
+        missing_modules = _missing_modules(group.import_targets())
+        installed = not missing_modules
+        missing_packages: tuple[str, ...]
+        if installed:
+            missing_packages = ()
+        else:
+            missing_map = {
+                module_name: package
+                for package, module_name in zip(
+                    group.packages, group.import_targets(), strict=False
+                )
+            }
+            missing_packages = tuple(
+                missing_map.get(module_name, module_name) for module_name in missing_modules
+            )
+
+        yield DependencyStatus(
+            feature_name=feature_name,
+            packages=group.packages,
+            extras_group=group.extras_group,
+            installed=installed,
+            missing_packages=missing_packages,
+            install_hint=group.install_hint,
+            docs_url=group.docs_url,
+        )
+
+
+def optional_import(
+    module: str,
+    *,
+    feature_name: str | None = None,
+    package_name: str | None = None,
+    extras_group: str | None = None,
+    docs_url: str | None = None,
+) -> Any:
+    """Import ``module`` or raise :class:`MissingDependencyError` with guidance."""
+
+    try:
+        return importlib.import_module(module)
+    except ModuleNotFoundError as exc:  # pragma: no cover - exercised via tests
+        resolved_feature = feature_name or module
+        registry = DEPENDENCY_REGISTRY.get(resolved_feature)
+        package_label = package_name
+        extras = extras_group
+        hint = None
+        documentation = docs_url
+        if registry is not None:
+            package_label = package_label or registry.package_label()
+            extras = extras or registry.extras_group
+            hint = registry.install_hint
+            documentation = documentation or registry.docs_url
+        else:
+            package_label = package_label or module
+        if hint is None:
+            if extras:
+                hint = f"pip install medical-kg[{extras}]"
+            elif package_label:
+                hint = f"pip install {package_label}"
+            else:
+                hint = "pip install missing dependency"
+        raise MissingDependencyError(
+            feature_name=resolved_feature,
+            package_name=package_label or module,
+            extras_group=extras,
+            install_hint=hint,
+            docs_url=documentation,
+        ) from exc
 
 if TYPE_CHECKING:  # pragma: no cover - import-time typing help only
     import prometheus_client
@@ -267,26 +514,48 @@ class LocustFacade:
     task: TaskDecoratorFactory
 
 
-try:  # pragma: no cover - optional dependency wiring
-    import httpx as _httpx  # type: ignore[import-not-found]
-except ModuleNotFoundError:  # pragma: no cover - tests guard against this at runtime
+def _spec_available(module_name: str) -> bool:
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except ModuleNotFoundError:
+        return False
+
+
+_httpx: ModuleType | None
+if not _spec_available("httpx"):
     _httpx = None
+else:
+    _httpx = importlib.import_module("httpx")
 
 
-try:  # pragma: no cover - optional dependency wiring
-    from locust import HttpUser as _LocustHttpUser  # type: ignore[import-not-found]
-    from locust import between as _locust_between
-    from locust import task as _locust_task
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
+_LocustHttpUser: type[LocustUserProtocol] | None
+_locust_between: Callable[[float, float], Callable[[], float]] | None
+_locust_task: TaskDecoratorFactory | None
+if not _spec_available("locust"):
     _LocustHttpUser = None
     _locust_between = None
     _locust_task = None
+else:
+    locust_module = importlib.import_module("locust")
+    http_user_attr = getattr(locust_module, "HttpUser", None)
+    between_attr = getattr(locust_module, "between", None)
+    task_attr = getattr(locust_module, "task", None)
+    if http_user_attr is None or between_attr is None or task_attr is None:
+        _LocustHttpUser = None
+        _locust_between = None
+        _locust_task = None
+    else:
+        _LocustHttpUser = cast(type[LocustUserProtocol], http_user_attr)
+        _locust_between = cast(Callable[[float, float], Callable[[], float]], between_attr)
+        _locust_task = cast(TaskDecoratorFactory, task_attr)
 
 
-try:  # pragma: no cover - optional dependency wiring
-    from redis.asyncio import Redis as _RedisClient  # type: ignore[import-not-found]
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
+_RedisClient: type[RedisClientProtocol] | None
+if not _spec_available("redis.asyncio"):
     _RedisClient = None
+else:
+    redis_module = importlib.import_module("redis.asyncio")
+    _RedisClient = cast(type[RedisClientProtocol], getattr(redis_module, "Redis", None))
 
 
 def get_tiktoken_encoding(name: str = "cl100k_base") -> TokenEncoder | None:
@@ -341,10 +610,13 @@ def build_counter(name: str, documentation: str, labelnames: Sequence[str]) -> C
     """Construct a Prometheus counter or a typed no-op substitute."""
 
     try:
-        from prometheus_client import Counter as PromCounter  # type: ignore[import-not-found]
+        prom_module = importlib.import_module("prometheus_client")
     except ModuleNotFoundError:  # pragma: no cover - optional dependency
         return _NoopCounter()
-    counter: "prometheus_client.Counter" = PromCounter(name, documentation, labelnames)
+    counter_cls = getattr(prom_module, "Counter", None)
+    if counter_cls is None:
+        return _NoopCounter()
+    counter = counter_cls(name, documentation, labelnames)
     return cast(CounterProtocol, counter)
 
 
@@ -352,48 +624,95 @@ def build_histogram(name: str, documentation: str, buckets: Sequence[float]) -> 
     """Construct a Prometheus histogram or a typed no-op substitute."""
 
     try:
-        from prometheus_client import Histogram as PromHistogram  # type: ignore[import-not-found]
+        prom_module = importlib.import_module("prometheus_client")
     except ModuleNotFoundError:  # pragma: no cover - optional dependency
         return _NoopHistogram()
-    histogram: "prometheus_client.Histogram" = PromHistogram(name, documentation, buckets=buckets)
+    histogram_cls = getattr(prom_module, "Histogram", None)
+    if histogram_cls is None:
+        return _NoopHistogram()
+    histogram = histogram_cls(name, documentation, buckets=buckets)
     return cast(HistogramProtocol, histogram)
 
 
 def get_httpx_module() -> HttpxModule:
     """Return the ``httpx`` module with a typed facade."""
 
+    global _httpx
     if _httpx is None:
-        raise ModuleNotFoundError(
-            "httpx is required but not installed. Install the project dependencies to run HTTP-bound features."
+        module = optional_import(
+            "httpx",
+            feature_name="http",
+            package_name="httpx",
         )
+        _httpx = cast(ModuleType, module)
     return cast(HttpxModule, _httpx)
 
 
 def build_redis_client(**kwargs: Any) -> RedisClientProtocol:
     """Instantiate a typed Redis client or raise when unavailable."""
 
-    if _RedisClient is None:
-        raise ModuleNotFoundError(
-            "redis is required but not installed. Install it before enabling Redis-backed caches."
+    global _RedisClient
+    client_cls = _RedisClient
+    if client_cls is None:
+        module = optional_import(
+            "redis.asyncio",
+            feature_name="caching",
+            package_name="redis",
         )
-    return cast(RedisClientProtocol, _RedisClient(**kwargs))
+        client_cls = getattr(module, "Redis", None)
+        if client_cls is None:
+            raise MissingDependencyError(
+                feature_name="caching",
+                package_name="redis",
+                extras_group=DEPENDENCY_REGISTRY["caching"].extras_group,
+                install_hint=DEPENDENCY_REGISTRY["caching"].install_hint,
+                docs_url=DEPENDENCY_REGISTRY["caching"].docs_url,
+            )
+        client_cls = cast(type[RedisClientProtocol], client_cls)
+        _RedisClient = client_cls
+    assert client_cls is not None
+    return client_cls(**kwargs)
 
 
 def load_locust() -> LocustFacade:
     """Return typed locust helpers, raising when the dependency is absent."""
 
+    global _LocustHttpUser, _locust_between, _locust_task
     if _LocustHttpUser is None or _locust_between is None or _locust_task is None:
-        raise ModuleNotFoundError(
-            "locust is required to execute load tests. Install it before running ops/load_test/locustfile.py."
+        module = optional_import(
+            "locust",
+            feature_name="load_testing",
+            package_name="locust",
         )
+        http_user = getattr(module, "HttpUser", None)
+        between = getattr(module, "between", None)
+        task = getattr(module, "task", None)
+        if http_user is None or between is None or task is None:
+            raise MissingDependencyError(
+                feature_name="load_testing",
+                package_name=DEPENDENCY_REGISTRY["load_testing"].package_label(),
+                extras_group=DEPENDENCY_REGISTRY["load_testing"].extras_group,
+                install_hint=DEPENDENCY_REGISTRY["load_testing"].install_hint,
+                docs_url=DEPENDENCY_REGISTRY["load_testing"].docs_url,
+            )
+        _LocustHttpUser = cast(type[LocustUserProtocol], http_user)
+        _locust_between = cast(Callable[[float, float], Callable[[], float]], between)
+        _locust_task = cast(TaskDecoratorFactory, task)
+    assert _LocustHttpUser is not None
+    assert _locust_between is not None
+    assert _locust_task is not None
     return LocustFacade(
-        HttpUser=cast(type[LocustUserProtocol], _LocustHttpUser),
-        between=cast(Callable[[float, float], Callable[[], float]], _locust_between),
-        task=cast(TaskDecoratorFactory, _locust_task),
+        HttpUser=_LocustHttpUser,
+        between=_locust_between,
+        task=_locust_task,
     )
 
 
 __all__ = [
+    "DEPENDENCY_REGISTRY",
+    "DependencyGroup",
+    "DependencyStatus",
+    "MissingDependencyError",
     "CounterProtocol",
     "DocProtocol",
     "GaugeProtocol",
@@ -414,6 +733,8 @@ __all__ = [
     "build_gauge",
     "build_histogram",
     "build_redis_client",
+    "iter_dependency_statuses",
+    "optional_import",
     "get_httpx_module",
     "get_tiktoken_encoding",
     "get_torch_module",

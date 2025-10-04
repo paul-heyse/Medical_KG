@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import importlib
 from datetime import timedelta
-from types import ModuleType, TracebackType
+from types import TracebackType
 from typing import Any, Protocol, cast
+
+from Medical_KG.utils.optional_dependencies import MissingDependencyError, get_httpx_module
 
 
 class ResponseProtocol(Protocol):
@@ -48,40 +49,31 @@ class ClientProtocol(Protocol):
     def close(self) -> None: ...
 
 
-_httpx: ModuleType | None
+class _FallbackHTTPError(Exception):
+    """Fallback HTTP error used when httpx is unavailable."""
+
+    pass
+
+
 try:  # pragma: no cover - exercised only when dependency available
-    _httpx = importlib.import_module("httpx")
-except ModuleNotFoundError:  # pragma: no cover - default for tests
-    _httpx = None
-
-
-if _httpx is not None:
-    HTTPError = cast(type[Exception], getattr(_httpx, "HTTPError"))
-else:  # pragma: no cover - executed when httpx missing
-
-    class _HTTPError(Exception):
-        """Fallback HTTPError when httpx is unavailable."""
-
-        pass
-
-    HTTPError = _HTTPError
+    HTTPError = cast(type[Exception], getattr(get_httpx_module(), "HTTPError"))
+except MissingDependencyError:  # pragma: no cover - default for tests
+    HTTPError = _FallbackHTTPError
 
 
 def create_async_client(**kwargs: Any) -> AsyncClientProtocol:
     """Instantiate an AsyncClient with typed return value."""
 
-    if _httpx is None:
-        raise RuntimeError("httpx must be installed to create an AsyncClient")
-    client = getattr(_httpx, "AsyncClient")(**kwargs)
+    module = get_httpx_module()
+    client = getattr(module, "AsyncClient")(**kwargs)
     return cast(AsyncClientProtocol, client)
 
 
 def create_client(**kwargs: Any) -> ClientProtocol:
     """Instantiate a Client with typed return value."""
 
-    if _httpx is None:
-        raise RuntimeError("httpx must be installed to create a Client")
-    client = getattr(_httpx, "Client")(**kwargs)
+    module = get_httpx_module()
+    client = getattr(module, "Client")(**kwargs)
     return cast(ClientProtocol, client)
 
 

@@ -104,6 +104,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Development and release engineering toolchain
 dev = [
     # Testing
     "pytest>=8.0.0",
@@ -136,8 +137,63 @@ dev = [
     "py-spy>=0.3.14",
 ]
 
+# Metrics, tracing, and exporter stack
+observability = [
+    "prometheus-client==0.23.1",
+    "python-json-logger==3.3.0",
+    "opentelemetry-api==1.37.0",
+    "opentelemetry-sdk==1.37.0",
+    "opentelemetry-instrumentation-fastapi==0.58b0",
+    "opentelemetry-instrumentation-httpx==0.58b0",
+    "opentelemetry-exporter-otlp==1.37.0",
+]
+
+# PDF ingestion and parsing helpers
+pdf = [
+    "pypdf==6.1.1",
+    "pdfminer.six==20250506",
+    "pypdfium2==4.30.0",
+]
+
+# Dense and sparse embedding backends
+embeddings = [
+    "sentence-transformers==5.1.1",
+    "sentencepiece==0.2.1",
+    "faiss-cpu>=1.7.4",
+]
+
+# Token counting utilities
+tokenization = [
+    "tiktoken==0.11.0",
+]
+
+# spaCy runtime dependencies (models installed separately)
+nlp = [
+    "spacy==3.7.5",
+]
+
+# GPU-enabled pipelines
+gpu = [
+    "torch",
+]
+
+# HTTP client stack used by ingestion and telemetry
+http = [
+    "httpx==0.28.1",
+]
+
+# Redis caches for rate limiting and metadata
+caching = [
+    "redis==6.4.0",
+]
+
+# Load-testing utilities
+load-testing = [
+    "locust>=2.24.1",
+]
+
+# SpaCy model placeholders (download via python -m spacy download ...)
 models = [
-    # SpaCy Models (download separately)
     # python -m spacy download en_core_sci_md
     # python -m spacy download en_core_web_sm
 ]
@@ -164,14 +220,13 @@ exclude = [
     "ops/e2e/",
     "ops/chaos/",
 ]
+mypy_path = ["stubs"]
 
 [[tool.mypy.overrides]]
 module = [
-    "Medical_KG.compat.locust",
     "Medical_KG.config.manager",
     "Medical_KG.extraction.*",
     "Medical_KG.facets.*",
-    "Medical_KG.observability.*",
     "Medical_KG.security.*",
 ]
 ignore_errors = true
@@ -182,7 +237,6 @@ module = [
     "fastapi.*",
     "pydantic",
     "typer",
-    "prometheus_client",
     "bs4",
     "rich",
     "rich.*",
@@ -191,14 +245,3 @@ module = [
 ]
 ignore_missing_imports = true
 
-[[tool.mypy.overrides]]
-module = [
-    "Medical_KG.api.*",
-    "Medical_KG.briefing.*",
-    "Medical_KG.retrieval.*",
-]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = ["Medical_KG.utils.optional_dependencies"]
-ignore_errors = true

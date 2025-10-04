@@ -85,7 +85,12 @@ class IngestionPipeline:
         completed_ids: Iterable[str] | None = None,
         total_estimated: int | None = None,
     ) -> list[PipelineResult]:
-        """Execute an adapter within an existing asyncio event loop."""
+        """Execute an adapter within an existing asyncio event loop.
+
+        This helper materialises the full result set in memory and should only
+        be used for small batches. Prefer :meth:`stream_events` for
+        observability-friendly, backpressured consumption of pipeline activity.
+        """
 
         invocations = self._normalise_params(params)
         results: list[PipelineResult] = []
@@ -146,7 +151,13 @@ class IngestionPipeline:
         completed_ids: Iterable[str] | None = None,
         total_estimated: int | None = None,
     ) -> AsyncIterator[Document]:
-        """Stream :class:`Document` instances as they are produced."""
+        """Stream :class:`Document` instances as they are produced.
+
+        This method remains for backwards compatibility and filters the richer
+        event stream down to successful documents. New integrations should
+        consume :meth:`stream_events` directly to access progress and error
+        events.
+        """
 
         async def _generator() -> AsyncIterator[Document]:
             async for event in self.stream_events(
@@ -173,7 +184,13 @@ class IngestionPipeline:
         params: Iterable[dict[str, Any]] | None = None,
         resume: bool = False,
     ) -> list[PipelineResult]:
-        """Legacy eager execution wrapper (deprecated)."""
+        """Legacy eager execution wrapper (deprecated).
+
+        The legacy wrapper preserves the historic return signature while
+        logging usage. Set the ``MEDICAL_KG_SUPPRESS_PIPELINE_DEPRECATION``
+        environment variable to silence the warning in automated contexts. The
+        wrapper will be removed after the six-month migration window.
+        """
 
         if os.getenv(_LEGACY_WARNING_ENV) != "1":
             import warnings
@@ -202,7 +219,13 @@ class IngestionPipeline:
         completed_ids: Iterable[str] | None = None,
         total_estimated: int | None = None,
     ) -> AsyncIterator[PipelineEvent]:
-        """Stream structured pipeline events with backpressure support."""
+        """Stream structured pipeline events with backpressure support.
+
+        The iterator yields :class:`PipelineEvent` subclasses describing
+        lifecycle milestones, document outcomes, adapter state transitions, and
+        progress updates. Callers can supply ``event_filter`` and
+        ``event_transformer`` callbacks to declaratively tailor the stream.
+        """
 
         pipeline_id = build_pipeline_id(source)
         queue: asyncio.Queue[PipelineEvent | object] = asyncio.Queue(maxsize=max(buffer_size, 1))
@@ -213,11 +236,14 @@ class IngestionPipeline:
         transform_fn = event_transformer or (lambda event: event)
         completed_total = 0
         failed_total = 0
+        in_flight_count = 0
         checkpoint_target = checkpoint_interval if checkpoint_interval > 0 else None
         completed_checkpoint = 0
         estimated_total = total_estimated
         completed_skip = set(completed_ids or [])
         start_time = time.perf_counter()
+        backpressure_wait_seconds = 0.0
+        backpressure_wait_count = 0
 
         async def emit(event: PipelineEvent) -> None:
             transformed = transform_fn(event)
@@ -225,10 +251,16 @@ class IngestionPipeline:
                 return
             if not filter_fn(transformed):
                 return
+            nonlocal backpressure_wait_seconds, backpressure_wait_count
+            wait_started = time.perf_counter()
             await queue.put(transformed)
+            waited = time.perf_counter() - wait_started
+            if waited > 0:
+                backpressure_wait_seconds += waited
+                backpressure_wait_count += 1
 
         async def producer() -> None:
-            nonlocal completed_total, failed_total, completed_checkpoint
+            nonlocal completed_total, failed_total, completed_checkpoint, in_flight_count
             state = "initial"
             await emit(
                 AdapterStateChange(
@@ -244,121 +276,148 @@ class IngestionPipeline:
             try:
                 async with self._client_factory() as client:
                     adapter = self._resolve_adapter(source, client)
-                    await emit(
-                        AdapterStateChange(
-                            timestamp=time.time(),
-                            pipeline_id=pipeline_id,
-                            adapter=adapter.source,
-                            old_state=state,
-                            new_state="ready",
-                            reason=None,
-                        )
-                    )
-                    state = "ready"
-                    for invocation in self._normalise_params(params):
-                        invocation_params = dict(invocation or {})
+                    loop = asyncio.get_running_loop()
+
+                    def _forward_adapter_event(event: PipelineEvent) -> None:
+                        if not event.pipeline_id:
+                            object.__setattr__(event, "pipeline_id", pipeline_id)
+                        if not event.timestamp:
+                            object.__setattr__(event, "timestamp", time.time())
+                        task = loop.create_task(emit(event))
+                        task.add_done_callback(lambda finished: finished.exception())
+
+                    adapter.bind_event_emitter(_forward_adapter_event)
+                    try:
                         await emit(
                             AdapterStateChange(
                                 timestamp=time.time(),
                                 pipeline_id=pipeline_id,
                                 adapter=adapter.source,
                                 old_state=state,
-                                new_state="invocation_started",
+                                new_state="ready",
                                 reason=None,
                             )
                         )
-                        state = "invocation_started"
-                        keyword_args = dict(invocation_params)
-                        if resume:
-                            keyword_args.setdefault("resume", resume)
-                        try:
-                            async for result in adapter.iter_results(**keyword_args):
-                                document = result.document
-                                if document.doc_id in completed_skip:
-                                    continue
-                                doc_started = time.perf_counter()
-                                await emit(
-                                    DocumentStarted(
-                                        timestamp=time.time(),
-                                        pipeline_id=pipeline_id,
-                                        doc_id=document.doc_id,
-                                        adapter=adapter.source,
-                                        parameters=dict(invocation_params),
-                                    )
-                                )
-                                duration = max(time.perf_counter() - doc_started, 0.0)
-                                await emit(
-                                    DocumentCompleted(
-                                        timestamp=time.time(),
-                                        pipeline_id=pipeline_id,
-                                        document=document,
-                                        duration=duration,
-                                        adapter_metadata=dict(result.metadata),
-                                    )
-                                )
-                                completed_total += 1
-                                completed_checkpoint += 1
-                                if progress_interval > 0 and completed_total % progress_interval == 0:
-                                    await emit(
-                                        self._build_progress_event(
-                                            pipeline_id,
-                                            completed_total,
-                                            failed_total,
-                                            estimated_total,
-                                            start_time,
-                                        )
-                                    )
-                                if (
-                                    checkpoint_target is not None
-                                    and completed_checkpoint >= checkpoint_target
-                                ):
-                                    completed_checkpoint = 0
-                                    await emit(
-                                        self._build_progress_event(
-                                            pipeline_id,
-                                            completed_total,
-                                            failed_total,
-                                            estimated_total,
-                                            start_time,
-                                        )
-                                    )
-                        except Exception as exc:  # pragma: no cover - defensive
-                            failed_total += 1
-                            completed_checkpoint += 1
-                            await emit(
-                                DocumentFailed(
-                                    timestamp=time.time(),
-                                    pipeline_id=pipeline_id,
-                                    doc_id=getattr(exc, "doc_id", None),
-                                    error=str(exc),
-                                    retry_count=getattr(exc, "retry_count", 0),
-                                    is_retryable=bool(getattr(exc, "is_retryable", False)),
-                                    error_type=exc.__class__.__name__,
-                                    traceback=traceback.format_exc(),
-                                )
-                            )
+                        state = "ready"
+                        for invocation in self._normalise_params(params):
+                            invocation_params = dict(invocation or {})
                             await emit(
                                 AdapterStateChange(
                                     timestamp=time.time(),
                                     pipeline_id=pipeline_id,
                                     adapter=adapter.source,
                                     old_state=state,
-                                    new_state="failed",
-                                    reason=str(exc),
+                                    new_state="invocation_started",
+                                    reason=None,
                                 )
                             )
-                            return
-                        await emit(
-                            AdapterStateChange(
-                                timestamp=time.time(),
-                                pipeline_id=pipeline_id,
-                                adapter=adapter.source,
-                                old_state=state,
-                                new_state="invocation_completed",
-                                reason=None,
+                            state = "invocation_started"
+                            keyword_args = dict(invocation_params)
+                            if resume:
+                                keyword_args.setdefault("resume", resume)
+                            try:
+                                async for result in adapter.iter_results(**keyword_args):
+                                    document = result.document
+                                    if document.doc_id in completed_skip:
+                                        continue
+                                    doc_started = time.perf_counter()
+                                    await emit(
+                                        DocumentStarted(
+                                            timestamp=time.time(),
+                                            pipeline_id=pipeline_id,
+                                            doc_id=document.doc_id,
+                                            adapter=adapter.source,
+                                            parameters=dict(invocation_params),
+                                        )
+                                    )
+                                    in_flight_count += 1
+                                    duration = max(time.perf_counter() - doc_started, 0.0)
+                                    await emit(
+                                        DocumentCompleted(
+                                            timestamp=time.time(),
+                                            pipeline_id=pipeline_id,
+                                            document=document,
+                                            duration=duration,
+                                            adapter_metadata=dict(result.metadata),
+                                        )
+                                    )
+                                    completed_total += 1
+                                    in_flight_count = max(in_flight_count - 1, 0)
+                                    completed_checkpoint += 1
+                                    if progress_interval > 0 and completed_total % progress_interval == 0:
+                                        await emit(
+                                            self._build_progress_event(
+                                                pipeline_id,
+                                                completed_total,
+                                                failed_total,
+                                                in_flight_count,
+                                                estimated_total,
+                                                start_time,
+                                                queue.qsize(),
+                                                queue.maxsize,
+                                                backpressure_wait_seconds,
+                                                backpressure_wait_count,
+                                            )
+                                        )
+                                    if (
+                                        checkpoint_target is not None
+                                        and completed_checkpoint >= checkpoint_target
+                                    ):
+                                        completed_checkpoint = 0
+                                        await emit(
+                                            self._build_progress_event(
+                                                pipeline_id,
+                                                completed_total,
+                                                failed_total,
+                                                in_flight_count,
+                                                estimated_total,
+                                                start_time,
+                                                queue.qsize(),
+                                                queue.maxsize,
+                                                backpressure_wait_seconds,
+                                                backpressure_wait_count,
+                                            )
+                                        )
+                            except Exception as exc:  # pragma: no cover - defensive
+                                failed_total += 1
+                                in_flight_count = max(in_flight_count - 1, 0)
+                                completed_checkpoint += 1
+                                await emit(
+                                    DocumentFailed(
+                                        timestamp=time.time(),
+                                        pipeline_id=pipeline_id,
+                                        doc_id=getattr(exc, "doc_id", None),
+                                        error=str(exc),
+                                        retry_count=getattr(exc, "retry_count", 0),
+                                        is_retryable=bool(getattr(exc, "is_retryable", False)),
+                                        error_type=exc.__class__.__name__,
+                                        traceback=traceback.format_exc(),
+                                    )
+                                )
+                                await emit(
+                                    AdapterStateChange(
+                                        timestamp=time.time(),
+                                        pipeline_id=pipeline_id,
+                                        adapter=adapter.source,
+                                        old_state=state,
+                                        new_state="failed",
+                                        reason=str(exc),
+                                    )
+                                )
+                                return
+                            await emit(
+                                AdapterStateChange(
+                                    timestamp=time.time(),
+                                    pipeline_id=pipeline_id,
+                                    adapter=adapter.source,
+                                    old_state=state,
+                                    new_state="invocation_completed",
+                                    reason=None,
+                                )
                             )
-                        )
-                        state = "invocation_completed"
+                            state = "invocation_completed"
+                    finally:
+                        adapter.bind_event_emitter(None)
                 await emit(
                     AdapterStateChange(
                         timestamp=time.time(),
@@ -375,8 +434,13 @@ class IngestionPipeline:
                         pipeline_id,
                         completed_total,
                         failed_total,
+                        in_flight_count,
                         estimated_total,
                         start_time,
+                        queue.qsize(),
+                        queue.maxsize,
+                        backpressure_wait_seconds,
+                        backpressure_wait_count,
                     )
                 )
                 await queue.put(sentinel)
@@ -416,8 +480,13 @@ class IngestionPipeline:
         pipeline_id: str,
         completed_total: int,
         failed_total: int,
+        in_flight_count: int,
         estimated_total: int | None,
         start_time: float,
+        queue_depth: int,
+        buffer_size: int,
+        backpressure_wait_seconds: float,
+        backpressure_wait_count: int,
     ) -> BatchProgress:
         elapsed = max(time.perf_counter() - start_time, 0.0)
         processed = completed_total + failed_total
@@ -434,8 +503,13 @@ class IngestionPipeline:
             pipeline_id=pipeline_id,
             completed_count=completed_total,
             failed_count=failed_total,
+            in_flight_count=max(in_flight_count, 0),
+            queue_depth=max(queue_depth, 0),
+            buffer_size=max(buffer_size, 1),
             remaining=remaining,
             eta_seconds=eta_seconds,
+            backpressure_wait_seconds=max(backpressure_wait_seconds, 0.0),
+            backpressure_wait_count=max(backpressure_wait_count, 0),
         )
 
     @staticmethod

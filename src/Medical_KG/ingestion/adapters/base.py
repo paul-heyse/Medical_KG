@@ -5,10 +5,10 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Callable, Generic, TypeVar
 
+from Medical_KG.ingestion.events import PipelineEvent
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion.models import Document, IngestionResult
 from Medical_KG.ingestion.utils import generate_doc_id
-from Medical_KG.ingestion.events import PipelineEvent
 
 
 @dataclass(slots=True)

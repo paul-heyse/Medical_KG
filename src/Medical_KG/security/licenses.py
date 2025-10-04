@@ -142,6 +142,8 @@ class LicenseRegistry:
             redactions: dict[str, str] = {}
             for vocab_name, value in _mapping(config.get("redactions")).items():
                 value_str = str(value).strip()
+                if value_str.startswith("'") and value_str.endswith("'"):
+                    value_str = value_str[1:-1]
                 if value_str.startswith('"') and value_str.endswith('"'):
                     value_str = value_str[1:-1]
                 redactions[vocab_name.upper()] = value_str

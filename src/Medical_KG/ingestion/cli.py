@@ -19,11 +19,12 @@ import itertools
 import json
 import logging
 import sys
+import textwrap
 from datetime import datetime, timezone
 from enum import Enum, IntEnum
 from importlib import metadata
 from pathlib import Path
-from typing import Any, Iterator, Sequence
+from typing import Any, Callable, Iterator, Optional, Sequence, cast
 
 import typer
 
@@ -54,6 +55,29 @@ app = typer.Typer(
     help="Medical KG unified ingestion CLI",
     no_args_is_help=True,
     rich_markup_mode="markdown",
+)
+
+_INGEST_HELP = textwrap.dedent(
+    """
+    Unified ingestion interface for all Medical KG adapters.
+
+    The command accepts an adapter name followed by flags shared across batch, auto,
+    and resume workflows. Short aliases mirror the most common operations so
+    existing scripts migrate with minimal churn.
+
+    **Examples**
+
+    • `med ingest demo --batch params.ndjson --resume`
+    • `med ingest umls --auto --limit 1000 --output json`
+    • `med ingest nice --batch nice.ndjson --schema schemas/nice.json`
+    """
+)
+
+_INGEST_EPILOG = textwrap.dedent(
+    """
+    See also: docs/ingestion_runbooks.md, docs/ingestion_cli_reference.md,
+    docs/ingestion_cli_migration_guide.md
+    """
 )
 
 
@@ -94,6 +118,40 @@ def _complete_adapter(
 def _build_pipeline(ledger_path: Path) -> IngestionPipeline:
     ledger = IngestionLedger(ledger_path)
     return IngestionPipeline(ledger)
+
+
+def _load_json_schema_validator(path: Path) -> Callable[[dict[str, Any]], None]:
+    try:
+        import jsonschema
+    except Exception as exc:  # pragma: no cover - optional dependency handling
+        raise typer.BadParameter(
+            "jsonschema is required when using --schema. Install it via 'micromamba install jsonschema' or 'pip install jsonschema'."
+        ) from exc
+
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            schema = json.load(handle)
+    except json.JSONDecodeError as exc:
+        raise typer.BadParameter(f"Failed to parse JSON schema at {path}: {exc.msg}") from exc
+
+    try:
+        validator_cls = jsonschema.validators.validator_for(schema)
+        validator_cls.check_schema(schema)
+        validator = validator_cls(schema)
+    except jsonschema.SchemaError as exc:
+        raise typer.BadParameter(f"Schema at {path} is invalid: {exc.message}") from exc
+
+    def _validate(instance: dict[str, Any]) -> None:
+        try:
+            validator.validate(instance)
+        except jsonschema.ValidationError as exc:
+            location = "/".join(str(part) for part in exc.path) or "<root>"
+            raise BatchValidationError(
+                f"Schema validation failed at {location}: {exc.message}",
+                hint="Update the NDJSON payload or adjust the provided schema.",
+            ) from exc
+
+    return _validate
 
 
 def _version_callback(value: bool) -> None:
@@ -181,10 +239,13 @@ def _dry_run(
     show_timings: bool,
     summary_only: bool,
     output: OutputFormat,
+    schema_validator: Callable[[dict[str, Any]], None] | None,
 ) -> None:
     warnings: list[str] = []
     if skip_validation:
         warnings.append("Validation skipped by user request (--skip-validation)")
+    if schema_validator is not None and batch is not None:
+        warnings.append("Batch entries validated against provided JSON schema")
     total_records: int | None = None
     if ids:
         total_records = len(ids) if limit is None else min(len(ids), limit)
@@ -193,6 +254,10 @@ def _dry_run(
         if strict_validation and total_records == 0:
             raise typer.BadParameter("Batch file is empty")
         iterator = load_ndjson_batch(batch, strict=not skip_validation)
+        iterator = cast(
+            Iterator[dict[str, Any]],
+            _apply_schema_validation(iterator, validator=schema_validator),
+        )
         processed = 0
         for _ in iterator:
             processed += 1
@@ -245,6 +310,22 @@ def _apply_limit(
     return iter(itertools.islice(iterator, limit))
 
 
+def _apply_schema_validation(
+    iterator: Iterator[dict[str, Any]] | None,
+    *,
+    validator: Callable[[dict[str, Any]], None] | None,
+) -> Iterator[dict[str, Any]] | None:
+    if iterator is None or validator is None:
+        return iterator
+
+    def _generator() -> Iterator[dict[str, Any]]:
+        for entry in iterator:
+            validator(entry)
+            yield entry
+
+    return _generator()
+
+
 def _adapter_help() -> str:
     sources = _available_sources()
     if not sources:
@@ -253,10 +334,23 @@ def _adapter_help() -> str:
     return f"Adapter to execute. Available adapters: {listed}"
 
 
+class _AdapterHelpText:
+    """Lazy adapter help so tests can monkeypatch available sources."""
+
+    def _value(self) -> str:
+        return _adapter_help()
+
+    def __str__(self) -> str:  # pragma: no cover - exercised via CLI help output
+        return self._value()
+
+    def __getattr__(self, name: str) -> Any:  # pragma: no cover - used by Click formatting
+        return getattr(self._value(), name)
+
+
 def ingest(
     adapter: str = typer.Argument(
         ...,
-        help=_adapter_help(),
+        help=cast(str, _AdapterHelpText()),
         autocompletion=_complete_adapter,
         metavar="ADAPTER",
     ),
@@ -328,6 +422,15 @@ def ingest(
     error_log: Path | None = typer.Option(None, "--error-log", help="Write detailed errors to a JSONL file"),
     show_timings: bool = typer.Option(False, "--show-timings", help="Include duration in summary output"),
     summary_only: bool = typer.Option(False, "--summary-only", help="Suppress per-result output"),
+    schema_path: Path | None = typer.Option(
+        None,
+        "--schema",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="Optional JSON Schema to validate batch parameters",
+    ),
     version: bool = typer.Option(
         False,
         "--version",
@@ -351,6 +454,9 @@ def ingest(
     if strict_validation and skip_validation:
         raise typer.BadParameter("--strict-validation cannot be combined with --skip-validation")
     _configure_logging(log_level, log_file, verbose)
+    schema_validator: Callable[[dict[str, Any]], None] | None = None
+    if schema_path is not None:
+        schema_validator = _load_json_schema_validator(schema_path)
     if dry_run:
         _dry_run(
             adapter=adapter_name,
@@ -364,22 +470,26 @@ def ingest(
             show_timings=show_timings,
             summary_only=summary_only,
             output=output,
+            schema_validator=schema_validator,
         )
         return
-    params_iter, total_records = _parameter_stream(
+    raw_params_iter, total_records = _parameter_stream(
         batch=batch,
         ids=identifier_list,
         skip_validation=skip_validation,
+    )
+    params_iter_unlimited = _apply_schema_validation(
+        raw_params_iter, validator=schema_validator
     )
     if batch and strict_validation and (total_records or 0) == 0:
         raise typer.BadParameter("Batch file is empty")
     if limit is not None and total_records is not None:
         total_records = min(total_records, limit)
-    params_iter = _apply_limit(params_iter, limit=limit)
+    params_iter: Optional[Iterator[dict[str, Any]]] = _apply_limit(
+        params_iter_unlimited, limit=limit
+    )
     pipeline = _build_pipeline(ledger_path)
     base_options: dict[str, Any] = {}
-    if auto:
-        base_options["auto"] = True
     if start_date:
         base_options["start_date"] = start_date.isoformat()
     if end_date:
@@ -391,6 +501,8 @@ def ingest(
     warnings: list[str] = []
     if skip_validation:
         warnings.append("Validation skipped by user request (--skip-validation)")
+    if schema_validator is not None and batch is not None:
+        warnings.append("Batch entries validated against provided JSON schema")
     display_progress = should_display_progress(progress, quiet)
     progress_bar: Any | None = None
     progress_task: int | None = None
@@ -433,6 +545,7 @@ def ingest(
     except BatchValidationError as exc:
         message = format_cli_error(str(exc), hint=exc.hint)
         _log_error(error_log, payload={"adapter": adapter_name, "error": message})
+        typer.echo(message, err=True)
         raise typer.Exit(code=ExitCode.INVALID_USAGE.value) from exc
     except typer.BadParameter:
         raise
@@ -461,7 +574,7 @@ def ingest(
         raise typer.Exit(code=ExitCode.FAILURE.value)
 
 
-app.command()(ingest)
+app.command(help=_INGEST_HELP, epilog=_INGEST_EPILOG)(ingest)
 
 
 def main(argv: list[str] | None = None) -> int:

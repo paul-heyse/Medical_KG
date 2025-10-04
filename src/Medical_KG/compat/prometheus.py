@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-import importlib
 from typing import Any, Callable, Protocol, cast
+
+from Medical_KG.utils.optional_dependencies import (
+    MissingDependencyError,
+    optional_import,
+)
 
 
 class CounterLike(Protocol):
@@ -51,10 +55,13 @@ class _NoopMetric:
         return None
 
 
-_prometheus = None
 try:  # pragma: no cover - exercised only when dependency installed
-    _prometheus = importlib.import_module("prometheus_client")
-except ModuleNotFoundError:  # pragma: no cover - default for tests
+    _prometheus = optional_import(
+        "prometheus_client",
+        feature_name="observability",
+        package_name="prometheus-client",
+    )
+except MissingDependencyError:  # pragma: no cover - default for tests
     _prometheus = None
 
 _CounterFactory: Callable[..., CounterLike] | None = None

@@ -514,29 +514,33 @@ class LocustFacade:
     task: TaskDecoratorFactory
 
 
-def _spec_available(module_name: str) -> bool:
-    try:
-        return importlib.util.find_spec(module_name) is not None
-    except ModuleNotFoundError:
-        return False
-
-
 _httpx: ModuleType | None
-if not _spec_available("httpx"):
+try:
+    _httpx_module = optional_import(
+        "httpx",
+        feature_name="http",
+        package_name="httpx",
+    )
+except MissingDependencyError:
     _httpx = None
 else:
-    _httpx = importlib.import_module("httpx")
+    _httpx = cast(ModuleType, _httpx_module)
 
 
 _LocustHttpUser: type[LocustUserProtocol] | None
 _locust_between: Callable[[float, float], Callable[[], float]] | None
 _locust_task: TaskDecoratorFactory | None
-if not _spec_available("locust"):
+try:
+    locust_module = optional_import(
+        "locust",
+        feature_name="load_testing",
+        package_name="locust",
+    )
+except MissingDependencyError:
     _LocustHttpUser = None
     _locust_between = None
     _locust_task = None
 else:
-    locust_module = importlib.import_module("locust")
     http_user_attr = getattr(locust_module, "HttpUser", None)
     between_attr = getattr(locust_module, "between", None)
     task_attr = getattr(locust_module, "task", None)
@@ -551,10 +555,15 @@ else:
 
 
 _RedisClient: type[RedisClientProtocol] | None
-if not _spec_available("redis.asyncio"):
+try:
+    redis_module = optional_import(
+        "redis.asyncio",
+        feature_name="caching",
+        package_name="redis",
+    )
+except MissingDependencyError:
     _RedisClient = None
 else:
-    redis_module = importlib.import_module("redis.asyncio")
     _RedisClient = cast(type[RedisClientProtocol], getattr(redis_module, "Redis", None))
 
 
@@ -562,8 +571,12 @@ def get_tiktoken_encoding(name: str = "cl100k_base") -> TokenEncoder | None:
     """Return the requested tiktoken encoding if the package is installed."""
 
     try:
-        module = importlib.import_module("tiktoken")
-    except ModuleNotFoundError:  # pragma: no cover - optional dependency
+        module = optional_import(
+            "tiktoken",
+            feature_name="tokenization",
+            package_name="tiktoken",
+        )
+    except MissingDependencyError:  # pragma: no cover - optional dependency
         return None
 
     encoding = module.get_encoding(name)
@@ -574,8 +587,12 @@ def load_spacy_pipeline(model: str) -> NLPPipeline | None:
     """Load a spaCy pipeline, returning ``None`` when unavailable."""
 
     try:
-        spacy_module = importlib.import_module("spacy")
-    except ModuleNotFoundError:  # pragma: no cover - optional dependency
+        spacy_module = optional_import(
+            "spacy",
+            feature_name="nlp",
+            package_name="spacy",
+        )
+    except MissingDependencyError:  # pragma: no cover - optional dependency
         return None
 
     try:
@@ -589,8 +606,12 @@ def get_torch_module() -> TorchModule | None:
     """Return the ``torch`` module if installed."""
 
     try:
-        torch_module = importlib.import_module("torch")
-    except ModuleNotFoundError:  # pragma: no cover - optional dependency
+        torch_module = optional_import(
+            "torch",
+            feature_name="gpu",
+            package_name="torch",
+        )
+    except MissingDependencyError:  # pragma: no cover - optional dependency
         return None
     return cast(TorchModule, torch_module)
 
@@ -599,8 +620,12 @@ def build_gauge(name: str, documentation: str, labelnames: Sequence[str]) -> Gau
     """Construct a Prometheus gauge or a typed no-op substitute."""
 
     try:
-        prom_module = importlib.import_module("prometheus_client")
-    except ModuleNotFoundError:  # pragma: no cover - optional dependency
+        prom_module = optional_import(
+            "prometheus_client",
+            feature_name="observability",
+            package_name="prometheus-client",
+        )
+    except MissingDependencyError:  # pragma: no cover - optional dependency
         return _NoopGauge()
     gauge = prom_module.Gauge(name, documentation, labelnames)
     return cast(GaugeProtocol, gauge)
@@ -610,8 +635,12 @@ def build_counter(name: str, documentation: str, labelnames: Sequence[str]) -> C
     """Construct a Prometheus counter or a typed no-op substitute."""
 
     try:
-        prom_module = importlib.import_module("prometheus_client")
-    except ModuleNotFoundError:  # pragma: no cover - optional dependency
+        prom_module = optional_import(
+            "prometheus_client",
+            feature_name="observability",
+            package_name="prometheus-client",
+        )
+    except MissingDependencyError:  # pragma: no cover - optional dependency
         return _NoopCounter()
     counter_cls = getattr(prom_module, "Counter", None)
     if counter_cls is None:
@@ -624,8 +653,12 @@ def build_histogram(name: str, documentation: str, buckets: Sequence[float]) -> 
     """Construct a Prometheus histogram or a typed no-op substitute."""
 
     try:
-        prom_module = importlib.import_module("prometheus_client")
-    except ModuleNotFoundError:  # pragma: no cover - optional dependency
+        prom_module = optional_import(
+            "prometheus_client",
+            feature_name="observability",
+            package_name="prometheus-client",
+        )
+    except MissingDependencyError:  # pragma: no cover - optional dependency
         return _NoopHistogram()
     histogram_cls = getattr(prom_module, "Histogram", None)
     if histogram_cls is None:

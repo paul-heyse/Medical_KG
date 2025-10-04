@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import shutil
 from copy import deepcopy
 from pathlib import Path
@@ -134,72 +133,6 @@ def test_staging_config_migrates_cleanly(config_dir: Path) -> None:
     assert any(step.startswith("set-$schema") or step.startswith("update-$schema") for step in steps)
 
 
-class LegacyValidator:
-    def __init__(self, schema: dict[str, object]) -> None:
-        self._schema = schema
-        self._definitions = schema.get("definitions", {})
-
-    def validate(self, payload: dict[str, object]) -> None:
-        errors: list[str] = []
-        self._validate_schema(payload, self._schema, [], errors)
-        if errors:
-            raise RuntimeError("; ".join(errors))
-
-    def _resolve(self, schema: dict[str, object]) -> dict[str, object]:
-        ref = schema.get("$ref")
-        if isinstance(ref, str) and ref.startswith("#/definitions/"):
-            key = ref.split("/")[-1]
-            return dict(self._definitions[key])
-        return schema
-
-    def _validate_schema(
-        self,
-        value: object,
-        schema: dict[str, object],
-        path: list[str],
-        errors: list[str],
-    ) -> None:
-        schema = self._resolve(schema)
-        schema_type = schema.get("type")
-        if schema_type == "object":
-            if not isinstance(value, dict):
-                errors.append(self._format(path, "expected object"))
-                return
-            props = schema.get("properties", {})
-            required = schema.get("required", [])
-            for key in required:
-                if key not in value:
-                    errors.append(self._format(path + [key], "missing required property"))
-            for key, val in value.items():
-                if key in props:
-                    self._validate_schema(val, props[key], path + [key], errors)
-        elif schema_type == "integer":
-            if not isinstance(value, int):
-                errors.append(self._format(path, "expected integer"))
-        elif schema_type == "string":
-            if not isinstance(value, str):
-                errors.append(self._format(path, "expected string"))
-
-    def _format(self, path: list[str], message: str) -> str:
-        location = "/".join(path) if path else "<root>"
-        return f"{location}: {message}"
-
-
-def test_validator_matches_legacy_error_paths(config_dir: Path) -> None:
-    schema_path = config_dir / "config.schema.json"
-    schema = json.loads(schema_path.read_text())
-    payload = {"config_version": "1.0.0"}
-    legacy = LegacyValidator(schema)
-    with pytest.raises(RuntimeError) as legacy_exc:
-        legacy.validate(payload)
-    validator = ConfigSchemaValidator(schema_path)
-    with pytest.raises(ConfigError) as modern_exc:
-        validator.validate(payload)
-    for segment in str(legacy_exc.value).split("; "):
-        location = segment.split(":", 1)[0]
-        assert location in str(modern_exc.value)
-
-
 def test_validate_one_thousand_payloads(config_dir: Path) -> None:
     schema_path = config_dir / "config.schema.json"
     validator = ConfigSchemaValidator(schema_path)
@@ -222,4 +155,11 @@ def test_all_environment_configs_validate(config_dir: Path, base_env: None) -> N
         payload = yaml.safe_load((config_dir / name).read_text()) or {}
         assert isinstance(payload, dict)
         validator.validate(payload, source=name)
+
+
+def test_validator_accepts_current_configuration_snapshot(config_dir: Path) -> None:
+    schema_path = config_dir / "config.schema.json"
+    validator = ConfigSchemaValidator(schema_path)
+    payload = _load_payload(config_dir)
+    validator.validate(payload, source="unit-test")
 

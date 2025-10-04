@@ -16,23 +16,23 @@
 - [ ] 2.3 Delete deprecation warning tests
 - [ ] 2.4 Remove legacy wrapper integration tests
 - [ ] 2.5 Clean up legacy-specific mocks
-- [ ] 2.6 Update remaining pipeline tests
-- [ ] 2.7 Verify pipeline test coverage maintained
+- [x] 2.6 Update remaining pipeline tests
+- [x] 2.7 Verify pipeline test coverage maintained
 
 ## 3. Remove Legacy Ledger Tests
 
-- [ ] 3.1 Delete string state coercion tests
-- [ ] 3.2 Remove `LedgerState.LEGACY` test cases
+- [x] 3.1 Delete string state coercion tests
+- [x] 3.2 Remove `LedgerState.LEGACY` test cases
 - [ ] 3.3 Delete migration script tests
-- [ ] 3.4 Remove string-to-enum mapping tests
+- [x] 3.4 Remove string-to-enum mapping tests
 - [ ] 3.5 Clean up legacy ledger fixtures
 - [ ] 3.6 Update ledger test documentation
 - [ ] 3.7 Verify ledger test coverage maintained
 
 ## 4. Remove Legacy Config Tests
 
-- [ ] 4.1 Delete `LegacyValidator` test suite
-- [ ] 4.2 Remove validator parity assertion tests
+- [x] 4.1 Delete `LegacyValidator` test suite
+- [x] 4.2 Remove validator parity assertion tests
 - [ ] 4.3 Delete legacy config file fixtures
 - [ ] 4.4 Remove custom validation helper tests
 - [ ] 4.5 Clean up legacy config schemas
@@ -61,7 +61,7 @@
 
 ## 7. Remove Legacy CLI Tests
 
-- [ ] 7.1 Delete legacy CLI command tests
+- [x] 7.1 Delete legacy CLI command tests
 - [ ] 7.2 Remove migration script tests
 - [ ] 7.3 Delete legacy CLI fixture files
 - [ ] 7.4 Remove command comparison tests
@@ -91,12 +91,12 @@
 
 ## 10. Add Replacement Smoke Tests
 
-- [ ] 10.1 Add streaming pipeline smoke test
-- [ ] 10.2 Add enum-only ledger smoke test
-- [ ] 10.3 Add jsonschema validation smoke test
-- [ ] 10.4 Add typed IR builder smoke test
-- [ ] 10.5 Add normalized telemetry smoke test
-- [ ] 10.6 Add unified CLI smoke test
+- [x] 10.1 Add streaming pipeline smoke test
+- [x] 10.2 Add enum-only ledger smoke test
+- [x] 10.3 Add jsonschema validation smoke test
+- [x] 10.4 Add typed IR builder smoke test
+- [x] 10.5 Add normalized telemetry smoke test
+- [x] 10.6 Add unified CLI smoke test
 - [ ] 10.7 Verify all smoke tests pass
 
 ## 11. Update Test Documentation

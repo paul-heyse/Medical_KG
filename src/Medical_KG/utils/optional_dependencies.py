@@ -348,14 +348,25 @@ def build_counter(name: str, documentation: str, labelnames: Sequence[str]) -> C
     return cast(CounterProtocol, counter)
 
 
-def build_histogram(name: str, documentation: str, buckets: Sequence[float]) -> HistogramProtocol:
+def build_histogram(
+    name: str,
+    documentation: str,
+    buckets: Sequence[float],
+    *,
+    labelnames: Sequence[str] | None = None,
+) -> HistogramProtocol:
     """Construct a Prometheus histogram or a typed no-op substitute."""
 
     try:
         from prometheus_client import Histogram as PromHistogram  # type: ignore[import-not-found]
     except ModuleNotFoundError:  # pragma: no cover - optional dependency
         return _NoopHistogram()
-    histogram: "prometheus_client.Histogram" = PromHistogram(name, documentation, buckets=buckets)
+    histogram: "prometheus_client.Histogram" = PromHistogram(
+        name,
+        documentation,
+        buckets=buckets,
+        labelnames=labelnames,
+    )
     return cast(HistogramProtocol, histogram)
 
 

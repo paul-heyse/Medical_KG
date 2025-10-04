@@ -803,3 +803,28 @@ TypedDict has zero runtime overhead - it's only for static type checking. Howeve
 - Check test fixtures: `tests/ingestion/fixtures/` for payload examples
 - Run mypy in strict mode: `mypy --strict src/Medical_KG/ingestion/adapters/your_adapter.py`
 - Consult `CONTRIBUTING.md` for code review checklist
+
+### Telemetry Wiring for New Adapters
+
+When introducing a new HTTP adapter, expose a `telemetry` keyword so callers can opt into shared logging/metrics without patching the client manually:
+
+```python
+from typing import Sequence
+
+from Medical_KG.ingestion.telemetry import HttpTelemetry
+
+class MyAdapter(HttpAdapter[MyAdapterPayload]):
+    source = "my-adapter"
+
+    def __init__(
+        self,
+        context: AdapterContext,
+        client: AsyncHttpClient,
+        *,
+        telemetry: HttpTelemetry | Sequence[HttpTelemetry] | None = None,
+    ) -> None:
+        super().__init__(context, client, telemetry=telemetry)
+        # Adapter-specific setup...
+```
+
+The base class forwards the telemetry definition to the shared `AsyncHttpClient`, so you can keep adapter constructors declarative while giving pipelines full control over instrumentation.

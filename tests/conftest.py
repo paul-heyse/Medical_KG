@@ -92,6 +92,9 @@ if "httpx" not in sys.modules:
                 super().__init__(message)
                 self.response = response
 
+        class HTTPStatusError(HTTPError):
+            pass
+
         class Request:
             def __init__(self, method: str, url: str, **kwargs: Any) -> None:
                 self.method = method
@@ -110,14 +113,27 @@ if "httpx" not in sys.modules:
                 text: str | None = None,
                 json: Any | None = None,
                 request: Request | None = None,
+                headers: Mapping[str, str] | None = None,
+                **_ignored: Any,
             ) -> None:
                 self.status_code = status_code
-                self._content = content or text.encode("utf-8") if text is not None else b""
+                if content is not None:
+                    body = (
+                        content
+                        if isinstance(content, (bytes, bytearray))
+                        else str(content).encode("utf-8")
+                    )
+                elif text is not None:
+                    body = text.encode("utf-8")
+                else:
+                    body = b""
+                self._content = body
                 self._json = json
-                self.text = text or (self._content.decode("utf-8") if self._content else "")
+                self.text = text if text is not None else (body.decode("utf-8") if body else "")
                 self.content = self._content
                 self.request = request
                 self.elapsed = None
+                self.headers = dict(headers or {})
 
             def json(self, **_kwargs: Any) -> Any:
                 if self._json is not None:
@@ -128,7 +144,7 @@ if "httpx" not in sys.modules:
 
             def raise_for_status(self) -> None:
                 if self.status_code >= 400:
-                    raise HTTPError("HTTP error", response=self)
+                    raise HTTPStatusError("HTTP error", response=self)
 
         class MockTransport:
             def __init__(self, handler: Callable[[Request], Response | Any]) -> None:
@@ -207,6 +223,7 @@ if "httpx" not in sys.modules:
         httpx_module.MockTransport = MockTransport
         httpx_module.TimeoutException = TimeoutException
         httpx_module.HTTPError = HTTPError
+        httpx_module.HTTPStatusError = HTTPStatusError
         httpx_module.Response = Response
         httpx_module.Request = Request
 
@@ -480,30 +497,6 @@ def httpx_mock_transport(monkeypatch: pytest.MonkeyPatch) -> Callable[[Callable[
             loop.run_until_complete(client.aclose())
         finally:
             loop.close()
-
-
-class _CounterStub:
-    def labels(self, *args: Any, **kwargs: Any) -> "_CounterStub":
-        return self
-
-    def inc(self, amount: float = 1.0) -> None:
-        return None
-
-
-class _HistogramStub:
-    def labels(self, *args: Any, **kwargs: Any) -> "_HistogramStub":
-        return self
-
-    def observe(self, amount: float) -> None:
-        return None
-
-
-@pytest.fixture(autouse=True)
-def stub_ingestion_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
-    counter = _CounterStub()
-    histogram = _HistogramStub()
-    monkeypatch.setattr("Medical_KG.ingestion.http_client.HTTP_REQUESTS", counter)
-    monkeypatch.setattr("Medical_KG.ingestion.http_client.HTTP_LATENCY", histogram)
 
 
 # ---------------------------------------------------------------------------

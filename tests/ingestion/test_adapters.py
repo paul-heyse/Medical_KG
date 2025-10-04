@@ -100,7 +100,28 @@ def _stub_http_client() -> AsyncHttpClient:
         def set_rate_limit(self, *_: object, **__: object) -> None:
             return None
 
+        def add_telemetry(self, *_: object, **__: object) -> None:
+            return None
+
     return cast(AsyncHttpClient, _Stub())
+
+
+def test_http_adapter_registers_telemetry(fake_ledger: Any) -> None:
+    class _Client:
+        def __init__(self) -> None:
+            self.telemetry = None
+
+        def set_rate_limit(self, *_: object, **__: object) -> None:
+            return None
+
+        def add_telemetry(self, telemetry: object, **_: object) -> None:
+            self.telemetry = telemetry
+
+    client = cast(AsyncHttpClient, _Client())
+    telemetry = object()
+    adapter = PubMedAdapter(AdapterContext(fake_ledger), client, telemetry=telemetry)
+    assert adapter.client is client
+    assert client.telemetry is telemetry
 
 
 def test_pubmed_adapter_parses_fixture(fake_ledger: Any, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -19,6 +19,7 @@ from typing import Any, Iterable, cast
 import yaml
 from jsonschema import FormatChecker, ValidationError
 from jsonschema.validators import validator_for
+from packaging.version import InvalidVersion, Version
 
 from Medical_KG.compat.prometheus import Gauge, GaugeLike
 from Medical_KG.types import JSONMapping, JSONObject, JSONValue, MutableJSONMapping
@@ -41,6 +42,14 @@ SIMPLE_DURATION_PATTERN = re.compile(r"^(?P<value>\d+)(?P<unit>[smhd])$")
 
 LOGGER = logging.getLogger(__name__)
 CURRENT_SCHEMA_VERSION = "1.0.0"
+ALLOW_OLD_SCHEMA_ENV = "MEDCFG_ALLOW_OLD_SCHEMA"
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 class ConfigError(RuntimeError):
@@ -185,7 +194,13 @@ def _extract_declared_version(payload: Mapping[str, JSONValue]) -> str | None:
 class ConfigSchemaValidator:
     """Wrap jsonschema validation with custom formats and error reporting."""
 
-    def __init__(self, schema_path: Path, *, format_checker: FormatChecker | None = None):
+    def __init__(
+        self,
+        schema_path: Path,
+        *,
+        format_checker: FormatChecker | None = None,
+        allow_older: bool | None = None,
+    ):
         self._schema_path = schema_path
         with schema_path.open("r", encoding="utf-8") as handle:
             raw_schema = json.load(handle)
@@ -204,23 +219,46 @@ class ConfigSchemaValidator:
             )
         self._schema = schema
         self._format_checker = format_checker or _build_format_checker()
+        try:
+            self._supported_version = Version(self.version)
+        except InvalidVersion as exc:
+            raise ConfigError(
+                "config.schema.json 'version' must follow semantic versioning"
+            ) from exc
+        self._allow_older = allow_older if allow_older is not None else _env_flag(ALLOW_OLD_SCHEMA_ENV, True)
         validator_cls = validator_for(schema)
         validator_cls.check_schema(schema)
         self._validator = validator_cls(schema, format_checker=self._format_checker)
 
     def validate(self, payload: JSONMapping, *, source: str = "configuration") -> None:
         declared_version = _extract_declared_version(payload)
-        if declared_version and declared_version != self.version:
-            raise ConfigError(
-                f"{source} declares schema version {declared_version} but loader supports {self.version}. "
-                "Review docs/configuration.md for migration steps."
-            )
         if declared_version is None:
             LOGGER.warning(
                 "%s does not declare a $schema version. Add \"$schema\": \"https://medical-kg.dev/schemas/config/v%s.json\".",
                 source,
                 self.version,
             )
+        else:
+            try:
+                declared = Version(declared_version)
+            except InvalidVersion as exc:
+                raise ConfigError(
+                    f"{source} declares schema version {declared_version!r} which is not a valid version string."
+                ) from exc
+            if declared > self._supported_version:
+                raise ConfigError(
+                    f"{source} declares schema version {declared_version} newer than supported {self.version}. "
+                    "Review docs/configuration.md for migration steps or upgrade the runtime."
+                )
+            if declared < self._supported_version:
+                message = (
+                    f"{source} declares schema version {declared_version} older than supported {self.version}. "
+                    "Review docs/configuration.md for migration guidance."
+                )
+                if self._allow_older:
+                    LOGGER.warning("%s Set %s=0 to fail on older schemas.", message, ALLOW_OLD_SCHEMA_ENV)
+                else:
+                    raise ConfigError(message + f" Set {ALLOW_OLD_SCHEMA_ENV}=1 to permit older schemas.")
 
         errors = sorted(
             self._validator.iter_errors(payload), key=lambda err: tuple(str(p) for p in err.absolute_path)
@@ -259,12 +297,16 @@ class ConfigManager:
         base_path: Path | None = None,
         env: str | None = None,
         secret_resolver: SecretResolver | None = None,
+        allow_older_schema: bool | None = None,
     ) -> None:
         self.base_path = base_path or Path(__file__).resolve().parent
         env_value = env if env is not None else os.getenv("CONFIG_ENV", "dev")
         self.env = env_value.lower()
         self.secret_resolver = secret_resolver or SecretResolver()
-        self.validator = ConfigSchemaValidator(self.base_path / "config.schema.json")
+        self.validator = ConfigSchemaValidator(
+            self.base_path / "config.schema.json",
+            allow_older=allow_older_schema,
+        )
         self.policy = self._load_policy()
         self._config: Config
         self._version: ConfigVersion

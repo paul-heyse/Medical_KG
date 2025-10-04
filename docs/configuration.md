@@ -17,7 +17,7 @@ At runtime the loader merges the files in the order above and applies environmen
 
 ## Schema Validation
 
-All configuration files declare a `$schema` pointer (for example `./config.schema.json#v1.0.0`). The loader resolves `config.schema.json`, verifies it targets JSON Schema Draft 7, and enforces the declared schema version. If a configuration references a different schema version the reload fails with guidance to migrate to the supported release. Update the `$schema` pointer and adjust any renamed fields when the schema version advances.
+All configuration files declare a `$schema` pointer (for example `./config.schema.json#v1.0.0`). The loader resolves `config.schema.json`, verifies it targets JSON Schema Draft 7, and enforces the declared schema version. Configurations pinned to an older schema load successfully but emit a warning that references `MEDCFG_ALLOW_OLD_SCHEMA` so operators can decide whether to keep accepting historical payloads. Set `MEDCFG_ALLOW_OLD_SCHEMA=0` to fail fast on older versions. If a configuration references a newer schema version the reload fails with guidance to migrate to the supported release. Update the `$schema` pointer and adjust any renamed fields when the schema version advances.
 
 ### Custom Formats
 

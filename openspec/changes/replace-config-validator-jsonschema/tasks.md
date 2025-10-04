@@ -11,71 +11,71 @@
 
 ## 2. Select jsonschema Version and Features
 
-- [ ] 2.1 Choose JSON Schema draft version (recommend Draft 7)
-- [ ] 2.2 Verify `jsonschema` library supports required features
-- [ ] 2.3 Document schema dialect to use (`$schema` field)
-- [ ] 2.4 Test `jsonschema` with existing config schemas
+- [x] 2.1 Choose JSON Schema draft version (recommend Draft 7)
+- [x] 2.2 Verify `jsonschema` library supports required features
+- [x] 2.3 Document schema dialect to use (`$schema` field)
+- [x] 2.4 Test `jsonschema` with existing config schemas
 - [ ] 2.5 Identify any feature gaps vs custom validator
 - [ ] 2.6 Plan workarounds for unsupported features
 
 ## 3. Update Config Schemas
 
-- [ ] 3.1 Add `$schema` field to all config files
-- [ ] 3.2 Convert custom validation annotations to standard keywords
+- [x] 3.1 Add `$schema` field to all config files
+- [x] 3.2 Convert custom validation annotations to standard keywords
 - [ ] 3.3 Test schema files validate with online validators
-- [ ] 3.4 Add schema version tracking (e.g., "version": "1.0")
-- [ ] 3.5 Document schema upgrade process
+- [x] 3.4 Add schema version tracking (e.g., "version": "1.0")
+- [x] 3.5 Document schema upgrade process
 - [ ] 3.6 Create schema changelog
 
 ## 4. Implement jsonschema Integration
 
-- [ ] 4.1 Add `jsonschema` to requirements.txt (if not present)
-- [ ] 4.2 Create `ConfigSchemaValidator` wrapper class
-- [ ] 4.3 Implement `validate(config: dict, schema: dict)` method
-- [ ] 4.4 Cache compiled schemas for performance
-- [ ] 4.5 Add format validators (email, uri, etc.)
-- [ ] 4.6 Add custom validators for domain-specific rules
-- [ ] 4.7 Ensure thread-safe schema cache
+- [x] 4.1 Add `jsonschema` to requirements.txt (if not present)
+- [x] 4.2 Create `ConfigSchemaValidator` wrapper class
+- [x] 4.3 Implement `validate(config: dict, schema: dict)` method
+- [x] 4.4 Cache compiled schemas for performance
+- [x] 4.5 Add format validators (email, uri, etc.)
+- [x] 4.6 Add custom validators for domain-specific rules
+- [x] 4.7 Ensure thread-safe schema cache
 
 ## 5. Improve Error Messages
 
-- [ ] 5.1 Parse `ValidationError` from jsonschema
-- [ ] 5.2 Extract JSON pointer to error location
-- [ ] 5.3 Format error with clear context (file, path, value)
-- [ ] 5.4 Add remediation hints for common errors
-- [ ] 5.5 Support multiple errors (collect all, not just first)
+- [x] 5.1 Parse `ValidationError` from jsonschema
+- [x] 5.2 Extract JSON pointer to error location
+- [x] 5.3 Format error with clear context (file, path, value)
+- [x] 5.4 Add remediation hints for common errors
+- [x] 5.5 Support multiple errors (collect all, not just first)
 - [ ] 5.6 Add color formatting for terminal output
-- [ ] 5.7 Test error messages with sample invalid configs
+- [x] 5.7 Test error messages with sample invalid configs
 
 ## 6. Remove Custom Validator
 
-- [ ] 6.1 Delete `ConfigValidator` class from config/manager.py
-- [ ] 6.2 Remove custom validation helper functions
-- [ ] 6.3 Remove manual ref resolution code
-- [ ] 6.4 Remove custom enum validation code
-- [ ] 6.5 Remove custom range validation code
-- [ ] 6.6 Clean up unused imports
-- [ ] 6.7 Verify ~200 lines removed
+- [x] 6.1 Delete `ConfigValidator` class from config/manager.py
+- [x] 6.2 Remove custom validation helper functions
+- [x] 6.3 Remove manual ref resolution code
+- [x] 6.4 Remove custom enum validation code
+- [x] 6.5 Remove custom range validation code
+- [x] 6.6 Clean up unused imports
+- [x] 6.7 Verify ~200 lines removed
 
 ## 7. Update ConfigManager
 
-- [ ] 7.1 Replace `ConfigValidator` usage with `jsonschema`
-- [ ] 7.2 Update `load_config()` to use new validator
-- [ ] 7.3 Update `validate_config()` method signature if needed
-- [ ] 7.4 Add schema version checking
+- [x] 7.1 Replace `ConfigValidator` usage with `jsonschema`
+- [x] 7.2 Update `load_config()` to use new validator
+- [x] 7.3 Update `validate_config()` method signature if needed
+- [x] 7.4 Add schema version checking
 - [ ] 7.5 Add schema migration support (for version upgrades)
-- [ ] 7.6 Maintain backwards compatibility during transition
-- [ ] 7.7 Add comprehensive type hints
+- [x] 7.6 Maintain backwards compatibility during transition
+- [x] 7.7 Add comprehensive type hints
 
 ## 8. Add Schema Versioning
 
-- [ ] 8.1 Add `version` field to all config schemas
-- [ ] 8.2 Implement version compatibility checking
-- [ ] 8.3 Warn when loading config with older schema version
-- [ ] 8.4 Document schema version upgrade path
+- [x] 8.1 Add `version` field to all config schemas
+- [x] 8.2 Implement version compatibility checking
+- [x] 8.3 Warn when loading config with older schema version
+- [x] 8.4 Document schema version upgrade path
 - [ ] 8.5 Add CLI command `med config validate-schema`
 - [ ] 8.6 Add CLI command `med config migrate-schema`
-- [ ] 8.7 Test schema version detection
+- [x] 8.7 Test schema version detection
 
 ## 9. Enable Advanced Schema Features
 
@@ -89,41 +89,41 @@
 
 ## 10. Add Custom Format Validators
 
-- [ ] 10.1 Register custom format: `duration` (e.g., "5m", "1h")
+- [x] 10.1 Register custom format: `duration` (e.g., "5m", "1h")
 - [ ] 10.2 Register custom format: `file_path` (validate exists)
 - [ ] 10.3 Register custom format: `url_with_scheme` (http/https only)
 - [ ] 10.4 Register custom format: `log_level` (DEBUG/INFO/WARNING/ERROR)
-- [ ] 10.5 Register custom format: `adapter_name` (valid adapter)
-- [ ] 10.6 Document custom formats in schema guide
-- [ ] 10.7 Test all custom formats
+- [x] 10.5 Register custom format: `adapter_name` (valid adapter)
+- [x] 10.6 Document custom formats in schema guide
+- [x] 10.7 Test all custom formats
 
 ## 11. Update Configuration Files
 
 - [ ] 11.1 Audit all YAML/JSON config files
-- [ ] 11.2 Add `$schema` reference to each file
-- [ ] 11.3 Validate all configs with new validator
+- [x] 11.2 Add `$schema` reference to each file
+- [x] 11.3 Validate all configs with new validator
 - [ ] 11.4 Fix any validation errors discovered
 - [ ] 11.5 Add inline comments explaining complex validations
-- [ ] 11.6 Test config hot-reload with validation
+- [x] 11.6 Test config hot-reload with validation
 
 ## 12. Add Comprehensive Tests
 
-- [ ] 12.1 Test valid configs pass validation
-- [ ] 12.2 Test invalid configs raise clear errors
-- [ ] 12.3 Test error messages include JSON pointer
+- [x] 12.1 Test valid configs pass validation
+- [x] 12.2 Test invalid configs raise clear errors
+- [x] 12.3 Test error messages include JSON pointer
 - [ ] 12.4 Test schema caching improves performance
-- [ ] 12.5 Test custom format validators
+- [x] 12.5 Test custom format validators
 - [ ] 12.6 Test advanced schema features (oneOf, anyOf, if/then)
-- [ ] 12.7 Test schema version checking
+- [x] 12.7 Test schema version checking
 - [ ] 12.8 Test migration from custom validator (backwards compat)
 - [ ] 12.9 Performance test: validate 1000 configs
-- [ ] 12.10 Integration test with real config files
+- [x] 12.10 Integration test with real config files
 
 ## 13. Update Documentation
 
-- [ ] 13.1 Document JSON Schema usage in `docs/configuration.md`
+- [x] 13.1 Document JSON Schema usage in `docs/configuration.md`
 - [ ] 13.2 Add schema authoring guide
-- [ ] 13.3 Document custom format validators
+- [x] 13.3 Document custom format validators
 - [ ] 13.4 Add examples of common validation patterns
 - [ ] 13.5 Document error message interpretation
 - [ ] 13.6 Update operations runbook with validation commands

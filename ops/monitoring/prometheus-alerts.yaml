@@ -291,3 +291,17 @@ groups:
           summary: "Multiple config versions detected"
           description: "{{ $value }} different config versions running - hot reload may have failed on some instances"
           runbook: "https://docs.medkg.example.com/runbooks/hot-config-change"
+
+  - name: ingestion_pipeline
+    interval: 5m
+    rules:
+      - alert: LegacyPipelineModeDetected
+        expr: sum(rate(ingest_pipeline_consumption_total{mode="run_async_legacy"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: ingestion
+        annotations:
+          summary: "Legacy pipeline mode detected"
+          description: "`run_async_legacy` consumption labels reappeared; investigate pipeline rollouts."
+          runbook: "docs/legacy/run_async_legacy_retrospective.md"

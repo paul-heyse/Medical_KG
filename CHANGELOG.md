@@ -2,9 +2,11 @@
 
 ## [Unreleased]
 ### Removed
+- Removed the deprecated `IngestionPipeline.run_async_legacy()` wrapper, related environment toggles, and legacy telemetry labels.
 - Deleted CLI migration tooling and helper scripts now that the unified CLI is fully adopted.
 
 ### Documentation
+- Documented the legacy wrapper removal across runbooks, contributor guidance, and operations checklists.
 - Archived CLI migration roadmaps and linked the documentation archive from active guides.
 
 ## [2.0.0] - 2025-10-03

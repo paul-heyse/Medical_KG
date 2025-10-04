@@ -18,6 +18,7 @@ from Medical_KG.ingestion.cli_helpers import (
 )
 from Medical_KG.ingestion.events import BatchProgress, DocumentCompleted
 from Medical_KG.ingestion.models import Document
+from Medical_KG.ingestion.types import PubMedDocumentPayload
 from Medical_KG.ingestion.pipeline import PipelineResult
 
 runner = CliRunner()
@@ -82,7 +83,13 @@ class FakePipeline:
 
 def build_result(doc_ids: list[str]) -> PipelineResult:
     documents = [
-        Document(doc_id=doc_id, source="demo", content="", metadata={})
+        Document(
+            doc_id=doc_id,
+            source="demo",
+            content="",
+            metadata={},
+            raw=_doc_raw(doc_id),
+        )
         for doc_id in doc_ids
     ]
     now = datetime.now(timezone.utc)
@@ -95,6 +102,17 @@ def build_result(doc_ids: list[str]) -> PipelineResult:
         started_at=now,
         completed_at=now,
     )
+
+
+def _doc_raw(doc_id: str) -> PubMedDocumentPayload:
+    return {
+        "pmid": doc_id,
+        "title": "Untitled",
+        "abstract": "",
+        "authors": [],
+        "mesh_terms": [],
+        "pub_types": [],
+    }
 
 
 @pytest.fixture(autouse=True)

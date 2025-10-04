@@ -6,8 +6,10 @@ from typing import Any, Sequence, cast
 
 import pytest
 
+from Medical_KG.ingestion import http_client as http_client_module
 from Medical_KG.ingestion.http_client import AsyncHttpClient, RateLimit
 from Medical_KG.ingestion.telemetry import (
+    CompositeTelemetry,
     HttpBackoffEvent,
     HttpErrorEvent,
     HttpRequestEvent,
@@ -175,6 +177,54 @@ def test_http_client_emits_events(monkeypatch: Any) -> None:
     assert response_event.status_code == 200
 
 
+def test_enable_metrics_registers_prometheus(monkeypatch: Any) -> None:
+    events: list[HttpResponseEvent] = []
+
+    class _StubPrometheusTelemetry:
+        instances: list["_StubPrometheusTelemetry"] = []
+
+        @staticmethod
+        def is_available() -> bool:
+            return True
+
+        def __init__(self) -> None:
+            self.events = events
+            self.__class__.instances.append(self)
+
+        def on_response(self, event: HttpResponseEvent) -> None:
+            self.events.append(event)
+
+    monkeypatch.setattr(
+        http_client_module,
+        "PrometheusTelemetry",
+        _StubPrometheusTelemetry,
+    )
+
+    async def _request(
+        self: HttpxAsyncClient, method: str, url: str, **kwargs: Any
+    ) -> HttpxResponseProtocol:
+        return HTTPX.Response(
+            status_code=200,
+            json={"ok": True},
+            request=HTTPX.Request(method, url, **kwargs),
+        )
+
+    client = AsyncHttpClient(enable_metrics=True)
+    monkeypatch.setattr(
+        client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient)
+    )
+
+    async def _run() -> None:
+        async with client:
+            await client.get_json("https://example.com/data")
+
+    asyncio.run(_run())
+
+    assert client.enable_metrics is True
+    assert _StubPrometheusTelemetry.instances
+    assert events
+
+
 def test_http_client_emits_error_event(monkeypatch: Any) -> None:
     telemetry = _RecordingTelemetry()
 
@@ -198,6 +248,37 @@ def test_http_client_emits_error_event(monkeypatch: Any) -> None:
     assert telemetry.events[-1][0] == "error"
     error_event = cast(HttpErrorEvent, telemetry.events[-1][1])
     assert error_event.retryable is False
+
+
+def test_http_client_normalizes_composite_telemetry(httpx_mock_transport: Any) -> None:
+    class _Telemetry:
+        def __init__(self, name: str) -> None:
+            self.name = name
+            self.calls: list[str] = []
+
+        def on_request(self, event: HttpRequestEvent) -> None:
+            self.calls.append(event.host)
+
+    global_telemetry = _Telemetry("global")
+    host_telemetry = _Telemetry("host")
+    composite = CompositeTelemetry(
+        global_telemetry,
+        per_host={"example.com": [host_telemetry]},
+    )
+
+    def handler(request: HttpxRequestProtocol) -> HttpxResponseProtocol:
+        return HTTPX.Response(status_code=200, json={"ok": True}, request=request)
+
+    httpx_mock_transport(handler)
+
+    async def _run() -> None:
+        async with AsyncHttpClient(telemetry=composite, enable_metrics=False) as client:
+            await client.get_json("https://example.com/resource")
+
+    asyncio.run(_run())
+
+    assert global_telemetry.calls == ["example.com"]
+    assert host_telemetry.calls == ["example.com"]
 
 
 def test_http_client_emits_retry_event(monkeypatch: Any) -> None:
@@ -344,6 +425,46 @@ def test_host_specific_telemetry(monkeypatch: Any) -> None:
     asyncio.run(_run())
     assert example_calls == ["example.com"]
     assert other_calls == ["other.com"]
+
+
+def test_add_telemetry_with_host_override(monkeypatch: Any) -> None:
+    class _HostTelemetry(_RecordingTelemetry):
+        def __init__(self) -> None:
+            super().__init__()
+            self.hosts: list[str] = []
+
+        def on_request(self, event: HttpRequestEvent) -> None:
+            self.hosts.append(event.host)
+            super().on_request(event)
+
+    telemetry = _HostTelemetry()
+
+    async def _request(
+        self: HttpxAsyncClient, method: str, url: str, **kwargs: Any
+    ) -> HttpxResponseProtocol:
+        return HTTPX.Response(
+            status_code=200,
+            json={"ok": True},
+            request=HTTPX.Request(method, url, **kwargs),
+        )
+
+    client = AsyncHttpClient()
+    client.add_telemetry(telemetry, host="example.com")
+    monkeypatch.setattr(
+        client._client, "request", _request.__get__(client._client, HTTPX.AsyncClient)
+    )
+
+    async def _run() -> None:
+        async with client:
+            await client.get_json("https://example.com/one")
+            await client.get_json("https://other.com/two")
+
+    asyncio.run(_run())
+
+    assert telemetry.hosts == ["example.com"]
+    request_events = [event for name, event in telemetry.events if name == "request"]
+    assert len(request_events) == 1
+    assert cast(HttpRequestEvent, request_events[0]).host == "example.com"
 
 
 def test_retry_on_transient_failure(monkeypatch: Any) -> None:

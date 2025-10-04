@@ -136,6 +136,7 @@ Running `med ingest --help` lists all adapters discovered in the registry and hi
 ### Streaming architecture overview
 
 - `IngestionPipeline.stream_events()` is the authoritative execution surface. All other helpers (`iter_results()`, `run_async()`) consume this stream so progress, backpressure, and failure data stay consistent.
+- The deprecated `run_async_legacy()` wrapper was removed in October 2025; code should migrate to `stream_events()` (preferred) or the eager `run_async()` helper.
 - Event queue backpressure is enforced via the `buffer_size` argument (default 100). When the consumer lags, the queue depth saturates and the adapter automatically pauses until space becomes available.
 - `BatchProgress` events now include `checkpoint_doc_ids` and an `is_checkpoint` flag, allowing orchestrators to persist progress atomically without replaying the entire stream.
 - Adapter authors can raise structured signals using `BaseAdapter.emit_event()`. The HTTP base adapter automatically emits `AdapterRetry` whenever the underlying client retries a request, exposing status codes and attempt counts.
@@ -186,7 +187,7 @@ Include `self.emit_event` calls at meaningful checkpoints (long-running fetch lo
 
 - Monitor `BatchProgress.queue_depth` and `BatchProgress.buffer_size` to detect when consumers fall behind. Sustained ratios near 1 indicate downstream bottlenecks.
 - Alert on `backpressure_wait_seconds` and `backpressure_wait_count`. Rising values mean the producer is frequently pausing; consider increasing `buffer_size` or scaling consumers.
-- New Prometheus metrics (`ingest_pipeline_events_total`, `ingest_pipeline_queue_depth`, `ingest_pipeline_checkpoint_latency_seconds`, `ingest_pipeline_duration_seconds`, `ingest_pipeline_consumption_total`) expose event mix, queue health, checkpoint latencies, run-time distribution, and how far teams have migrated off eager wrappers.
+- Prometheus metrics (`ingest_pipeline_events_total`, `ingest_pipeline_queue_depth`, `ingest_pipeline_checkpoint_latency_seconds`, `ingest_pipeline_duration_seconds`, `ingest_pipeline_consumption_total`) expose event mix, queue health, checkpoint latencies, and run-time distribution. `ingest_pipeline_consumption_total{mode}` now only emits `stream_events` and `run_async` labels—`run_async_legacy` was removed in October 2025 and its reappearance should be treated as an incident.
 
 ### Streaming API endpoint
 
@@ -441,6 +442,19 @@ These helpers can be combined via the `telemetry` constructor argument or `clien
 
 ### Prometheus Metrics
 
+Prometheus instrumentation is disabled by default. Install
+`prometheus_client` and opt in by constructing the shared client with
+``AsyncHttpClient(enable_metrics=True)`` (or by setting
+``enable_client_metrics=True`` when building an :class:`IngestionPipeline`).
+When the dependency is missing the client logs a warning and continues without
+registering Prometheus callbacks.
+
+```python
+from Medical_KG.ingestion.http_client import AsyncHttpClient
+
+client = AsyncHttpClient(enable_metrics=True)
+```
+
 `PrometheusTelemetry` records the following metrics (all with a `host` label):
 
 | Metric | Type | Description |
@@ -457,7 +471,10 @@ A ready-to-import Grafana dashboard (`ops/monitoring/grafana/http-client-telemet
 
 ### Per-Host Telemetry Patterns
 
-Adapters that talk to multiple APIs can scope telemetry by host:
+Adapters that talk to multiple APIs can scope telemetry by host. Pass telemetry
+definitions into adapter constructors—the base :class:`HttpAdapter` forwards
+them to the shared client using ``AsyncHttpClient.add_telemetry`` so callbacks
+are registered once per upstream:
 
 ```python
 from Medical_KG.ingestion.telemetry import LoggingTelemetry, PrometheusTelemetry
@@ -495,6 +512,6 @@ Telemetry callbacks execute synchronously after each lifecycle event. Keep handl
 
 ### Troubleshooting
 
-- Missing metrics usually indicate `prometheus_client` is not installed; set `enable_metrics=False` to silence the warning and rely on logging/trace callbacks.
+- Missing metrics usually indicate `prometheus_client` is not installed; install the dependency before enabling metrics or leave `enable_metrics=False`.
 - Spikes in `http_limiter_queue_saturation` above 0.8 trigger a warning log and indicate the limiter is the bottleneck—either lower concurrency or request higher upstream quotas.
 - If callbacks raise exceptions they are logged at `WARNING` level and suppressed; check application logs for `"Telemetry callback"` messages when instrumentation appears inactive.

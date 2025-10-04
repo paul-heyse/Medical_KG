@@ -22,7 +22,9 @@ please follow the steps below before sending a pull request.
    - `pytest -q`
 5. **Update docs** – if you add new patterns or optional integrations, document the
    approach in [`docs/type_safety.md`](./docs/type_safety.md) and reference the unified
-   ingestion CLI (`med ingest <adapter>`) for examples. Historical migration material lives
+   ingestion CLI (`med ingest <adapter>`) for examples. All ingestion code should consume
+   `IngestionPipeline.stream_events()` (or the eager `run_async()` helper); the deprecated
+   `run_async_legacy()` wrapper was removed in October 2025. Historical migration material lives
    under [`docs/archive/cli_unification/`](./docs/archive/cli_unification/).
 
 ## Coding Standards

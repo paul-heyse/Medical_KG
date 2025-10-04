@@ -13,7 +13,9 @@ Shared test doubles live in `tests/conftest.py`:
   for deterministic HTTP interactions.
 
 Use these utilities when adding new tests so that ingestion behaviours stay hermetic and
-coverage remains comprehensive.
+coverage remains comprehensive. Streaming-first behaviour is exercised by the
+`test_pipeline_stream_events_smoke` scenario in `tests/ingestion/test_pipeline.py`, which
+validates that `stream_events()` emits the expected lifecycle events for current adapters.
 
 ## Optional Field Coverage
 

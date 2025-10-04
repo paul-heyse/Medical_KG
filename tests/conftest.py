@@ -510,6 +510,18 @@ def sample_document_factory() -> (
         raw: Any | None = None,
     ) -> "Document":
         from Medical_KG.ingestion.models import Document
+        from Medical_KG.ingestion.types import PubMedDocumentPayload
+
+        if raw is None:
+            default_raw: PubMedDocumentPayload = {
+                "pmid": doc_id,
+                "title": content or "Untitled",
+                "abstract": content or "",
+                "authors": [],
+                "mesh_terms": [],
+                "pub_types": [],
+            }
+            raw = default_raw
 
         return Document(
             doc_id=doc_id, source=source, content=content, metadata=metadata or {}, raw=raw

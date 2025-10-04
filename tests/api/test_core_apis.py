@@ -13,6 +13,7 @@ from Medical_KG.app import create_app
 from Medical_KG.config.manager import SecretResolver
 from Medical_KG.ingestion.events import BatchProgress, DocumentCompleted, DocumentStarted
 from Medical_KG.ingestion.models import Document
+from Medical_KG.ingestion.types import PubMedDocumentPayload
 from Medical_KG.services.chunks import Chunk
 from Medical_KG.utils.optional_dependencies import HttpxModule, get_httpx_module
 
@@ -223,6 +224,7 @@ def test_ingestion_stream_endpoint(app: FastAPI) -> None:
                 source="demo",
                 content="",
                 metadata={},
+                raw=_stream_raw_payload("ingest-1"),
             )
             yield DocumentStarted(
                 timestamp=0.0,
@@ -238,6 +240,17 @@ def test_ingestion_stream_endpoint(app: FastAPI) -> None:
                 duration=0.1,
                 adapter_metadata={},
             )
+
+
+def _stream_raw_payload(doc_id: str) -> PubMedDocumentPayload:
+    return {
+        "pmid": doc_id,
+        "title": "Untitled",
+        "abstract": "",
+        "authors": [],
+        "mesh_terms": [],
+        "pub_types": [],
+    }
             yield BatchProgress(
                 timestamp=0.2,
                 pipeline_id="test",

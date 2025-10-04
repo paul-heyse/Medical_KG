@@ -20,6 +20,7 @@ Use this checklist before promoting a build to production. All items must be ✅
 ## 3. Data Integrity
 
 - [ ] Backups verified: `aws s3 ls s3://medkg-backups/neo4j/` and `/opensearch/` show <24h freshness.
+- [ ] Ledger audit clean: `python scripts/ops/ledger_audit.py releases/<date>/ledger.jsonl` reports no findings.
 - [ ] KG SHACL pass-rate ≥ 0.98 over last 24h (see Grafana panel "KG Validation").
 - [ ] Catalog diff report reviewed (`ops/runbooks/06-catalog-refresh.md`).
 

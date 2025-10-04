@@ -177,6 +177,31 @@ groups:
           summary: "Extraction F1 score below threshold"
           description: "Effects extraction F1 is {{ $value }} (< 0.75)"
 
+  - name: ledger
+    interval: 1m
+    rules:
+      - alert: LegacyLedgerStateDetected
+        expr: med_ledger_documents_by_state{state="legacy"} > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: ingestion
+        annotations:
+          summary: "Legacy ledger state detected"
+          description: "Ledger emitted state=legacy. Run scripts/ops/ledger_audit.py and compact the ledger."
+          runbook: "https://docs.medkg.example.com/runbooks/ledger-maintenance"
+
+      - alert: LedgerInvalidTransitions
+        expr: rate(med_ledger_errors_total{type="invalid_transition"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: ingestion
+        annotations:
+          summary: "Invalid ledger transitions detected"
+          description: "Invalid transitions are being recorded; inspect ingestion logs for enum misuse."
+          runbook: "https://docs.medkg.example.com/runbooks/ledger-maintenance"
+
   - name: api_health
     interval: 30s
     rules:

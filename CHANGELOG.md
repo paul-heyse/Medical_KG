@@ -3,6 +3,7 @@
 ## [Unreleased]
 ### Removed
 - Deleted CLI migration tooling and helper scripts now that the unified CLI is fully adopted.
+- Removed the final ledger compatibility shims (`LedgerState.LEGACY`, string coercion helpers) and introduced enum-only validation tooling.
 
 ### Documentation
 - Archived CLI migration roadmaps and linked the documentation archive from active guides.

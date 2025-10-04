@@ -88,6 +88,41 @@
           "refId": "B"
         }
       ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PROMETHEUS_DS"
+      },
+      "description": "Enum-only ledger states; any legacy bucket should remain at zero.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth"
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 17},
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "right"
+        }
+      },
+      "title": "Ledger State Distribution",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by(state) (med_ledger_documents_by_state)",
+          "legendFormat": "{{state}}",
+          "refId": "A"
+        }
+      ]
     }
   ],
   "time": {

@@ -28,6 +28,7 @@ Failure: any stage can fall back to [FAILED]
 ```
 
 - **State semantics** – PDF ingestion emits `ir_building` during MinerU execution, `ir_ready` when artifacts are persisted, and `embedding` when downstream processors are triggered. Ledger transitions must use the `LedgerState` enum; attempting to pass raw strings raises a `TypeError`.
+- **Enum enforcement** – `update_state(doc_id, LedgerState.X)` is the only supported signature. Legacy string states now raise `TypeError` at the API boundary and `LedgerCorruption` during load if they slip into persisted logs. Run `python scripts/ops/ledger_audit.py /path/to/ledger.jsonl` before deployments to confirm no `legacy` markers remain.
 
 ### Snapshots and Compaction
 
@@ -47,6 +48,7 @@ Failure: any stage can fall back to [FAILED]
 - Counters: `med_ledger_state_transitions_total` (labelled by `from_state`/`to_state`), `med_ledger_initialization_total` (snapshot vs. full load), `med_ledger_errors_total` (invalid transitions, serialization failures).
 - Gauges: `med_ledger_documents_by_state`, `med_ledger_stuck_documents` (non-terminal backlog).
 - Histogram: `med_ledger_state_duration_seconds` observes time spent in each state prior to transition.
+- Benchmark: `python scripts/benchmarks/ledger_benchmark.py --documents 10000` measures load times for enum-only ledgers and should report <1s mean on standard staging hardware.
 - Dashboard recommendations: chart distribution, track retry loops, and alert on sustained growth in `failed`/`retrying` buckets.
 
 ## Runbooks for Common Failures

@@ -224,7 +224,6 @@ def _decode_state(
     raw: JSONValue,
     *,
     context: str,
-    legacy_fallback: LedgerState | None = None,
 ) -> LedgerState:
     if isinstance(raw, LedgerState):
         return raw
@@ -241,10 +240,9 @@ def _decode_state(
         except KeyError:
             lower_token = token.lower()
             if lower_token == "legacy":
-                if legacy_fallback is not None:
-                    return legacy_fallback
                 raise LedgerCorruption(
-                    f"{context} references removed legacy state without fallback"
+                    f"{context} references removed legacy state. "
+                    "Run ledger compaction to convert historical entries to enum states."
                 )
             try:
                 return LedgerState(lower_token)
@@ -286,7 +284,8 @@ def validate_transition(old: LedgerState, new: LedgerState) -> None:
     allowed = VALID_TRANSITIONS.get(old, set())
     if new not in allowed:
         raise InvalidStateTransition(
-            f"Invalid ledger state transition: {old.value!r} -> {new.value!r}"
+            f"Invalid ledger state transition from {old.name} to {new.name}."
+            " Ensure the transition is declared in VALID_TRANSITIONS."
         )
 
 
@@ -335,7 +334,6 @@ class LedgerAuditRecord:
             old_state = _decode_state(
                 payload["old_state"],
                 context="audit old_state",
-                legacy_fallback=new_state,
             )
         except (KeyError, ValueError) as exc:  # pragma: no cover - defensive guard
             raise LedgerCorruption("Ledger audit record has invalid state") from exc
@@ -468,10 +466,12 @@ class IngestionLedger:
                         self._apply_audit(state, audit)
                         records[audit.doc_id] = state
                         history.setdefault(audit.doc_id, []).append(audit)
-        except Exception as exc:  # pragma: no cover - defensive
-            raise LedgerCorruption("Ledger JSONL file is malformed") from exc
         except InvalidStateTransition as exc:  # pragma: no cover - defensive
             raise LedgerCorruption("Ledger contains invalid transition") from exc
+        except LedgerCorruption:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive
+            raise LedgerCorruption("Ledger JSONL file is malformed") from exc
         self._documents = records
         self._history = history
         INITIALIZATION_DURATION.observe(perf_counter() - start)
@@ -519,7 +519,6 @@ class IngestionLedger:
                 state_value = _decode_state(
                     state_raw,
                     context=f"snapshot state for {doc_id}",
-                    legacy_fallback=audits[-1].new_state if audits else None,
                 )
             document_state = LedgerDocumentState(
                 doc_id=str(doc_id),

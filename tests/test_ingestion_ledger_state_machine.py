@@ -11,6 +11,7 @@ from Medical_KG.ingestion.ledger import (
     InvalidStateTransition,
     LedgerAuditRecord,
     LedgerState,
+    LedgerCorruption,
     get_valid_next_states,
     is_retryable_state,
     is_terminal_state,
@@ -38,8 +39,10 @@ def test_validate_transition_accepts_declared_edges() -> None:
 
 
 def test_validate_transition_rejects_invalid_edge() -> None:
-    with pytest.raises(InvalidStateTransition):
+    with pytest.raises(InvalidStateTransition) as excinfo:
         validate_transition(LedgerState.FETCHING, LedgerState.IR_READY)
+    assert "FETCHING" in str(excinfo.value)
+    assert "IR_READY" in str(excinfo.value)
 
 
 def test_audit_record_round_trip() -> None:
@@ -102,8 +105,8 @@ def test_record_requires_enum(tmp_path: Path) -> None:
     assert "LedgerState enum" in str(excinfo.value)
 
 
-def test_legacy_alias_entries_still_parse(tmp_path: Path) -> None:
-    ledger_path = tmp_path / "legacy.jsonl"
+def test_alias_entries_still_parse(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "aliases.jsonl"
     timestamp = datetime.now(timezone.utc).timestamp()
     ledger_path.write_text(
         "\n".join(
@@ -111,7 +114,7 @@ def test_legacy_alias_entries_still_parse(tmp_path: Path) -> None:
                 json.dumps(
                     {
                         "doc_id": "doc-1",
-                        "old_state": "legacy",
+                        "old_state": "IR_BUILDING",
                         "new_state": "pdf_ir_ready",
                         "timestamp": timestamp,
                         "adapter": "stub",
@@ -138,6 +141,28 @@ def test_legacy_alias_entries_still_parse(tmp_path: Path) -> None:
     state = ledger.get("doc-1")
     assert state is not None
     assert state.state is LedgerState.COMPLETED
+
+
+def test_removed_legacy_state_raises(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "legacy.jsonl"
+    timestamp = datetime.now(timezone.utc).timestamp()
+    ledger_path.write_text(
+        json.dumps(
+            {
+                "doc_id": "doc-1",
+                "old_state": "legacy",
+                "new_state": "COMPLETED",
+                "timestamp": timestamp,
+                "adapter": "stub",
+                "metadata": {},
+                "parameters": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(LedgerCorruption) as excinfo:
+        IngestionLedger(ledger_path)
+    assert "removed legacy state" in str(excinfo.value)
 
 
 def test_delta_application(tmp_path: Path) -> None:

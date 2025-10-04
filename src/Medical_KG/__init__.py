@@ -1,8 +1,13 @@
 """Medical_KG package exports."""
 
-from typing import Any, Callable, cast
+from __future__ import annotations
 
-from fastapi import FastAPI
+from typing import TYPE_CHECKING, Any, Callable, cast
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+else:  # pragma: no cover - optional FastAPI dependency for runtime imports
+    FastAPI = Any  # type: ignore[assignment]
 
 from Medical_KG.config.manager import ConfigError, ConfigManager
 

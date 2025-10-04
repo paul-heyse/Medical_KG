@@ -109,6 +109,16 @@ $ med dependencies check --json > dependencies.json
 Use `--verbose` to include install hints and documentation links, or inspect
 specific fields with `jq` in pipelines.
 
+## CI coverage
+
+The GitHub Actions workflow `optional-dependencies` job runs on every pull
+request. It imports `iter_dependency_statuses()` directly to confirm that all
+registry entries emit an install hint and documentation link, executes
+`med dependencies check --json` to exercise the CLI output format, and asserts
+that `MissingDependencyError` surfaces actionable guidance for missing
+packages. This keeps the dependency matrix accurate even in environments
+without extras installed.
+
 ## Adding a new optional dependency
 
 1. Add or update the extras group in `pyproject.toml`.
@@ -128,3 +138,38 @@ specific fields with `jq` in pipelines.
   `pip install --upgrade pip` before reinstalling the extras group.
 - When adding new stubs, run `mypy --strict` locally to confirm the override
   list does not need additional entries.
+
+## Migration & communication
+
+- **Contributor migration guide** – Update existing modules to replace raw
+  `ModuleNotFoundError` handling with `optional_import()` and raise or surface
+  `MissingDependencyError` for required features. Follow the before/after
+  examples below when refactoring legacy imports.
+- **External communication** – Announce the change in the release notes and in
+  team channels, pointing users to `docs/dependencies.md` and the
+  `med dependencies check` diagnostic command.
+- **Before/after patterns**:
+
+  ```python
+  # Before
+  try:
+      import prometheus_client
+  except ModuleNotFoundError:
+      prometheus_client = None
+
+  # After
+  from Medical_KG.utils.optional_dependencies import MissingDependencyError, optional_import
+
+  try:
+      prometheus_client = optional_import(
+          "prometheus_client",
+          feature_name="observability",
+          package_name="prometheus-client",
+      )
+  except MissingDependencyError:
+      prometheus_client = None
+  ```
+
+- **Feedback loop** – Watch the optional dependency CI job and repository issue
+  tracker for reports of missing packages or unclear messaging. Adjust this
+  document and the registry entries when new dependencies or scenarios emerge.

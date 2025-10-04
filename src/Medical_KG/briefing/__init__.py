@@ -1,9 +1,20 @@
 """Briefing output generation utilities."""
 
+from Medical_KG.utils.optional_dependencies import (
+    MissingDependencyError,
+    optional_import,
+)
+
 try:  # pragma: no cover - optional FastAPI dependency for router wiring
-    from .api import router
-except ModuleNotFoundError:  # pragma: no cover - fallback when fastapi/pydantic absent
+    _api_module = optional_import(
+        "Medical_KG.briefing.api",
+        feature_name="fastapi",
+        package_name="fastapi",
+    )
+except MissingDependencyError:  # pragma: no cover - fallback when fastapi/pydantic absent
     router = None  # type: ignore[assignment]
+else:
+    router = getattr(_api_module, "router", None)
 from .models import (
     AdverseEvent,
     Citation,

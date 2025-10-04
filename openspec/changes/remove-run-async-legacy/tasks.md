@@ -2,9 +2,9 @@
 
 ## 1. Audit Legacy Usage
 
-- [ ] 1.1 Search codebase for all calls to `run_async_legacy()`
-- [ ] 1.2 Search for `consumption_mode="run_async_legacy"` references
-- [ ] 1.3 Grep for `MEDICAL_KG_SUPPRESS_PIPELINE_DEPRECATION` env variable
+- [x] 1.1 Search codebase for all calls to `run_async_legacy()`
+- [x] 1.2 Search for `consumption_mode="run_async_legacy"` references
+- [x] 1.3 Grep for `MEDICAL_KG_SUPPRESS_PIPELINE_DEPRECATION` env variable
 - [ ] 1.4 Check telemetry dashboards for legacy-specific counters
 - [ ] 1.5 Review logs for deprecation warnings in staging/production
 - [ ] 1.6 Document all remaining legacy usage patterns
@@ -21,28 +21,28 @@
 
 ## 3. Remove Legacy Pipeline Methods
 
-- [ ] 3.1 Delete `IngestionPipeline.run_async_legacy()` method
-- [ ] 3.2 Delete `_log_legacy_usage()` helper function
-- [ ] 3.3 Remove legacy consumption mode constants
-- [ ] 3.4 Remove `_LEGACY_WARNING_ENV` constant
-- [ ] 3.5 Clean up any legacy-specific error handling
-- [ ] 3.6 Remove legacy method docstrings and examples
+- [x] 3.1 Delete `IngestionPipeline.run_async_legacy()` method
+- [x] 3.2 Delete `_log_legacy_usage()` helper function
+- [x] 3.3 Remove legacy consumption mode constants
+- [x] 3.4 Remove `_LEGACY_WARNING_ENV` constant
+- [x] 3.5 Clean up any legacy-specific error handling
+- [x] 3.6 Remove legacy method docstrings and examples
 - [ ] 3.7 Run mypy strict on modified files
 
 ## 4. Clean Event System
 
-- [ ] 4.1 Remove `consumption_mode="run_async_legacy"` parameter
-- [ ] 4.2 Remove legacy mode tracking from `PipelineEvent` emissions
-- [ ] 4.3 Update `PIPELINE_CONSUMPTION_COUNTER` to remove legacy label
-- [ ] 4.4 Clean up event filtering that distinguished legacy mode
+- [x] 4.1 Remove `consumption_mode="run_async_legacy"` parameter
+- [x] 4.2 Remove legacy mode tracking from `PipelineEvent` emissions
+- [x] 4.3 Update `PIPELINE_CONSUMPTION_COUNTER` to remove legacy label
+- [x] 4.4 Clean up event filtering that distinguished legacy mode
 - [ ] 4.5 Remove any legacy-specific event transformers
 - [ ] 4.6 Test event emission with all consumption modes removed
 - [ ] 4.7 Verify event schema compatibility
 
 ## 5. Remove Environment Variables
 
-- [ ] 5.1 Delete `MEDICAL_KG_SUPPRESS_PIPELINE_DEPRECATION` handling
-- [ ] 5.2 Remove env variable checks from pipeline initialization
+- [x] 5.1 Delete `MEDICAL_KG_SUPPRESS_PIPELINE_DEPRECATION` handling
+- [x] 5.2 Remove env variable checks from pipeline initialization
 - [ ] 5.3 Update environment configuration documentation
 - [ ] 5.4 Remove env variable from Docker/K8s configs
 - [ ] 5.5 Clean up staging/production environment files
@@ -101,7 +101,7 @@
 
 ## 11. Validation
 
-- [ ] 11.1 Verify `grep -r "run_async_legacy"` returns no matches
+- [x] 11.1 Verify `grep -r "run_async_legacy"` returns no matches
 - [ ] 11.2 Verify `grep -r "consumption_mode"` shows no legacy references
 - [ ] 11.3 Confirm telemetry shows no legacy counter increments
 - [ ] 11.4 Run full test suite - all tests pass

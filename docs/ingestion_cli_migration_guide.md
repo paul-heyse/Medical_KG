@@ -9,7 +9,7 @@ The legacy ingestion entry points (`med ingest --source ...` and `med-ingest ...
 3. **Validate locally** – execute `med ingest <adapter> --dry-run --summary-only` with migrated flags to ensure payloads parse and ledger state resolves.
 4. **Update CI** – commit the translated commands and ensure the CI migration checker passes with zero findings.
 5. **Communicate** – share the announcement template (see below) with downstream consumers before flipping production pipelines.
-6. **Audit eager pipeline usage** – run `scripts/check_streaming_migration.py` to find remaining `run_async`/`run_async_legacy` calls and plan their transition to `stream_events()`.
+6. **Audit eager pipeline usage** – run `scripts/check_streaming_migration.py` to find remaining `run_async` calls and plan their transition to `stream_events()`.
 
 ## Flag Translation Reference
 

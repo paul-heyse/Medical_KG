@@ -6,10 +6,10 @@ Central index for Medical KG runbooks, contacts, and cadences.
 
 - **Primary On-Call** – PagerDuty schedule `medical-kg-primary`.
 - **Secondary On-Call** – PagerDuty schedule `medical-kg-secondary` (escalate after 15 min).
-- **Engineering Manager** – eng-manager@medkg.example.com.
-- **Operations Lead** – ops-lead@medkg.example.com.
-- **Clinical Liaison** – clinical@medkg.example.com.
-- **Security Officer** – security@medkg.example.com.
+- **Engineering Manager** – <eng-manager@medkg.example.com>.
+- **Operations Lead** – <ops-lead@medkg.example.com>.
+- **Clinical Liaison** – <clinical@medkg.example.com>.
+- **Security Officer** – <security@medkg.example.com>.
 
 ## Runbook Index
 
@@ -41,8 +41,8 @@ Central index for Medical KG runbooks, contacts, and cadences.
 ## Communication Channels
 
 - **Slack** – `#ops`, `#incidents`, `#medical-kg`.
-- **Status Page** – https://status.medkg.example.com.
-- **Email** – ops@medkg.example.com for scheduled maintenance notices.
+- **Status Page** – <https://status.medkg.example.com>.
+- **Email** – <ops@medkg.example.com> for scheduled maintenance notices.
 
 ## Ingestion Metrics & Logs
 

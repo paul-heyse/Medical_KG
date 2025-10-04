@@ -1,13 +1,13 @@
 """Pydantic request/response models for the public API."""
-
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated, Any
 
+from pydantic import BaseModel, Field
+
 from Medical_KG.extraction.models import ExtractionEnvelope
 from Medical_KG.facets.models import FacetModel
-from pydantic import BaseModel, Field
 
 
 class ErrorDetail(BaseModel):

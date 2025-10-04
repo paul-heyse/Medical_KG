@@ -18,6 +18,16 @@
 | Source schema drift | ValidationError raised in adapter `validate()` step; ledger records `schema_failed` | Capture payload sample, update adapter parser/tests, regenerate fixtures, and redeploy. |
 | Network outage | `httpx.ConnectError` recorded; ledger state `network_failed` | Retries handled automatically. For sustained incidents > 1h, pause jobs and notify operations. |
 
+## Unified Ingestion CLI
+
+- Entry point: `med ingest <adapter> [options]`.
+- Format selection: `--output text|json|table`, plus `--summary-only` for log-friendly output and `--show-timings` for runtime metrics.
+- Batch orchestration: `--batch path.ndjson` (chunked automatically with `--chunk-size`), `--id` for targeted document replays, and `--limit` to cap records.
+- Resume & auto pipelines: `--resume`, `--auto`, `--page-size`, `--start-date`, `--end-date`, and `--rate-limit` control long-running fetches.
+- Validation toggles: `--strict-validation`, `--skip-validation`, `--fail-fast`, and `--dry-run` manage payload hygiene without rewriting adapters.
+- Logging & UX: `--progress/--no-progress`, `--quiet`, `--verbose`, `--log-level`, `--log-file`, and `--error-log` tailor operator feedback.
+- Deprecation path: `med ingest-legacy` delegates with a warning; set `MEDICAL_KG_SUPPRESS_INGEST_DEPRECATED=1` to silence the notice during scripted migrations.
+
 ## Batch & Auto Modes
 
 - The CLI (`med ingest`) supports `--auto` to stream ingested `doc_id`s and advance the ledger to `auto_done`.

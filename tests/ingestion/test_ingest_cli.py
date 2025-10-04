@@ -1,45 +1,75 @@
-import json
-from pathlib import Path
-from typing import Any
+import logging
 
 import pytest
 
 from Medical_KG.cli import build_parser
 
 
-def test_ingest_cli_batch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    batch = tmp_path / "batch.ndjson"
-    batch.write_text(json.dumps({"term": "lactate"}))
-    ledger = tmp_path / "ledger.jsonl"
+def test_ingest_delegates_to_unified_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, list[str]] = {}
+
+    def fake_main(argv: list[str] | None = None) -> int:
+        captured["argv"] = argv or []
+        return 0
+
+    monkeypatch.setattr("Medical_KG.ingestion.cli.main", fake_main)
 
     parser = build_parser()
-    args = parser.parse_args(
-        [
-            "ingest",
-            "pubmed",
-            "--batch",
-            str(batch),
-            "--auto",
-            "--ledger",
-            str(ledger),
-        ]
-    )
+    args = parser.parse_args(["ingest", "demo", "--batch", "payload.ndjson"])
+    exit_code = args.func(args)
 
-    class DummyAdapter:
-        async def run(self, **kwargs: Any) -> list[object]:
-            return []
+    assert exit_code == 0
+    assert captured["argv"] == ["ingest", "demo", "--batch", "payload.ndjson"]
 
-    class DummyClient:
-        async def aclose(self) -> None:
-            return None
 
-        async def __aenter__(self) -> "DummyClient":
-            return self
+def test_ingest_translates_legacy_flags(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
+) -> None:
+    captured: dict[str, list[str]] = {}
 
-        async def __aexit__(self, *_exc: Any) -> bool:
-            return False
+    def fake_main(argv: list[str] | None = None) -> int:
+        captured["argv"] = argv or []
+        return 0
 
-    monkeypatch.setattr("Medical_KG.cli.get_adapter", lambda *args, **kwargs: DummyAdapter())
-    monkeypatch.setattr("Medical_KG.cli.AsyncHttpClient", lambda: DummyClient())
-    result = args.func(args)
-    assert result == 0
+    monkeypatch.setattr("Medical_KG.ingestion.cli.main", fake_main)
+
+    parser = build_parser()
+    with caplog.at_level(logging.WARNING):
+        args = parser.parse_args(
+            [
+                "ingest",
+                "--source",
+                "demo",
+                "--batch-file",
+                "params.ndjson",
+                "--continue-from-ledger",
+            ]
+        )
+        exit_code = args.func(args)
+
+    assert exit_code == 0
+    assert captured["argv"] == ["ingest", "demo", "--batch", "params.ndjson", "--resume"]
+    stderr = capsys.readouterr().err
+    assert "deprecated" in stderr
+    assert any("Delegating ingestion command" in record.message for record in caplog.records)
+
+
+def test_ingest_legacy_command_warns(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    captured: dict[str, list[str]] = {}
+
+    def fake_main(argv: list[str] | None = None) -> int:
+        captured["argv"] = argv or []
+        return 0
+
+    monkeypatch.setattr("Medical_KG.ingestion.cli.main", fake_main)
+
+    parser = build_parser()
+    args = parser.parse_args(["ingest-legacy", "--source", "demo"])
+    exit_code = args.func(args)
+
+    assert exit_code == 0
+    assert captured["argv"] == ["ingest", "demo"]
+    stderr = capsys.readouterr().err
+    assert "deprecated" in stderr

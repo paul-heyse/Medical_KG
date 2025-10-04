@@ -3,7 +3,6 @@ import logging
 import pytest
 
 from Medical_KG.cli import build_parser
-from Medical_KG.ingestion.pipeline import PipelineResult
 
 
 def test_ingest_delegates_to_unified_cli(monkeypatch: pytest.MonkeyPatch) -> None:

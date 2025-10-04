@@ -7,9 +7,19 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping, Sequence, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+    cast,
+)
 
-from Medical_KG.ingestion.pipeline import PipelineResult
+from Medical_KG.ingestion.ledger import IngestionLedger
+from Medical_KG.ingestion.pipeline import IngestionPipeline, PipelineResult
 
 if TYPE_CHECKING:  # pragma: no cover - typing aids
     from rich.console import Console as RichConsole
@@ -46,6 +56,38 @@ class BatchValidationError(ValueError):
     def __init__(self, message: str, *, hint: str | None = None) -> None:
         super().__init__(message)
         self.hint = hint
+
+
+class BatchLoadError(BatchValidationError):
+    """Backward-compatible alias for batch loading failures."""
+
+
+class AdapterInvocationError(RuntimeError):
+    """Raised when an adapter fails to execute within the pipeline."""
+
+    def __init__(self, source: str, *, cause: Exception) -> None:
+        message = f"Failed to invoke adapter '{source}': {cause}"
+        super().__init__(message)
+        self.source = source
+        self.cause = cause
+
+
+@dataclass(slots=True)
+class LedgerResumeStats:
+    """Aggregate statistics describing a resume plan."""
+
+    total: int
+    skipped: int
+    remaining: int
+
+
+@dataclass(slots=True)
+class LedgerResumePlan:
+    """Plan for resuming failed or pending ledger entries."""
+
+    resume_ids: list[str]
+    skipped_ids: list[str]
+    stats: LedgerResumeStats
 
 
 @dataclass(slots=True)
@@ -88,9 +130,15 @@ class CLIResultSummary:
         }
 
 
-def load_ndjson_batch(path: Path, *, strict: bool = True) -> Iterator[dict[str, Any]]:
+def load_ndjson_batch(
+    path: Path,
+    *,
+    strict: bool = True,
+    progress: Callable[[int, int | None], None] | None = None,
+) -> Iterator[dict[str, Any]]:
     """Yield JSON objects from an NDJSON file, optionally enforcing strict validation."""
 
+    count = 0
     with path.open("r", encoding="utf-8") as handle:
         for index, line in enumerate(handle, start=1):
             if not line.strip():
@@ -98,18 +146,21 @@ def load_ndjson_batch(path: Path, *, strict: bool = True) -> Iterator[dict[str, 
             try:
                 payload = json.loads(line)
             except json.JSONDecodeError as exc:  # pragma: no cover - validated via tests
-                raise BatchValidationError(
+                raise BatchLoadError(
                     f"Invalid JSON on line {index} of {path}: {exc.msg}",
                     hint="Ensure each line is a complete JSON object.",
                 ) from exc
             if not isinstance(payload, Mapping):
-                raise BatchValidationError(
+                raise BatchLoadError(
                     "Batch entries must be JSON objects",
                     hint=f"Entry on line {index} is {type(payload).__name__}",
                 )
             record = dict(payload)
             if strict:
                 _validate_mapping(record, path, index)
+            count += 1
+            if progress is not None:
+                progress(count, None)
             yield record
 
 
@@ -162,10 +213,29 @@ def create_progress(description: str, total: int | None) -> tuple[Any, int] | No
     return progress, task_id
 
 
-def format_cli_error(message: str, *, hint: str | None = None) -> str:
-    if hint:
-        return f"Error: {message}\nHint: {hint}"
-    return f"Error: {message}"
+def format_cli_error(
+    error: Exception | str,
+    *,
+    prefix: str = "Error",
+    remediation: str | None = None,
+    hint: str | None = None,
+    use_color: bool = False,
+) -> str:
+    """Render a CLI-friendly error message with optional remediation details."""
+
+    message = str(error)
+    heading = message if not prefix else f"{prefix}: {message}"
+    if use_color and Console is not None:
+        prefix_markup = f"[bold red]{prefix}[/bold red]" if prefix else "[bold red]Error[/bold red]"
+        heading = f"{prefix_markup}: {message}" if prefix else f"{prefix_markup} {message}"
+    details = [heading]
+    final_hint = remediation or hint
+    if final_hint:
+        label = "Hint"
+        if use_color and Console is not None:
+            label = "[bold yellow]Hint[/bold yellow]"
+        details.append(f"{label}: {final_hint}")
+    return "\n".join(details)
 
 
 def summarise_results(
@@ -239,7 +309,7 @@ def render_table_summary(
     table.add_column("Field")
     table.add_column("Value")
     table.add_row("Adapter", summary.adapter)
-    table.add_row("Processed", str(summary.processed_documents))
+    table.add_row("Processed documents", str(summary.processed_documents))
     table.add_row("Resume", "yes" if summary.resume else "no")
     table.add_row("Auto", "yes" if summary.auto else "no")
     if summary.batch_file:
@@ -248,6 +318,9 @@ def render_table_summary(
         table.add_row("Batch records", str(summary.total_parameters))
     if show_timings:
         table.add_row("Duration", f"{summary.duration_seconds:.2f}s")
+    for result in summary.results:
+        doc_list = ", ".join(result.doc_ids) if result.doc_ids else "0 documents"
+        table.add_row(f"{result.source} documents", doc_list)
     console.begin_capture()
     console.print(table)
     return cast(str, console.end_capture())
@@ -255,6 +328,48 @@ def render_table_summary(
 
 def render_json_summary(summary: CLIResultSummary) -> str:
     return json.dumps(summary.to_dict(), indent=2)
+
+
+def format_results(
+    results: Sequence[PipelineResult],
+    *,
+    output_format: str = "text",
+    verbose: bool = False,
+) -> list[str]:
+    """Format pipeline results into text, JSON, or JSONL representations."""
+
+    total_batches = len(results)
+    total_documents = sum(len(result.doc_ids) for result in results)
+
+    if output_format.lower() == "jsonl":
+        return [json.dumps(result.doc_ids, ensure_ascii=False) for result in results]
+
+    if output_format.lower() == "json":
+        payload = {
+            "batches": total_batches,
+            "documents": total_documents,
+            "results": [
+                {"source": result.source, "doc_ids": list(result.doc_ids)}
+                for result in results
+            ],
+        }
+        return [json.dumps(payload, ensure_ascii=False)]
+
+    lines = [
+        f"Batches processed: {total_batches}",
+        f"Documents processed: {total_documents}",
+    ]
+    if not results:
+        lines.append("No results returned.")
+        return lines
+
+    for result in results:
+        if verbose:
+            doc_summary = ", ".join(result.doc_ids) if result.doc_ids else "0 documents"
+        else:
+            doc_summary = f"{len(result.doc_ids)} documents"
+        lines.append(f"{result.source}: {doc_summary}")
+    return lines
 
 
 def throttle(rate_limit_per_second: float | None, *, last_run: float | None) -> float:
@@ -280,13 +395,101 @@ def _validate_mapping(record: Mapping[str, Any], path: Path, index: int) -> None
             )
 
 
+def handle_ledger_resume(
+    ledger: IngestionLedger | Path,
+    *,
+    candidate_doc_ids: Sequence[str] | None = None,
+) -> LedgerResumePlan:
+    """Derive a resume plan from ledger entries and optional candidate IDs."""
+
+    if isinstance(ledger, Path):
+        if not ledger.exists():
+            resume = list(candidate_doc_ids or [])
+            total_candidates = len(candidate_doc_ids or [])
+            stats = LedgerResumeStats(
+                total=total_candidates,
+                skipped=total_candidates - len(resume),
+                remaining=len(resume),
+            )
+            return LedgerResumePlan(resume_ids=resume, skipped_ids=[], stats=stats)
+        ledger_instance = IngestionLedger(ledger)
+    else:
+        ledger_instance = ledger
+
+    entries = {entry.doc_id: entry.state for entry in ledger_instance.entries()}
+    candidate_sequence = list(candidate_doc_ids) if candidate_doc_ids is not None else None
+
+    failure_states = {"auto_failed", "auto_inflight"}
+    success_states = {"auto_done"}
+
+    resume_ids: list[str] = []
+    skipped_ids: list[str] = []
+
+    if candidate_sequence is None:
+        for doc_id, state in entries.items():
+            if state in failure_states:
+                resume_ids.append(doc_id)
+            elif state in success_states:
+                skipped_ids.append(doc_id)
+        total = len(entries)
+    else:
+        for doc_id in candidate_sequence:
+            state_value = entries.get(doc_id)
+            if state_value is None:
+                resume_ids.append(doc_id)
+                continue
+            if state_value in failure_states:
+                resume_ids.append(doc_id)
+                continue
+            skipped_ids.append(doc_id)
+        total = len(candidate_sequence)
+
+    remaining = len(resume_ids)
+    skipped = total - remaining if total >= remaining else 0
+    stats = LedgerResumeStats(total=total, skipped=skipped, remaining=remaining)
+    return LedgerResumePlan(
+        resume_ids=resume_ids,
+        skipped_ids=skipped_ids,
+        stats=stats,
+    )
+
+
+def invoke_adapter_sync(
+    source: str,
+    *,
+    ledger: IngestionLedger,
+    registry: Any | None = None,
+    client_factory: type[Any] | None = None,
+    params: Sequence[dict[str, Any]] | None = None,
+    resume: bool = False,
+) -> list[PipelineResult]:
+    """Invoke an adapter synchronously with consistent error handling."""
+
+    try:
+        pipeline = IngestionPipeline(
+            ledger,
+            registry=registry,
+            client_factory=client_factory,
+        )
+        return pipeline.run(source, params=params, resume=resume)
+    except Exception as exc:  # pragma: no cover - surfaced through tests
+        raise AdapterInvocationError(source, cause=exc) from exc
+
+
 __all__ = [
+    "AdapterInvocationError",
+    "BatchLoadError",
     "BatchValidationError",
     "CLIResultSummary",
     "chunk_parameters",
     "count_ndjson_records",
     "create_progress",
     "format_cli_error",
+    "format_results",
+    "handle_ledger_resume",
+    "invoke_adapter_sync",
+    "LedgerResumePlan",
+    "LedgerResumeStats",
     "load_ndjson_batch",
     "render_json_summary",
     "render_table_summary",

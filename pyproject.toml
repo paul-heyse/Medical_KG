@@ -21,6 +21,7 @@ dependencies = [
     # Data Models & Validation
     "python-dotenv==1.1.1",
     "pydantic==2.11.9",
+    "jsonschema==4.25.1",
 
 
     # JSON & Serialization
@@ -143,6 +144,7 @@ models = [
 
 [project.scripts]
 med = "Medical_KG.cli:main"
+med-ingest-legacy = "Medical_KG.cli:main"
 
 [tool.black]
 line-length = 100
@@ -182,6 +184,10 @@ module = [
     "typer",
     "prometheus_client",
     "bs4",
+    "rich",
+    "rich.*",
+    "jsonschema",
+    "jsonschema.*",
 ]
 ignore_missing_imports = true
 

@@ -68,9 +68,8 @@ class BaseAdapter(Generic[RawPayloadT], ABC):
     def parse(self, raw: RawPayloadT) -> Document:
         """Transform a raw record into a :class:`Document`."""
 
-    @abstractmethod
     def validate(self, document: Document) -> None:
-        """Perform source-specific validations."""
+        """Perform source-specific validations (override as needed)."""
 
     async def write(self, document: Document) -> IngestionResult:
         entry = self.context.ledger.record(

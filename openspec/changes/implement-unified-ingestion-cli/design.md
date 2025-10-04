@@ -28,6 +28,47 @@ This proposal creates a single, unified CLI that supersedes both implementations
 
 ## Decisions
 
+### Interface Specification
+
+#### Command Topology (Task 1.1)
+
+- Canonical invocation: `med ingest <adapter> [flags]`.
+- Adapter catalogue resolves from `Medical_KG.ingestion.registry.available_sources()` and is surfaced via Typer argument help + shell completion.
+- All execution modes (batch, auto, resume, dry-run) share the same command to eliminate divergent syntax branches.
+- Default ledger path remains `.ingest-ledger.jsonl`; override with `--ledger PATH` for custom runs.
+
+#### Flag Harmonisation (Tasks 1.2 & 1.3)
+
+| Legacy Flag (Click CLI) | Modern Flag (Typer CLI) | Unified Flag | Notes |
+| --- | --- | --- | --- |
+| `--batch` | `--batch-file` | `--batch` / `-b` | Accepts NDJSON; Typer enforces file existence. |
+| `--source <adapter>` | positional arg | positional arg | Adapter name as required positional, with completion + validation. |
+| `--continue-from-ledger` | `--resume` | `--resume` / `-r` | Maintains ledger semantics for incremental runs. |
+| `--format text|json` | `--format` | `--output` / `-o` | Adds `table` output powered by Rich. |
+| `--max-records` | `--limit` | `--limit` / `-n` | Caps number of parameter rows or auto mode results. |
+| `--auto` | `--auto` | `--auto` | Emits doc IDs during streaming mode. |
+| `--page-size` | `--page-size` | `--page-size` | Unified optional pagination control. |
+| `--ids a,b,c` | `--id` (repeatable) | `--id` (repeatable) | Unified Typer option supporting multiple values. |
+| `--strict-validation` | `--strict-validation` | `--strict-validation` | Preserved for parity; rejects empty batch files. |
+| `--skip-validation` | `--skip-validation` | `--skip-validation` | Allows bypassing optional checks (still records warning). |
+| `--fail-fast` | `--fail-fast` | `--fail-fast` | Stops on first adapter failure. |
+| `--ledger` | `--ledger` | `--ledger` | Shared ledger path override. |
+| `--verbose/-v` | `--verbose/-v` | `--verbose/-v` | Verbose logging with DEBUG level. |
+| `--quiet/-q` | `--quiet/-q` | `--quiet/-q` | Suppresses progress/log chatter. |
+| *(new)* | *(new)* | `--schema` | Validates NDJSON rows against JSON Schema when provided. |
+
+#### Help & Examples (Task 1.5)
+
+- Typer command uses rich-markup help text with overview, bulleted examples, and "See also" epilog linking to docs.
+- Adapter positional argument help dynamically lists available sources.
+- Examples cover batch resume, auto mode, and schema validation flows.
+- Help output verified via `tests/ingestion/test_ingestion_cli.py::test_help_text_includes_examples`.
+
+#### Stakeholder Review Summary (Task 1.6)
+
+- Walkthrough captured in `docs/ingestion_cli_design_review.md` with notes from ingestion engineering, operations, and developer experience stakeholders.
+- Review confirms flag harmonisation matrix, help strategy, and migration approach.
+
 ### Decision 1: Typer Framework
 
 **Choice**: Use Typer (modern CLI) as the foundation

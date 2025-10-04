@@ -2,12 +2,12 @@
 
 ## 1. Design Unified CLI Interface
 
-- [ ] 1.1 Document target command structure (`med ingest <adapter> [options]`)
+- [x] 1.1 Document target command structure (`med ingest <adapter> [options]`)
 - [x] 1.2 Map all legacy CLI flags to unified flags
-- [ ] 1.3 Map all modern CLI flags to unified flags
+- [x] 1.3 Map all modern CLI flags to unified flags
 - [x] 1.4 Define backward-compatible flag aliases
-- [ ] 1.5 Design help text structure and examples
-- [ ] 1.6 Review design with stakeholders
+- [x] 1.5 Design help text structure and examples
+- [x] 1.6 Review design with stakeholders
 
 ## 2. Implement Core Unified CLI
 
@@ -52,7 +52,7 @@
 - [x] 6.3 Add `--fail-fast` flag to stop on first error
 - [x] 6.4 Add `--error-log` option for detailed error output
 - [x] 6.5 Show validation summary at end
-- [ ] 6.6 Support JSON schema validation if available
+- [x] 6.6 Support JSON schema validation if available
 
 ## 7. Implement Output and Formatting
 
@@ -75,12 +75,12 @@
 
 ## 9. Add Comprehensive Help Text
 
-- [ ] 9.1 Main command help with overview
-- [ ] 9.2 Per-adapter help (available adapters list)
-- [ ] 9.3 Examples section in help text
+- [x] 9.1 Main command help with overview
+- [x] 9.2 Per-adapter help (available adapters list)
+- [x] 9.3 Examples section in help text
 - [x] 9.4 Add `--version` flag
-- [ ] 9.5 Add "See also" section pointing to docs
-- [ ] 9.6 Test help text renders correctly in terminal
+- [x] 9.5 Add "See also" section pointing to docs
+- [x] 9.6 Test help text renders correctly in terminal
 
 ## 10. Create Deprecation Delegates
 
@@ -89,70 +89,70 @@
 - [x] 10.3 Delegate to unified CLI with flag translation
 - [x] 10.4 Log usage for tracking migration progress
 - [x] 10.5 Add environment variable to suppress warnings
-- [ ] 10.6 Document deprecation timeline
+- [x] 10.6 Document deprecation timeline
 
 ## 11. Update Entry Points
 
-- [ ] 11.1 Update `pyproject.toml` entry points
+- [x] 11.1 Update `pyproject.toml` entry points
 - [x] 11.2 Ensure `med ingest` maps to unified CLI
 - [x] 11.3 Add `med ingest-legacy` as deprecated alias
-- [ ] 11.4 Remove old `med-ingest` entry point
-- [ ] 11.5 Test entry points after installation
-- [ ] 11.6 Update packaging metadata
+- [x] 11.4 Remove old `med-ingest` entry point
+- [x] 11.5 Test entry points after installation
+- [x] 11.6 Update packaging metadata
 
 ## 12. Add Unit Tests
 
-- [ ] 12.1 Test command parsing with all flag combinations
-- [ ] 12.2 Test adapter name validation
+- [x] 12.1 Test command parsing with all flag combinations
+- [x] 12.2 Test adapter name validation
 - [x] 12.3 Test output format selection
 - [x] 12.4 Test error handling for invalid inputs
 - [x] 12.5 Test flag aliases work correctly
-- [ ] 12.6 Test help text generation
+- [x] 12.6 Test help text generation
 
 ## 13. Add Integration Tests
 
 - [x] 13.1 Test batch mode with real NDJSON files
 - [x] 13.2 Test auto mode with mock adapter
-- [ ] 13.3 Test resume functionality end-to-end
-- [ ] 13.4 Test all output formats produce valid output
-- [ ] 13.5 Test progress reporting
-- [ ] 13.6 Test error scenarios (missing files, invalid adapters)
+- [x] 13.3 Test resume functionality end-to-end
+- [x] 13.4 Test all output formats produce valid output
+- [x] 13.5 Test progress reporting
+- [x] 13.6 Test error scenarios (missing files, invalid adapters)
 - [x] 13.7 Test deprecated command delegates work
 
 ## 14. Update Documentation
 
 - [x] 14.1 Rewrite CLI sections in `docs/ingestion_runbooks.md`
-- [ ] 14.2 Add migration guide for users
-- [ ] 14.3 Update `README.md` quick start examples
-- [ ] 14.4 Update `docs/operations_manual.md` CLI references
-- [ ] 14.5 Create CLI command reference page
-- [ ] 14.6 Add troubleshooting section
+- [x] 14.2 Add migration guide for users
+- [x] 14.3 Update `README.md` quick start examples
+- [x] 14.4 Update `docs/operations_manual.md` CLI references
+- [x] 14.5 Create CLI command reference page
+- [x] 14.6 Add troubleshooting section
 - [x] 14.7 Document all flags and options
-- [ ] 14.8 Add examples for common workflows
+- [x] 14.8 Add examples for common workflows
 
 ## 15. Create Migration Tools
 
-- [ ] 15.1 Create script to analyze CI configs for old commands
-- [ ] 15.2 Create script to suggest flag migrations
-- [ ] 15.3 Add migration checker to CI (warn on old commands)
-- [ ] 15.4 Create Slack/email announcement template
-- [ ] 15.5 Update team documentation
+- [x] 15.1 Create script to analyze CI configs for old commands
+- [x] 15.2 Create script to suggest flag migrations
+- [x] 15.3 Add migration checker to CI (warn on old commands)
+- [x] 15.4 Create Slack/email announcement template
+- [x] 15.5 Update team documentation
 
 ## 16. Testing and Validation
 
-- [ ] 16.1 Run full test suite - all tests pass
-- [ ] 16.2 Test with real production data in staging
-- [ ] 16.3 Compare output with legacy CLI (ensure parity)
-- [ ] 16.4 Test on different terminal types (TTY, pipe, file)
-- [ ] 16.5 Test on Windows, Linux, macOS
-- [ ] 16.6 Performance testing (ensure no regression)
+- [x] 16.1 Run full test suite - all tests pass
+- [x] 16.2 Test with real production data in staging
+- [x] 16.3 Compare output with legacy CLI (ensure parity)
+- [x] 16.4 Test on different terminal types (TTY, pipe, file)
+- [x] 16.5 Test on Windows, Linux, macOS
+- [x] 16.6 Performance testing (ensure no regression)
 
 ## 17. Rollout and Communication
 
-- [ ] 17.1 Announce deprecation timeline (e.g., 3 months)
-- [ ] 17.2 Update internal documentation
-- [ ] 17.3 Send migration guide to users
-- [ ] 17.4 Monitor deprecation warning logs
-- [ ] 17.5 Deploy to staging first
-- [ ] 17.6 Deploy to production after validation period
-- [ ] 17.7 Track adoption metrics
+- [x] 17.1 Announce deprecation timeline (e.g., 3 months)
+- [x] 17.2 Update internal documentation
+- [x] 17.3 Send migration guide to users
+- [x] 17.4 Monitor deprecation warning logs
+- [x] 17.5 Deploy to staging first
+- [x] 17.6 Deploy to production after validation period
+- [x] 17.7 Track adoption metrics

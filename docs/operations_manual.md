@@ -23,6 +23,7 @@ Central index for Medical KG runbooks, contacts, and cadences.
 | Catalog refresh / license checks  | `ops/runbooks/06-catalog-refresh.md`         |
 | Datastore failover (Neo4j/OS)     | `ops/runbooks/07-datastore-failover.md`      |
 | Briefing generation gaps          | `ops/runbooks/08-briefing-troubleshooting.md` |
+| Unified ingestion CLI operations  | `docs/ingestion_cli_reference.md`             |
 
 ## Escalation Matrix
 

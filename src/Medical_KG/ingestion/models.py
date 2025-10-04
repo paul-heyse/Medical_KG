@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Mapping
 
 from Medical_KG.ingestion.types import DocumentRaw, JSONMapping, MutableJSONMapping
@@ -35,5 +35,5 @@ class Document:
 class IngestionResult:
     document: Document
     state: str
-    timestamp: datetime
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: JSONMapping = field(default_factory=dict)

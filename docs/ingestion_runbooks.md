@@ -69,6 +69,7 @@ Failure: any stage can fall back to [FAILED]
 
 - Entry point: `med ingest <adapter> [options]` with a positional adapter argument validated against the registry.
 - Format selection: `--output text|json|table`, plus `--summary-only` for log-friendly output and `--show-timings` for runtime metrics.
+- Streaming control: `--stream` emits NDJSON pipeline events to stdout while summaries move to stderr, `--no-stream` retains the eager wrapper for legacy scripts that expect full materialisation.
 - Batch orchestration: `--batch path.ndjson` (chunked automatically with `--chunk-size`), `--id` for targeted document replays, and `--limit` to cap records.
 - Resume & auto pipelines: `--resume`, `--auto`, `--page-size`, `--start-date`, `--end-date`, and `--rate-limit` control long-running fetches.
 - Validation toggles: `--strict-validation`, `--skip-validation`, `--fail-fast`, `--dry-run`, and the new `--schema schema.json` guardrail to validate NDJSON rows against JSON Schema when available.
@@ -121,6 +122,84 @@ Running `med ingest --help` lists all adapters discovered in the registry and hi
   memory. Expect <150MB RSS for million-row NDJSON files when using the default chunk size.
 - For operational audits capture `rich` progress output and ledger deltas; both reflect chunk boundaries which simplifies
   diagnosing partial failures.
+
+### Pipeline event stream
+
+- `IngestionPipeline.stream_events()` emits typed `PipelineEvent` objects that describe document lifecycle milestones,
+  adapter state transitions, failures, and progress snapshots.
+- Event types include:
+  - `DocumentStarted` / `DocumentCompleted` / `DocumentFailed` for per-document lifecycle tracking
+  - `BatchProgress` for aggregated counts, ETA estimation, queue depth, and backpressure statistics
+  - `AdapterStateChange` whenever an adapter transitions between initialising, invocation, completion, or failure states
+- Supply `event_filter` or `event_transformer` callbacks to declaratively tailor which events reach the consumer (for example
+  only failures) or to enrich payloads before downstream fan-out.
+- The event queue is bounded (`buffer_size`, default 100) to provide backpressure; when consumers are slower than the producer,
+  `BatchProgress` carries `backpressure_wait_seconds`/`backpressure_wait_count` so you can alert on the build-up.
+- Example patterns:
+  - `event_filter=errors_only` to forward only `DocumentFailed` events into incident pipelines
+- `event_transformer=lambda event: enrich(event)` to attach SLA metadata before publishing to SSE or WebSocket clients
+
+### Streaming architecture overview
+
+- `IngestionPipeline.stream_events()` is the authoritative execution surface. All other helpers (`iter_results()`, `run_async()`) consume this stream so progress, backpressure, and failure data stay consistent.
+- Event queue backpressure is enforced via the `buffer_size` argument (default 100). When the consumer lags, the queue depth saturates and the adapter automatically pauses until space becomes available.
+- `BatchProgress` events now include `checkpoint_doc_ids` and an `is_checkpoint` flag, allowing orchestrators to persist progress atomically without replaying the entire stream.
+- Adapter authors can raise structured signals using `BaseAdapter.emit_event()`. The HTTP base adapter automatically emits `AdapterRetry` whenever the underlying client retries a request, exposing status codes and attempt counts.
+- Structured logging captures every emitted event at DEBUG level with JSON payloads so operators can replay executions by tailing the ingestion service logs.
+
+#### Event catalogue
+
+| Event | Description |
+| --- | --- |
+| `DocumentStarted` | Document handed to the adapter for parse/validate; includes adapter name and invocation parameters. |
+| `DocumentCompleted` | Successful parse/validate/write; payload contains the serialised `Document` and adapter metadata. |
+| `DocumentFailed` | Terminal failure; captures retry metadata (`retry_count`, `is_retryable`) and the exception type. |
+| `AdapterRetry` | HTTP transport issued a retry (status codes 429/502/503/504); exposes attempt number and upstream status. |
+| `BatchProgress` | Periodic heartbeat; now carries queue depth, ETA, backpressure metrics, and checkpoint doc IDs. |
+| `AdapterStateChange` | Lifecycle transitions for adapter startup, invocation boundaries, completion, or failure. |
+
+### Checkpointing recipes
+
+- Configure `checkpoint_interval` to the cadence that downstream storage can persist (e.g., 1,000 documents for S3 checkpoints). Each checkpoint event includes `checkpoint_doc_ids` so you can durably record the most recent batch.
+- Supply `completed_ids` when restarting a run to skip already-processed documents; the pipeline filters these before emitting `DocumentStarted`, preserving idempotence.
+- Combine checkpoint metadata with ledger snapshots for full recovery: store `checkpoint_doc_ids`, ledger offsets, and the `BatchProgress.timestamp` value to resume precisely where the previous run paused.
+
+#### Adapter template snippet
+
+```python
+class ExampleAdapter(HttpAdapter[JSONMapping]):
+    async def fetch(self, *_: Any, **__: Any) -> AsyncIterator[JSONMapping]:
+        for page in self._pages:
+            try:
+                yield await self._fetch_page(page)
+            except HTTPError as exc:
+                self.emit_event(
+                    AdapterRetry(
+                        timestamp=time.time(),
+                        pipeline_id="",
+                        adapter=self.source,
+                        attempt=getattr(exc, "request", {}).get("attempt", 1),
+                        error=str(exc),
+                        status_code=getattr(exc.response, "status_code", None),
+                    )
+                )
+                raise
+```
+
+Include `self.emit_event` calls at meaningful checkpoints (long-running fetch loops, retries, schema warnings) so downstream consumers receive the same visibility as first-party adapters.
+
+### Backpressure tuning
+
+- Monitor `BatchProgress.queue_depth` and `BatchProgress.buffer_size` to detect when consumers fall behind. Sustained ratios near 1 indicate downstream bottlenecks.
+- Alert on `backpressure_wait_seconds` and `backpressure_wait_count`. Rising values mean the producer is frequently pausing; consider increasing `buffer_size` or scaling consumers.
+- New Prometheus metrics (`ingest_pipeline_events_total`, `ingest_pipeline_queue_depth`, `ingest_pipeline_checkpoint_latency_seconds`, `ingest_pipeline_duration_seconds`, `ingest_pipeline_consumption_total`) expose event mix, queue health, checkpoint latencies, run-time distribution, and how far teams have migrated off eager wrappers.
+
+### Streaming API endpoint
+
+- `POST /api/ingestion/stream` returns Server-Sent Events (SSE) with the same event payloads produced by `stream_events()`. Each SSE message includes the event type in the `event:` field and the JSON body in `data:`.
+- Request body mirrors CLI options: `adapter`, optional `params` array, `resume`, `buffer_size`, `progress_interval`, `checkpoint_interval`, `completed_ids`, and `total_estimated`.
+- SSE responses set `Cache-Control: no-cache` and `X-Accel-Buffering: no` so intermediaries forward events immediately. Client disconnects are detected via `Request.is_disconnected()` to stop work promptly.
+- Rate limiting shares the same fixed-window policy as other APIs and returns `X-RateLimit-*` headers on the SSE response.
 
 ## Licensing Requirements
 
@@ -318,3 +397,110 @@ clean = text.strip()
 
 Re-run `./.venv/bin/python -m mypy --strict` on any adapter that adopts these examples to guarantee the migration stayed
 type-safe.
+
+## HTTP Client Telemetry
+
+`AsyncHttpClient` exposes structured telemetry so operators can observe the full request lifecycle without wrapping adapters in bespoke logging or metric code.
+
+### Event Types
+
+Each lifecycle hook receives a dataclass instance with contextual metadata:
+
+| Event | Dataclass | Key fields |
+|-------|-----------|------------|
+| Request started | `HttpRequestEvent` | `request_id`, `url`, `method`, sanitized `headers` |
+| Response received | `HttpResponseEvent` | `status_code`, `duration_seconds`, `response_size_bytes` |
+| Retry scheduled | `HttpRetryEvent` | `attempt`, `delay_seconds`, `reason`, `will_retry` |
+| Limiter backoff | `HttpBackoffEvent` | `wait_time_seconds`, `queue_depth`, `queue_saturation` |
+| Error surfaced | `HttpErrorEvent` | `error_type`, `message`, `retryable` |
+
+Events share a `request_id`, allowing downstream systems to correlate retries, backoff, and completion.
+
+### Callback Interface
+
+Callbacks can be passed directly to `AsyncHttpClient` or registered later:
+
+```python
+from Medical_KG.ingestion.http_client import AsyncHttpClient
+from Medical_KG.ingestion.telemetry import HttpRequestEvent
+
+def log_request(event: HttpRequestEvent) -> None:
+    LOG.info("HTTP %s %s", event.method, event.url, extra={"request_id": event.request_id})
+
+client = AsyncHttpClient(on_request=log_request)
+
+# Register more callbacks after construction (per-host mappings supported)
+client.add_telemetry({
+    "api.example.com": logging_telemetry,
+    "ratelimited.partner": prometheus_helper,
+})
+```
+
+### Built-in Telemetry Helpers
+
+* `LoggingTelemetry` – emits structured log records with the full event payload (sensitive headers redacted).
+* `PrometheusTelemetry` – exports counters/histograms/gauges when `prometheus_client` is installed; disabled automatically otherwise.
+* `TracingTelemetry` – creates OpenTelemetry spans (pass a tracer to opt in; no-op if OpenTelemetry is absent).
+* `CompositeTelemetry` – fan-out helper that executes multiple telemetry handlers while isolating failures.
+
+These helpers can be combined via the `telemetry` constructor argument or `client.add_telemetry`.
+
+### Prometheus Metrics
+
+`PrometheusTelemetry` records the following metrics (all with a `host` label):
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `http_requests_total{method,host,status}` | Counter | Successful + failed requests (status is HTTP code or exception type) |
+| `http_request_duration_seconds{method,host}` | Histogram | Request latency distribution |
+| `http_response_size_bytes{method,host}` | Histogram | Response payload sizes |
+| `http_retries_total{host,reason}` | Counter | Retry attempts grouped by reason |
+| `http_backoff_duration_seconds{host}` | Histogram | Limiter-enforced wait times |
+| `http_limiter_queue_depth{host}` | Gauge | Current limiter queue depth |
+| `http_limiter_queue_saturation{host}` | Gauge | Queue depth as % of capacity |
+
+A ready-to-import Grafana dashboard (`ops/monitoring/grafana/http-client-telemetry.json`) visualises request volume, latency percentiles, retries, and limiter saturation.
+
+### Per-Host Telemetry Patterns
+
+Adapters that talk to multiple APIs can scope telemetry by host:
+
+```python
+from Medical_KG.ingestion.telemetry import LoggingTelemetry, PrometheusTelemetry
+
+telemetry_by_host = {
+    "api.hipaa.local": LoggingTelemetry(level=logging.WARNING),
+    "partner-rate-limited.com": [PrometheusTelemetry()],
+}
+
+adapter = PubMedAdapter(context, client, telemetry=telemetry_by_host)
+```
+
+The base `HttpAdapter` automatically forwards telemetry definitions to the shared client, so adapter constructors only need to expose a `telemetry` keyword when they want custom defaults.
+
+### Operational Examples
+
+- **Structured request logging** (task 13.1):
+
+  ```python
+  logging_telemetry = LoggingTelemetry(logger=logging.getLogger("ingest.http"))
+  client = AsyncHttpClient(telemetry=[logging_telemetry])
+  ```
+
+- **Rate-limit budget tracking** (task 13.2): use `http_limiter_queue_depth` + `http_limiter_queue_saturation` in Grafana to watch headroom per host. The new dashboard includes saturation gauges with alert thresholds.
+
+- **Retry alerting** (task 13.3): alert on `sum(rate(http_retries_total[5m])) by (reason)` exceeding expected baselines to catch upstream instability before failures cascade.
+
+- **Adapter-specific telemetry** (task 13.4): pass telemetry into the adapter constructor (`PubMedAdapter(..., telemetry=LoggingTelemetry())`) to scope handlers to that integration while sharing the client across sources.
+
+- **OpenTelemetry tracing** (task 13.5): instantiate `TracingTelemetry(tracer=trace.get_tracer("ingest.http"))` and pass it to the client to produce spans with retry/backoff events annotated.
+
+### Performance Considerations
+
+Telemetry callbacks execute synchronously after each lifecycle event. Keep handlers lightweight (logging, metric increments, span annotations) to maintain the observed <5% overhead during synthetic load tests. Expensive work should be deferred to background tasks.
+
+### Troubleshooting
+
+- Missing metrics usually indicate `prometheus_client` is not installed; set `enable_metrics=False` to silence the warning and rely on logging/trace callbacks.
+- Spikes in `http_limiter_queue_saturation` above 0.8 trigger a warning log and indicate the limiter is the bottleneck—either lower concurrency or request higher upstream quotas.
+- If callbacks raise exceptions they are logged at `WARNING` level and suppressed; check application logs for `"Telemetry callback"` messages when instrumentation appears inactive.

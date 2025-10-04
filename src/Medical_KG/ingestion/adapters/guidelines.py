@@ -16,7 +16,7 @@ import json
 import xml.etree.ElementTree as ET
 from collections.abc import AsyncIterator, Iterable
 from collections.abc import Sequence as SequenceABC
-from typing import Generic, Mapping, TypeVar
+from typing import Generic, Mapping, Sequence, TypeVar
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
@@ -33,6 +33,7 @@ from Medical_KG.ingestion.types import (
     UspstfDocumentPayload,
     WhoGhoDocumentPayload,
 )
+from Medical_KG.ingestion.telemetry import HttpTelemetry
 from Medical_KG.ingestion.utils import (
     canonical_json,
     ensure_json_mapping,
@@ -53,8 +54,14 @@ class _BootstrapAdapter(HttpAdapter[RawBootstrapT], Generic[RawBootstrapT]):
         client: AsyncHttpClient,
         *,
         bootstrap_records: Iterable[RawBootstrapT] | None = None,
+        telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+        )
+        | None = None,
     ) -> None:
-        super().__init__(context, client)
+        super().__init__(context, client, telemetry=telemetry)
         self._bootstrap: list[RawBootstrapT] = list(bootstrap_records or [])
 
     async def _yield_bootstrap(self) -> AsyncIterator[RawBootstrapT]:

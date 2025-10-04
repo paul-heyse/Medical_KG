@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib
 import json
 import sys
 from datetime import datetime, timezone
@@ -28,6 +27,11 @@ from Medical_KG.pdf import (
     ensure_gpu,
 )
 from Medical_KG.security.licenses import LicenseRegistry
+from Medical_KG.utils.optional_dependencies import (
+    MissingDependencyError,
+    get_httpx_module,
+    iter_dependency_statuses,
+)
 
 
 class HttpxResponse(Protocol):
@@ -57,9 +61,9 @@ class HttpxModule(Protocol):
 
 def _require_httpx() -> HttpxModule:
     try:
-        module = importlib.import_module("httpx")
-    except Exception as exc:  # pragma: no cover - dependency check
-        raise RuntimeError("httpx is required for CLI operations") from exc
+        module = get_httpx_module()
+    except MissingDependencyError as exc:  # pragma: no cover - dependency check
+        raise RuntimeError(str(exc)) from exc
     return cast(HttpxModule, module)
 
 
@@ -122,6 +126,47 @@ def _command_policy(args: argparse.Namespace) -> int:
         licensed = "licensed" if config.get("licensed", False) else "unlicensed"
         print(f"{vocab}: {licensed} ({territory})")
     return 0
+
+
+def _command_dependencies_check(args: argparse.Namespace) -> int:
+    statuses = list(iter_dependency_statuses())
+    all_installed = all(status.installed for status in statuses)
+    if getattr(args, "json", False):
+        payload = [
+            {
+                "feature": status.feature_name,
+                "extras_group": status.extras_group,
+                "packages": list(status.packages),
+                "installed": status.installed,
+                "missing_packages": list(status.missing_packages),
+                "install_hint": status.install_hint,
+                "docs_url": status.docs_url,
+            }
+            for status in statuses
+        ]
+        indent = 2 if getattr(args, "verbose", False) else None
+        print(json.dumps(payload, indent=indent))
+        return 0 if all_installed else 1
+
+    for status in statuses:
+        extras = f" [{status.extras_group}]" if status.extras_group else ""
+        state = "installed" if status.installed else "missing"
+        print(f"{status.feature_name}{extras}: {state}")
+        if status.installed:
+            if getattr(args, "verbose", False):
+                print(f"  packages: {', '.join(status.packages)}")
+                print(f"  install: {status.install_hint}")
+                if status.docs_url:
+                    print(f"  docs: {status.docs_url}")
+        else:
+            missing = status.missing_packages or status.packages
+            print(f"  missing: {', '.join(missing)}")
+            print(f"  install: {status.install_hint}")
+            if status.docs_url:
+                print(f"  docs: {status.docs_url}")
+            elif getattr(args, "verbose", False):
+                print("  docs: (not provided)")
+    return 0 if all_installed else 1
 
 
 def _command_licensing_validate(args: argparse.Namespace) -> int:
@@ -430,6 +475,23 @@ def build_parser() -> argparse.ArgumentParser:
     licensing_validate = licensing_subparsers.add_parser("validate", help="Validate licenses.yml")
     licensing_validate.add_argument("--licenses", type=Path, default=Path("licenses.yml"))
     licensing_validate.set_defaults(func=_command_licensing_validate)
+
+    dependencies = subparsers.add_parser(
+        "dependencies", help="Optional dependency diagnostics"
+    )
+    dependency_subparsers = dependencies.add_subparsers(
+        dest="dependencies_command", required=True
+    )
+    dependencies_check = dependency_subparsers.add_parser(
+        "check", help="Show optional dependency installation status"
+    )
+    dependencies_check.add_argument(
+        "--json", action="store_true", help="Emit machine-readable JSON output"
+    )
+    dependencies_check.add_argument(
+        "--verbose", action="store_true", help="Show package lists and docs"
+    )
+    dependencies_check.set_defaults(func=_command_dependencies_check)
 
     return parser
 

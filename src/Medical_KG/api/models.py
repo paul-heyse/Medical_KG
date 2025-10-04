@@ -112,3 +112,14 @@ class KgWriteRequest(BaseModel):
 class KgWriteResponse(BaseModel):
     written_nodes: int
     written_relationships: int
+
+
+class IngestionStreamRequest(BaseModel):
+    adapter: str
+    params: Annotated[list[dict[str, Any]], Field(default_factory=list)]
+    resume: bool = False
+    buffer_size: Annotated[int, Field(default=100, ge=1)]
+    progress_interval: Annotated[int, Field(default=100, ge=1)]
+    checkpoint_interval: Annotated[int, Field(default=1000, ge=1)]
+    completed_ids: list[str] | None = None
+    total_estimated: int | None = None

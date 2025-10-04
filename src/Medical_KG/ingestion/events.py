@@ -13,7 +13,11 @@ from Medical_KG.ingestion.models import Document
 
 @dataclass(slots=True)
 class PipelineEvent:
-    """Base event emitted during pipeline execution."""
+    """Base event emitted during pipeline execution.
+
+    Every concrete event produced by :class:`IngestionPipeline` extends this
+    dataclass to ensure consistent typing and serialisation semantics.
+    """
 
     timestamp: float
     pipeline_id: str
@@ -21,16 +25,26 @@ class PipelineEvent:
 
 @dataclass(slots=True)
 class DocumentStarted(PipelineEvent):
-    """Indicates that processing for a document has begun."""
+    """Indicates that adapter processing for a document has begun.
 
-    doc_id: str | None
+    The pipeline emits this event immediately before handing a document off to
+    downstream consumers, ensuring lifecycle events are observable even when
+    the consumer processes slowly or fails mid-stream.
+    """
+
+    doc_id: str
     adapter: str
     parameters: Mapping[str, Any]
 
 
 @dataclass(slots=True)
 class DocumentCompleted(PipelineEvent):
-    """Represents a successfully processed document."""
+    """Represents a successfully processed document.
+
+    The attached :class:`~Medical_KG.ingestion.models.Document` contains the
+    final parsed payload, while ``adapter_metadata`` carries any adapter
+    specific information (HTTP timings, pagination cursors, etc.).
+    """
 
     document: Document
     duration: float
@@ -39,7 +53,11 @@ class DocumentCompleted(PipelineEvent):
 
 @dataclass(slots=True)
 class DocumentFailed(PipelineEvent):
-    """Represents a document processing failure."""
+    """Represents a document processing failure.
+
+    The failure event preserves retry context so orchestrators can decide
+    whether to requeue the document or surface the error to operators.
+    """
 
     doc_id: str | None
     error: str
@@ -51,17 +69,42 @@ class DocumentFailed(PipelineEvent):
 
 @dataclass(slots=True)
 class BatchProgress(PipelineEvent):
-    """Progress update emitted periodically during processing."""
+    """Progress update emitted periodically during processing.
+
+    Progress events expose throughput metrics, remaining counts (when known),
+    and backpressure measurements derived from the bounded event queue.
+    """
 
     completed_count: int
     failed_count: int
+    in_flight_count: int
+    queue_depth: int
+    buffer_size: int
     remaining: int | None
     eta_seconds: float | None
+    backpressure_wait_seconds: float
+    backpressure_wait_count: int
+    checkpoint_doc_ids: list[str] = field(default_factory=list)
+    is_checkpoint: bool = False
+
+
+@dataclass(slots=True)
+class AdapterRetry(PipelineEvent):
+    """Emitted when an HTTP adapter issues a retry for an upstream request."""
+
+    adapter: str
+    attempt: int
+    error: str
+    status_code: int | None
 
 
 @dataclass(slots=True)
 class AdapterStateChange(PipelineEvent):
-    """Signals that an adapter has transitioned between lifecycle states."""
+    """Signals that an adapter has transitioned between lifecycle states.
+
+    These events allow consumers to monitor adapter lifecycle, including
+    transitions to failure states with accompanying reasons.
+    """
 
     adapter: str
     old_state: str
@@ -71,7 +114,11 @@ class AdapterStateChange(PipelineEvent):
 
 @dataclass(slots=True)
 class PipelineResult:
-    """Aggregated summary of a pipeline execution."""
+    """Aggregated summary of a pipeline execution.
+
+    Instances of this dataclass are returned by the eager convenience wrapper
+    :meth:`IngestionPipeline.run_async` for compatibility with legacy code.
+    """
 
     source: str
     documents: list[Document]
@@ -124,6 +171,7 @@ def event_to_dict(event: PipelineEvent) -> MutableMapping[str, Any]:
 
 __all__ = [
     "AdapterStateChange",
+    "AdapterRetry",
     "BatchProgress",
     "DocumentCompleted",
     "DocumentFailed",

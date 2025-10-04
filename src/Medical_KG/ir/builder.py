@@ -30,12 +30,20 @@ from collections.abc import Mapping, MutableMapping, Sequence
 from html.parser import HTMLParser
 from typing import Any, List, Tuple
 
+from Medical_KG.utils.optional_dependencies import MissingDependencyError, optional_import
+
 try:  # pragma: no cover - optional dependency
+    optional_import(
+        "bs4",
+        feature_name="html-parsing",
+        package_name="beautifulsoup4",
+    )
+except MissingDependencyError:  # pragma: no cover - fallback to stdlib parser
+    BS4_AVAILABLE = False
+else:
     from bs4 import BeautifulSoup  # noqa: F401
 
     BS4_AVAILABLE = True
-except ModuleNotFoundError:  # pragma: no cover - fallback to stdlib parser
-    BS4_AVAILABLE = False
 
 from Medical_KG.ingestion.types import (
     AdapterDocumentPayload,

@@ -20,6 +20,8 @@ med ingest ADAPTER [OPTIONS]
 | `--limit N` | `-n` | Cap number of parameter rows or auto-mode iterations processed. |
 | `--output text|json|table` | `-o` | Select output format (text default, JSON for automation, Rich table for operators). |
 | `--summary-only` | – | Emit aggregated summary without per-result lines. |
+| `--stream` | – | Emit NDJSON event stream to stdout (summary written to stderr). |
+| `--no-stream` | – | Use legacy eager execution (returns full `PipelineResult` list). |
 | `--show-timings` | – | Include run duration in summaries. |
 | `--schema PATH` | – | Validate NDJSON records against JSON Schema (requires `jsonschema`). |
 | `--dry-run` | – | Validate inputs and ledger state without invoking adapters. |

@@ -26,6 +26,7 @@ Central index for Medical KG runbooks, contacts, and cadences.
 | Datastore failover (Neo4j/OS)     | `ops/runbooks/07-datastore-failover.md`      |
 | Briefing generation gaps          | `ops/runbooks/08-briefing-troubleshooting.md` |
 | Unified ingestion CLI operations  | `docs/ingestion_cli_reference.md`             |
+| Optional dependency diagnostics   | `docs/dependencies.md`                       |
 
 ## Escalation Matrix
 
@@ -41,6 +42,15 @@ Central index for Medical KG runbooks, contacts, and cadences.
 - **Slack** – `#ops`, `#incidents`, `#medical-kg`.
 - **Status Page** – https://status.medkg.example.com.
 - **Email** – ops@medkg.example.com for scheduled maintenance notices.
+
+## Ingestion Metrics & Logs
+
+- **Counters** – `ingest_pipeline_events_total{event_type,adapter}` tracks emitted pipeline events. Sudden spikes in `DocumentFailed` or `AdapterRetry` should trigger incident review.
+- **Adoption tracking** – `ingest_pipeline_consumption_total{mode,adapter}` surfaces how frequently teams rely on streaming (`mode="stream"`/`"iter_results"`) versus eager wrappers (`mode="run_async"`, `"run_async_legacy"`, or `"run_sync"`). Investigate services that remain on eager paths after the migration freeze.
+- **Histograms** – `ingest_pipeline_duration_seconds` captures total run time distribution; `ingest_pipeline_checkpoint_latency_seconds` measures time between checkpoint-ready `BatchProgress` events.
+- **Gauges** – `ingest_pipeline_queue_depth{adapter}` exposes current backpressure; alert when depth approaches `buffer_size` for >5 minutes.
+- **Structured logging** – every event is logged at DEBUG with JSON via the `pipeline_event` message. Forward to the log aggregator so SSE consumers can be replayed during incidents.
+- **SSE Endpoint** – `/api/ingestion/stream` delivers the same events to external consumers. Ensure Grafana dashboards consume both Prometheus metrics and SSE streams for end-to-end visibility.
 
 ## Cadences
 

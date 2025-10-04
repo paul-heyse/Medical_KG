@@ -41,7 +41,9 @@ def patch_adapters(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def make_pipeline(monkeypatch: pytest.MonkeyPatch) -> Callable[[list[PipelineResult]], FakePipeline]:
+def make_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[list[PipelineResult]], FakePipeline]:
     def _factory(results: list[PipelineResult]) -> FakePipeline:
         pipeline = FakePipeline(results)
         monkeypatch.setattr(cli, "_build_pipeline", lambda _ledger: pipeline)
@@ -223,7 +225,7 @@ def test_adapter_help_lists_available_sources(monkeypatch: pytest.MonkeyPatch) -
 def test_schema_validation_success(
     tmp_path: Path, make_pipeline: Callable[[list[PipelineResult]], FakePipeline]
 ) -> None:
-    make_pipeline([PipelineResult(source="demo", doc_ids=["doc-1"])] )
+    make_pipeline([PipelineResult(source="demo", doc_ids=["doc-1"])])
     batch = tmp_path / "params.ndjson"
     schema = tmp_path / "schema.json"
     batch.write_text(json.dumps({"param": "value"}))
@@ -256,7 +258,7 @@ def test_schema_validation_failure(tmp_path: Path) -> None:
 def test_resume_sets_flag_on_pipeline(
     tmp_path: Path, make_pipeline: Callable[[list[PipelineResult]], FakePipeline]
 ) -> None:
-    pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=["doc-1"])] )
+    pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=["doc-1"])])
     batch = tmp_path / "params.ndjson"
     batch.write_text(json.dumps({"param": "value"}))
 
@@ -272,7 +274,7 @@ def test_resume_sets_flag_on_pipeline(
 def test_table_output_uses_rich_table(
     tmp_path: Path, make_pipeline: Callable[[list[PipelineResult]], FakePipeline]
 ) -> None:
-    make_pipeline([PipelineResult(source="demo", doc_ids=["doc-1", "doc-2"])] )
+    make_pipeline([PipelineResult(source="demo", doc_ids=["doc-1", "doc-2"])])
     batch = tmp_path / "params.ndjson"
     batch.write_text(json.dumps({"param": "value"}))
 
@@ -286,9 +288,7 @@ def test_table_output_uses_rich_table(
     assert "doc-1" in outcome.stdout
 
 
-def test_progress_reporting_advances(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_progress_reporting_advances(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[int] = []
 
     class _Progress:
@@ -307,10 +307,12 @@ def test_progress_reporting_advances(
     monkeypatch.setattr(cli, "create_progress", _fake_create_progress)
     monkeypatch.setattr(cli, "should_display_progress", lambda force, quiet: True)
 
-    pipeline = FakePipeline([
-        PipelineResult(source="demo", doc_ids=["doc-1"]),
-        PipelineResult(source="demo", doc_ids=["doc-2"]),
-    ])
+    pipeline = FakePipeline(
+        [
+            PipelineResult(source="demo", doc_ids=["doc-1"]),
+            PipelineResult(source="demo", doc_ids=["doc-2"]),
+        ]
+    )
     monkeypatch.setattr(cli, "_build_pipeline", lambda _ledger: pipeline)
 
     batch = tmp_path / "batch.ndjson"

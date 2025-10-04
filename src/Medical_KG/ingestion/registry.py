@@ -34,13 +34,16 @@ from Medical_KG.ingestion.http_client import AsyncHttpClient
 
 
 class AdapterFactory(Protocol):
-    def __call__(self, context: AdapterContext, client: AsyncHttpClient, **kwargs: Any) -> BaseAdapter[Any]:
-        ...
+    def __call__(
+        self, context: AdapterContext, client: AsyncHttpClient, **kwargs: Any
+    ) -> BaseAdapter[Any]: ...
 
 
 def _register() -> Dict[str, AdapterFactory]:
     def factory(cls: Type[HttpAdapter[Any]]) -> AdapterFactory:
-        def _builder(context: AdapterContext, client: AsyncHttpClient, **kwargs: Any) -> BaseAdapter[Any]:
+        def _builder(
+            context: AdapterContext, client: AsyncHttpClient, **kwargs: Any
+        ) -> BaseAdapter[Any]:
             return cls(context, client, **kwargs)
 
         return _builder
@@ -72,7 +75,9 @@ def _register() -> Dict[str, AdapterFactory]:
 _REGISTRY = _register()
 
 
-def get_adapter(source: str, context: AdapterContext, client: AsyncHttpClient, **kwargs: Any) -> BaseAdapter[Any]:
+def get_adapter(
+    source: str, context: AdapterContext, client: AsyncHttpClient, **kwargs: Any
+) -> BaseAdapter[Any]:
     try:
         factory = _REGISTRY[source]
     except KeyError as exc:  # pragma: no cover - defensive

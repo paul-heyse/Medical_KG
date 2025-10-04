@@ -162,9 +162,7 @@ class AsyncHttpClient:
             self._limiters[host] = _SimpleLimiter(limit.rate, limit.per)
         return self._limiters[host]
 
-    async def _execute(
-        self, method: str, url: str, **kwargs: object
-    ) -> ResponseProtocol:
+    async def _execute(self, method: str, url: str, **kwargs: object) -> ResponseProtocol:
         parsed = urlparse(url)
         limiter = self._get_limiter(parsed.netloc)
 
@@ -175,7 +173,9 @@ class AsyncHttpClient:
                 try:
                     start = time()
                     response = await self._client.request(method, url, **kwargs)
-                    HTTP_REQUESTS.labels(method=method, host=parsed.netloc, status=str(response.status_code)).inc()
+                    HTTP_REQUESTS.labels(
+                        method=method, host=parsed.netloc, status=str(response.status_code)
+                    ).inc()
                     HTTP_LATENCY.observe(time() - start)
                     response.raise_for_status()
                     return response
@@ -184,7 +184,9 @@ class AsyncHttpClient:
                     if status not in {429, 502, 503, 504}:
                         raise
                     last_error = exc
-                    HTTP_REQUESTS.labels(method=method, host=parsed.netloc, status=exc.__class__.__name__).inc()
+                    HTTP_REQUESTS.labels(
+                        method=method, host=parsed.netloc, status=exc.__class__.__name__
+                    ).inc()
                     jitter = random.uniform(0, backoff / 2)
                     await asyncio.sleep(backoff + jitter)
                     backoff = min(backoff * 2, 5.0)
@@ -219,7 +221,9 @@ class AsyncHttpClient:
         limiter = self._get_limiter(parsed.netloc)
         async with limiter:
             async with self._client.stream(method, url, **kwargs) as response:
-                HTTP_REQUESTS.labels(method=method, host=parsed.netloc, status=str(response.status_code)).inc()
+                HTTP_REQUESTS.labels(
+                    method=method, host=parsed.netloc, status=str(response.status_code)
+                ).inc()
                 HTTP_LATENCY.observe(response.elapsed.total_seconds() if response.elapsed else 0.0)
                 response.raise_for_status()
                 yield response

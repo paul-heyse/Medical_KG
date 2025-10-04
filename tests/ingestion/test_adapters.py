@@ -262,9 +262,7 @@ def test_clinical_trials_paginates(fake_ledger: Any, monkeypatch: pytest.MonkeyP
                         ]
                     }
                 return {
-                    "studies": [
-                        {"protocolSection": {"identificationModule": {"nctId": "NCT1"}}}
-                    ],
+                    "studies": [{"protocolSection": {"identificationModule": {"nctId": "NCT1"}}}],
                     "nextPageToken": "token",
                 }
 
@@ -291,6 +289,7 @@ def test_clinical_trials_propagates_http_errors(
         return response
 
     httpx_mock_transport(handler)
+
     async def _test() -> None:
         async with AsyncHttpClient() as client:
             adapter = ClinicalTrialsGovAdapter(AdapterContext(fake_ledger), client)
@@ -619,9 +618,7 @@ def test_terminology_validations(fake_ledger: Any) -> None:
             snomed = SnomedAdapter(context, client, bootstrap_records=[snomed_record()])
             with pytest.raises(ValueError):
                 snomed.validate(
-                    Document(
-                        "doc", "snomed", "", metadata={"code": "12"}, raw={"designation": []}
-                    )
+                    Document("doc", "snomed", "", metadata={"code": "12"}, raw={"designation": []})
                 )
 
     _run(_test())

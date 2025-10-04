@@ -48,6 +48,10 @@ class QwenEmbeddingClient:
 
     def _embed_via_http(self, texts: Sequence[str]) -> List[List[float]]:
         payload = {"model": self.model, "input": list(texts)}
+        api_url = self.api_url
+        if api_url is None:
+            msg = "api_url must be configured for HTTP embedding transport"
+            raise RuntimeError(msg)
         attempt = 0
         last_error: Exception | None = None
         while attempt < self.max_retries:
@@ -59,7 +63,7 @@ class QwenEmbeddingClient:
                     else create_client(timeout=self.timeout)
                 )
                 try:
-                    response = client.post(self.api_url, json=payload)
+                    response = client.post(api_url, json=payload)
                     response.raise_for_status()
                     data = response.json()
                     vectors = [item["embedding"] for item in data.get("data", [])]

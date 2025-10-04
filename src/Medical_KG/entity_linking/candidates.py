@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass, replace
-from typing import List, Mapping, MutableMapping, Sequence, Tuple, cast
+from typing import List, Mapping, Sequence, Tuple
 
 from Medical_KG.retrieval.fusion import reciprocal_rank_fusion
+from Medical_KG.retrieval.models import RetrievalResult
 
 from .ner import Mention
 
@@ -52,16 +53,14 @@ class CandidateGenerator:
         self._dense = dense
         self._rrf_k = rrf_k
         self._cache_size = cache_size
-        self._cache: MutableMapping[Tuple[str, str], Tuple[Candidate, ...]] = OrderedDict()
+        self._cache: OrderedDict[Tuple[str, str], Tuple[Candidate, ...]] = OrderedDict()
 
     def generate(self, mention: Mention, context: str) -> List[Candidate]:
         cache_key = (mention.text.lower(), context)
         cached = self._cache.get(cache_key)
         if cached is not None:
             # Move key to the end to reflect recent use
-            cast(OrderedDict[Tuple[str, str], Tuple[Candidate, ...]], self._cache).move_to_end(
-                cache_key
-            )
+            self._cache.move_to_end(cache_key)
             return [replace(candidate) for candidate in cached]
 
         lex = list(self._dictionary.search(mention.text, fuzzy=False))
@@ -76,10 +75,13 @@ class CandidateGenerator:
         rrf_scores = reciprocal_rank_fusion(
             {
                 name: [
-                    type(
-                        "Hit",
-                        (),
-                        {"chunk_id": c.identifier, "score": c.score, "doc_id": c.ontology},
+                    RetrievalResult(
+                        chunk_id=c.identifier,
+                        doc_id=c.ontology,
+                        text=c.label,
+                        title_path=None,
+                        section=None,
+                        score=c.score,
                     )
                     for c in candidates
                 ]

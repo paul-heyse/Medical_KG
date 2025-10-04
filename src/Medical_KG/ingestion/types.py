@@ -153,8 +153,7 @@ class UspstfDocumentPayload(TitleMixin):
     url: NotRequired[str | None]
 
 
-class CdcSocrataDocumentPayload(IdentifierMixin, RecordMixin):
-    ...
+class CdcSocrataDocumentPayload(IdentifierMixin, RecordMixin): ...
 
 
 class CdcWonderDocumentPayload(TypedDict):
@@ -168,8 +167,7 @@ class WhoGhoDocumentPayload(TypedDict):
     year: NotRequired[str | None]
 
 
-class OpenPrescribingDocumentPayload(IdentifierMixin, RecordMixin):
-    ...
+class OpenPrescribingDocumentPayload(IdentifierMixin, RecordMixin): ...
 
 
 class PubMedDocumentPayload(TitleMixin):
@@ -419,7 +417,9 @@ def is_who_gho_payload(raw: DocumentRaw | None) -> TypeGuard[WhoGhoDocumentPaylo
     return "indicator" in raw and "value" in raw
 
 
-def is_openprescribing_payload(raw: DocumentRaw | None) -> TypeGuard[OpenPrescribingDocumentPayload]:
+def is_openprescribing_payload(
+    raw: DocumentRaw | None,
+) -> TypeGuard[OpenPrescribingDocumentPayload]:
     if not _is_payload_dict(raw):
         return False
     return "identifier" in raw and "record" in raw and "version" not in raw

@@ -34,7 +34,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("adapter", help="Adapter to benchmark (must exist in registry)")
     parser.add_argument("--batch", type=Path, required=True, help="NDJSON payload for benchmarking")
     parser.add_argument("--iterations", type=int, default=3, help="Number of runs to average")
-    parser.add_argument("--dry-run", action="store_true", help="Use --dry-run to avoid adapter execution")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Use --dry-run to avoid adapter execution"
+    )
     args = parser.parse_args(argv)
 
     argv_template = [args.adapter, "--batch", str(args.batch), "--summary-only"]

@@ -417,7 +417,9 @@ def test_knowledge_base_optional_fields(fake_ledger: Any, scenario: OptionalFiel
 
 
 def _load_types_module() -> types.ModuleType:
-    types_path = Path(__file__).resolve().parents[2] / "src" / "Medical_KG" / "ingestion" / "types.py"
+    types_path = (
+        Path(__file__).resolve().parents[2] / "src" / "Medical_KG" / "ingestion" / "types.py"
+    )
     spec = importlib.util.spec_from_file_location("ingestion_types", types_path)
     if spec is None or spec.loader is None:  # pragma: no cover - defensive
         raise RuntimeError("Failed to load ingestion types module")
@@ -430,7 +432,9 @@ _INGESTION_TYPES = _load_types_module()
 
 
 def _collect_not_required_fields(typed_dict_cls: type[Any]) -> set[str]:
-    hints = typing.get_type_hints(typed_dict_cls, globalns=_INGESTION_TYPES.__dict__, include_extras=True)
+    hints = typing.get_type_hints(
+        typed_dict_cls, globalns=_INGESTION_TYPES.__dict__, include_extras=True
+    )
     optional_fields: set[str] = set()
     for field, annotation in hints.items():
         if typing.get_origin(annotation) is typing.NotRequired:
@@ -470,7 +474,10 @@ def test_not_required_fields_have_present_and_absent_scenarios() -> None:
         if not optional_fields:
             continue
         missing = optional_fields - coverage.get(scenario_name, set())
-        assert not missing, f"Missing optional field coverage for {scenario_name}: {sorted(missing)}"
+        assert (
+            not missing
+        ), f"Missing optional field coverage for {scenario_name}: {sorted(missing)}"
+
 
 @pytest.mark.parametrize("scenario", CLINICAL_SCENARIOS, ids=lambda s: s.name)
 def test_clinical_optional_fields(fake_ledger: Any, scenario: OptionalFieldScenario) -> None:

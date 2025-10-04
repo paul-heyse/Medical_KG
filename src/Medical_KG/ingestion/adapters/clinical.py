@@ -140,7 +140,9 @@ class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
                     study_payload["derivedSection"] = dict(derived_section_value)
                 yield study_payload
             next_token_value = payload_map.get("nextPageToken")
-            page_token = next_token_value if isinstance(next_token_value, str) and next_token_value else None
+            page_token = (
+                next_token_value if isinstance(next_token_value, str) and next_token_value else None
+            )
             if not page_token:
                 break
 
@@ -167,12 +169,16 @@ class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
         sponsor_module = _coerce_mapping(protocol.get("sponsorCollaboratorsModule"))
         lead_sponsor_mapping = _coerce_mapping(sponsor_module.get("leadSponsor"))
         lead_sponsor_name_value = lead_sponsor_mapping.get("name")
-        lead_sponsor_name = lead_sponsor_name_value if isinstance(lead_sponsor_name_value, str) else None
+        lead_sponsor_name = (
+            lead_sponsor_name_value if isinstance(lead_sponsor_name_value, str) else None
+        )
 
         design_module = _coerce_mapping(protocol.get("designModule"))
         phases_value = design_module.get("phases")
         phases: list[str] = []
-        if isinstance(phases_value, SequenceABC) and not isinstance(phases_value, (str, bytes, bytearray)):
+        if isinstance(phases_value, SequenceABC) and not isinstance(
+            phases_value, (str, bytes, bytearray)
+        ):
             for phase in phases_value:
                 if isinstance(phase, str):
                     phases.append(phase)
@@ -318,15 +324,14 @@ class OpenFdaAdapter(HttpAdapter[JSONMapping]):
 
     def parse(self, raw: JSONMapping) -> Document:
         identifier_value = (
-            raw.get("safetyreportid")
-            or raw.get("udi_di")
-            or raw.get("setid")
-            or raw.get("id")
+            raw.get("safetyreportid") or raw.get("udi_di") or raw.get("setid") or raw.get("id")
         )
         if identifier_value is None:
             raise ValueError("Record missing identifier")
         identifier = str(identifier_value)
-        version_value = raw.get("receivedate") or raw.get("version_number") or raw.get("last_updated")
+        version_value = (
+            raw.get("receivedate") or raw.get("version_number") or raw.get("last_updated")
+        )
         version = str(version_value) if version_value else "unknown"
         record_payload: dict[str, JSONValue] = dict(raw)
         payload: OpenFdaDocumentPayload = {
@@ -372,7 +377,9 @@ class DailyMedAdapter(HttpAdapter[str]):
                 yield record
             return
         params = {"type": "spl", "setid": setid}
-        xml = await self.fetch_text("https://dailymed.nlm.nih.gov/dailymed/services/v2/spls", params=params)
+        xml = await self.fetch_text(
+            "https://dailymed.nlm.nih.gov/dailymed/services/v2/spls", params=params
+        )
         yield xml
 
     def parse(self, raw: str) -> Document:
@@ -433,7 +440,9 @@ class RxNormAdapter(HttpAdapter[JSONMapping]):
             for record in self._bootstrap:
                 yield record
             return
-        payload = await self.fetch_json(f"https://rxnav.nlm.nih.gov/REST/rxcui/{rxcui}/properties.json")
+        payload = await self.fetch_json(
+            f"https://rxnav.nlm.nih.gov/REST/rxcui/{rxcui}/properties.json"
+        )
         yield ensure_json_mapping(
             payload,
             context="rxnorm response",
@@ -511,7 +520,9 @@ class AccessGudidAdapter(HttpAdapter[JSONMapping]):
             for record in self._bootstrap:
                 yield record
             return
-        payload = await self.fetch_json("https://accessgudid.nlm.nih.gov/devices/lookup.json", params={"udi": udi_di})
+        payload = await self.fetch_json(
+            "https://accessgudid.nlm.nih.gov/devices/lookup.json", params={"udi": udi_di}
+        )
         yield ensure_json_mapping(
             payload,
             context="accessgudid response",
@@ -558,7 +569,9 @@ class OpenFdaUdiAdapter(OpenFdaAdapter):
 
     source = "openfda_udi"
 
-    def parse(self, raw: JSONMapping) -> Document:  # pragma: no cover - delegate to super then enrich
+    def parse(
+        self, raw: JSONMapping
+    ) -> Document:  # pragma: no cover - delegate to super then enrich
         document = super().parse(raw)
         udi_di = raw.get("udi_di")
         if isinstance(udi_di, str) and udi_di:

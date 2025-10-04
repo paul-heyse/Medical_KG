@@ -349,8 +349,7 @@ def format_results(
             "batches": total_batches,
             "documents": total_documents,
             "results": [
-                {"source": result.source, "doc_ids": list(result.doc_ids)}
-                for result in results
+                {"source": result.source, "doc_ids": list(result.doc_ids)} for result in results
             ],
         }
         return [json.dumps(payload, ensure_ascii=False)]

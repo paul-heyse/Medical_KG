@@ -21,11 +21,9 @@ class AdapterRegistry(Protocol):
         context: AdapterContext,
         client: AsyncHttpClient,
         **kwargs: Any,
-    ) -> BaseAdapter[Any]:
-        ...
+    ) -> BaseAdapter[Any]: ...
 
-    def available_sources(self) -> list[str]:
-        ...
+    def available_sources(self) -> list[str]: ...
 
 
 @dataclass(slots=True)
@@ -75,8 +73,7 @@ class IngestionPipeline:
             adapter = self._resolve_adapter(source, client)
             if params is None:
                 doc_ids = [
-                    result.document.doc_id
-                    async for result in adapter.iter_results(resume=resume)
+                    result.document.doc_id async for result in adapter.iter_results(resume=resume)
                 ]
                 outputs.append(PipelineResult(source=source, doc_ids=doc_ids))
             else:
@@ -84,9 +81,7 @@ class IngestionPipeline:
                     invocation_params = dict(entry)
                     doc_ids = [
                         result.document.doc_id
-                        async for result in adapter.iter_results(
-                            **invocation_params, resume=resume
-                        )
+                        async for result in adapter.iter_results(**invocation_params, resume=resume)
                     ]
                     outputs.append(PipelineResult(source=source, doc_ids=doc_ids))
         return outputs
@@ -126,6 +121,7 @@ class IngestionPipeline:
 
     def _resolve_adapter(self, source: str, client: AsyncHttpClient) -> BaseAdapter[Any]:
         return self._registry.get_adapter(source, AdapterContext(ledger=self.ledger), client)
+
 
 __all__ = [
     "IngestionPipeline",

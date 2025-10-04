@@ -91,8 +91,8 @@ def _sentence_split(text: str) -> List[Tuple[str, int, int]]:
 
 
 def _lexical_coherence(a: str, b: str) -> float:
-    def vectorise(sentence: str) -> dict[str, float]:
-        counts = {}
+    def vectorise(sentence: str) -> dict[str, int]:
+        counts: dict[str, int] = {}
         for token in re.findall(r"[A-Za-z0-9]+", sentence.lower()):
             counts[token] = counts.get(token, 0) + 1
         return counts

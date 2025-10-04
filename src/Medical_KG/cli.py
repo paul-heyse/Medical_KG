@@ -1,4 +1,5 @@
 """Simple command-line interface for configuration management."""
+
 from __future__ import annotations
 
 import argparse
@@ -171,14 +172,14 @@ def _command_mineru_run(args: argparse.Namespace) -> int:
         return 0
     exit_code = 0
     for entry in entries:
-        local_path = entry.metadata.get("local_path")
-        if not local_path:
+        local_path_value = entry.metadata.get("local_path")
+        if not isinstance(local_path_value, str) or not local_path_value:
             print(f"Skipping {entry.doc_id}: missing local_path", file=sys.stderr)
             continue
         document = PdfDocument(
             doc_key=entry.doc_id,
             uri=str(entry.metadata.get("uri", "")),
-            local_path=Path(local_path),
+            local_path=Path(local_path_value),
         )
         try:
             metadata = pipeline.process(document)

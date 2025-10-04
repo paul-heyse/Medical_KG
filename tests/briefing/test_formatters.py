@@ -11,6 +11,7 @@ from Medical_KG.briefing.formatters import BriefingFormatter
 _pdfminer = pytest.importorskip("pdfminer.high_level")
 extract_text = _pdfminer.extract_text
 
+
 @pytest.fixture
 def formatter() -> BriefingFormatter:
     return BriefingFormatter()

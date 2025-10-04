@@ -25,6 +25,7 @@ def test_available_sources_sorted() -> None:
 
 def test_get_adapter_returns_instance(tmp_path: Path) -> None:
     ledger = IngestionLedger(_ledger_path(tmp_path))
+
     async def _build() -> str:
         async with AsyncHttpClient() as client:
             adapter = registry.get_adapter("pubmed", AdapterContext(ledger=ledger), client)
@@ -35,6 +36,7 @@ def test_get_adapter_returns_instance(tmp_path: Path) -> None:
 
 def test_get_adapter_unknown_source(tmp_path: Path) -> None:
     ledger = IngestionLedger(_ledger_path(tmp_path))
+
     async def _call() -> None:
         async with AsyncHttpClient() as client:
             registry.get_adapter("unknown", AdapterContext(ledger=ledger), client)

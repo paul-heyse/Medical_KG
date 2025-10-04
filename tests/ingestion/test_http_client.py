@@ -107,6 +107,7 @@ def test_http_client_uses_mock_transport(httpx_mock_transport: Any) -> None:
         )
 
     httpx_mock_transport(handler)
+
     async def _run() -> None:
         async with AsyncHttpClient() as client:
             payload = await client.get_json("https://example.com")

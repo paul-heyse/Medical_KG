@@ -48,7 +48,7 @@ class ConceptGraphWriter:
         if self._vector_index_created:
             return
         query = "CALL db.index.vector.createNodeIndex($name, 'Concept', 'embedding_qwen', $dimension, $metric)"
-        params = {
+        params: dict[str, JsonValue] = {
             "name": self.vector_index_name,
             "dimension": self.vector_dimension,
             "metric": self.similarity_metric,
@@ -78,7 +78,7 @@ class ConceptGraphWriter:
             "iri": concept.iri,
             "props": cast(Mapping[str, JsonValue], props),
         }
-        self.session.run(query, cast(Mapping[str, JsonValue], parameters))
+        self.session.run(query, parameters)
 
     def _create_relationships(self, concepts: Iterable[Concept]) -> None:
         for concept in concepts:

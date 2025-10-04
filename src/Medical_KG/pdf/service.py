@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from Medical_KG.ingestion.ledger import IngestionLedger
+from Medical_KG.ingestion.types import JSONValue
+from Medical_KG.ingestion.utils import ensure_json_value
 
 from .gpu import ensure_gpu
 from .mineru import MinerURunner, MinerURunResult
@@ -164,15 +166,18 @@ class PdfPipeline:
                 "tables_uri": run.artifacts.tables,
             },
         )
-        metadata = {
+        metadata: dict[str, JSONValue] = {
             "mineru_run_id": document.doc_key,
             "mineru_version": "v1",
-            "mineru_cli_args": self._mineru.command(document.local_path, document.doc_key),
-            "mineru_artifacts": artifact_map,
-            "tables": tables,
-            "references": references,
-            "figures": figures,
-            "qa_metrics": asdict(metrics),
+            "mineru_cli_args": ensure_json_value(
+                self._mineru.command(document.local_path, document.doc_key),
+                context="mineru CLI args",
+            ),
+            "mineru_artifacts": ensure_json_value(artifact_map, context="mineru artifacts"),
+            "tables": ensure_json_value(tables, context="mineru tables"),
+            "references": ensure_json_value(references, context="mineru references"),
+            "figures": ensure_json_value(figures, context="mineru figures"),
+            "qa_metrics": ensure_json_value(asdict(metrics), context="qa metrics"),
         }
         self._ledger.record(document.doc_key, "pdf_ir_ready", metadata)
         return metadata

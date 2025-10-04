@@ -104,6 +104,8 @@ def _available_sources() -> list[str]:
         return sorted(_resolve_registry().available_sources())
     except Exception:  # pragma: no cover - defensive import failure handling
         return []
+
+
 def _complete_adapter(
     ctx: typer.Context,
     incomplete: str,
@@ -378,8 +380,12 @@ def ingest(
         "--ledger",
         help="Path to ingestion ledger JSONL",
     ),
-    limit: int | None = typer.Option(None, "--limit", "-n", min=1, help="Maximum records to process"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Validate inputs without executing adapters"),
+    limit: int | None = typer.Option(
+        None, "--limit", "-n", min=1, help="Maximum records to process"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Validate inputs without executing adapters"
+    ),
     chunk_size: int = typer.Option(
         1000,
         "--chunk-size",
@@ -401,7 +407,9 @@ def ingest(
         "--end-date",
         help="Filter auto mode to documents updated before this ISO timestamp",
     ),
-    page_size: int | None = typer.Option(None, "--page-size", min=1, help="Override adapter pagination size"),
+    page_size: int | None = typer.Option(
+        None, "--page-size", min=1, help="Override adapter pagination size"
+    ),
     rate_limit: float | None = typer.Option(
         None,
         "--rate-limit",
@@ -415,12 +423,22 @@ def ingest(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Reduce non-essential output"),
     log_file: Path | None = typer.Option(None, "--log-file", help="Write logs to the given file"),
-    log_level: str = typer.Option("INFO", "--log-level", help="Logging level (DEBUG, INFO, WARNING, ERROR)"),
-    strict_validation: bool = typer.Option(False, "--strict-validation", help="Enable strict batch validation"),
-    skip_validation: bool = typer.Option(False, "--skip-validation", help="Skip optional validation checks"),
+    log_level: str = typer.Option(
+        "INFO", "--log-level", help="Logging level (DEBUG, INFO, WARNING, ERROR)"
+    ),
+    strict_validation: bool = typer.Option(
+        False, "--strict-validation", help="Enable strict batch validation"
+    ),
+    skip_validation: bool = typer.Option(
+        False, "--skip-validation", help="Skip optional validation checks"
+    ),
     fail_fast: bool = typer.Option(False, "--fail-fast", help="Abort on first adapter error"),
-    error_log: Path | None = typer.Option(None, "--error-log", help="Write detailed errors to a JSONL file"),
-    show_timings: bool = typer.Option(False, "--show-timings", help="Include duration in summary output"),
+    error_log: Path | None = typer.Option(
+        None, "--error-log", help="Write detailed errors to a JSONL file"
+    ),
+    show_timings: bool = typer.Option(
+        False, "--show-timings", help="Include duration in summary output"
+    ),
     summary_only: bool = typer.Option(False, "--summary-only", help="Suppress per-result output"),
     schema_path: Path | None = typer.Option(
         None,
@@ -478,9 +496,7 @@ def ingest(
         ids=identifier_list,
         skip_validation=skip_validation,
     )
-    params_iter_unlimited = _apply_schema_validation(
-        raw_params_iter, validator=schema_validator
-    )
+    params_iter_unlimited = _apply_schema_validation(raw_params_iter, validator=schema_validator)
     if batch and strict_validation and (total_records or 0) == 0:
         raise typer.BadParameter("Batch file is empty")
     if limit is not None and total_records is not None:
@@ -532,13 +548,17 @@ def ingest(
                     outputs = pipeline.run(adapter_name, params=chunk_with_options, resume=resume)
                     results.extend(outputs)
                     processed += len(chunk_with_options)
-                    processed_docs = sum(len(item.doc_ids) for item in outputs) or len(chunk_with_options)
+                    processed_docs = sum(len(item.doc_ids) for item in outputs) or len(
+                        chunk_with_options
+                    )
                     if progress_bar is not None and progress_task is not None:
                         progress_bar.advance(progress_task, processed_docs)
                     if auto and not summary_only:
                         _emit_doc_ids(outputs)
                     if fail_fast and any(len(item.doc_ids) == 0 for item in outputs):
-                        raise RuntimeError("Adapter returned no documents for at least one invocation")
+                        raise RuntimeError(
+                            "Adapter returned no documents for at least one invocation"
+                        )
                     if limit is not None and processed >= limit:
                         break
                     last_tick = throttle(rate_limit, last_run=last_tick)
@@ -553,7 +573,11 @@ def ingest(
         message = format_cli_error(str(exc))
         _log_error(
             error_log,
-            payload={"adapter": adapter_name, "error": message, "exception": exc.__class__.__name__},
+            payload={
+                "adapter": adapter_name,
+                "error": message,
+                "exception": exc.__class__.__name__,
+            },
         )
         errors.append(str(exc))
     completed_at = datetime.now(timezone.utc)

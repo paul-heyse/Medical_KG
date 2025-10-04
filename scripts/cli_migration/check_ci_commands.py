@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 
@@ -60,7 +60,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    findings = [finding for path in iter_files(args.root, args.include) for finding in scan_file(path)]
+    findings = [
+        finding for path in iter_files(args.root, args.include) for finding in scan_file(path)
+    ]
 
     if args.json:
         payload = {"findings": [asdict(item) for item in findings], "legacy_count": len(findings)}

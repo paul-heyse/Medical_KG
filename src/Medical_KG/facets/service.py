@@ -7,8 +7,6 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
-from pydantic import ValidationError
-
 from Medical_KG.facets.dedup import deduplicate_facets
 from Medical_KG.facets.generator import (
     FacetGenerationError,
@@ -20,6 +18,7 @@ from Medical_KG.facets.generator import (
 from Medical_KG.facets.models import FacetIndexRecord, FacetModel
 from Medical_KG.facets.router import FacetRouter
 from Medical_KG.facets.validator import FacetValidationError, FacetValidator
+from pydantic import ValidationError
 
 
 @dataclass(slots=True)

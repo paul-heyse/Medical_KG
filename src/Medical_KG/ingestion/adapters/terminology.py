@@ -175,7 +175,9 @@ class UMLSAdapter(HttpAdapter[Any]):
         if cui in self._cache:
             yield self._cache[cui]
             return
-        payload = await self.fetch_json("https://uts-ws.nlm.nih.gov/rest/content/current/CUI/" + cui)
+        payload = await self.fetch_json(
+            "https://uts-ws.nlm.nih.gov/rest/content/current/CUI/" + cui
+        )
         payload_map = ensure_json_mapping(payload, context="umls response")
         self._cache[cui] = payload_map
         yield payload_map
@@ -241,7 +243,9 @@ class LoincAdapter(HttpAdapter[Any]):
         if code in self._cache:
             yield self._cache[code]
             return
-        payload = await self.fetch_json("https://fhir.loinc.org/CodeSystem/$lookup", params={"code": code})
+        payload = await self.fetch_json(
+            "https://fhir.loinc.org/CodeSystem/$lookup", params={"code": code}
+        )
         payload_map = ensure_json_mapping(payload, context="loinc response")
         self._cache[code] = payload_map
         yield payload_map
@@ -402,7 +406,8 @@ class SnomedAdapter(HttpAdapter[Any]):
             context="snomed designation",
         )
         designation_entries = [
-            ensure_json_mapping(entry, context="snomed designation entry") for entry in designation_value
+            ensure_json_mapping(entry, context="snomed designation entry")
+            for entry in designation_value
         ]
         # ``SnomedDocumentPayload.display`` is optional; designation entries are
         # required and stay typed via ``ensure_json_mapping`` above.

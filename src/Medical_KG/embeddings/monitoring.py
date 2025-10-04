@@ -138,7 +138,7 @@ class EmbeddingPerformanceMonitor:
 
         if not sample_texts:
             return LoadTestResult(0, 0, 0.0, 0.0, 0.0)
-        batch = batch_size or getattr(self.service.qwen, "batch_size", 256)
+        batch = batch_size if batch_size is not None else self.service.qwen.batch_size
         latencies: list[float] = []
         total = 0
         failed = 0

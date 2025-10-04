@@ -1,4 +1,5 @@
 """Unit tests for Document.raw type guard helpers."""
+
 from __future__ import annotations
 
 from typing import Callable, assert_type
@@ -201,7 +202,9 @@ def make_medrxiv_payload() -> types.MedRxivDocumentPayload:
         make_snomed_payload,
     ],
 )
-def test_terminology_family_guard_accepts_members(factory: Callable[[], types.TerminologyDocumentPayload]) -> None:
+def test_terminology_family_guard_accepts_members(
+    factory: Callable[[], types.TerminologyDocumentPayload],
+) -> None:
     payload = factory()
     assert types.is_terminology_payload(payload)
 
@@ -216,7 +219,9 @@ def test_terminology_family_guard_accepts_members(factory: Callable[[], types.Te
         make_access_gudid_payload,
     ],
 )
-def test_clinical_family_guard_accepts_members(factory: Callable[[], types.ClinicalCatalogDocumentPayload]) -> None:
+def test_clinical_family_guard_accepts_members(
+    factory: Callable[[], types.ClinicalCatalogDocumentPayload],
+) -> None:
     payload = factory()
     assert types.is_clinical_payload(payload)
 
@@ -225,7 +230,9 @@ def test_clinical_family_guard_accepts_members(factory: Callable[[], types.Clini
     "factory",
     [make_nice_guideline_payload, make_uspstf_payload],
 )
-def test_guideline_family_guard_accepts_members(factory: Callable[[], types.GuidelineDocumentPayload]) -> None:
+def test_guideline_family_guard_accepts_members(
+    factory: Callable[[], types.GuidelineDocumentPayload],
+) -> None:
     payload = factory()
     assert types.is_guideline_payload(payload)
 
@@ -239,7 +246,9 @@ def test_guideline_family_guard_accepts_members(factory: Callable[[], types.Guid
         make_openprescribing_payload,
     ],
 )
-def test_knowledge_base_family_guard_accepts_members(factory: Callable[[], types.KnowledgeBaseDocumentPayload]) -> None:
+def test_knowledge_base_family_guard_accepts_members(
+    factory: Callable[[], types.KnowledgeBaseDocumentPayload],
+) -> None:
     payload = factory()
     assert types.is_knowledge_base_payload(payload)
 
@@ -248,7 +257,9 @@ def test_knowledge_base_family_guard_accepts_members(factory: Callable[[], types
     "factory",
     [make_pubmed_payload, make_pmc_payload, make_medrxiv_payload],
 )
-def test_literature_family_guard_accepts_members(factory: Callable[[], types.LiteratureDocumentPayload]) -> None:
+def test_literature_family_guard_accepts_members(
+    factory: Callable[[], types.LiteratureDocumentPayload],
+) -> None:
     payload = factory()
     assert types.is_literature_payload(payload)
 
@@ -323,7 +334,9 @@ def test_specific_guards_reject_none_and_unrelated_payloads(
     guard: Callable[[types.DocumentRaw | None], bool],
 ) -> None:
     assert not guard(None)
-    assert not guard(make_pubmed_payload() if guard is not types.is_pubmed_payload else make_mesh_payload())
+    assert not guard(
+        make_pubmed_payload() if guard is not types.is_pubmed_payload else make_mesh_payload()
+    )
 
 
 def test_pubmed_guard_narrows_type_for_mypy() -> None:

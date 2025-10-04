@@ -454,7 +454,6 @@ def sample_document_factory() -> (
 def httpx_mock_transport(monkeypatch: pytest.MonkeyPatch) -> Callable[[Callable[[Any], Any]], Any]:
     """Patch httpx AsyncClient creation to use a MockTransport."""
 
-
     HTTPX = get_httpx_module()
     clients: list[Any] = []
 
@@ -720,5 +719,3 @@ def expected_retrieval_response() -> RetrievalResponse:
         size=1,
         metadata={"feature_flags": {"rerank_enabled": False}},
     )
-
-

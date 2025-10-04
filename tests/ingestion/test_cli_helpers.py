@@ -127,12 +127,16 @@ def test_invoke_adapter_wraps_failures(tmp_path: Path) -> None:
             raise RuntimeError("boom")
 
     with pytest.raises(AdapterInvocationError):
-        invoke_adapter_sync("stub", ledger=ledger, registry=_BrokenRegistry(), client_factory=_Client)
+        invoke_adapter_sync(
+            "stub", ledger=ledger, registry=_BrokenRegistry(), client_factory=_Client
+        )
 
 
 def test_format_cli_error_includes_remediation() -> None:
     exc = RuntimeError("bad things happened")
-    rendered = format_cli_error(exc, prefix="Failure", remediation="Check configuration", use_color=False)
+    rendered = format_cli_error(
+        exc, prefix="Failure", remediation="Check configuration", use_color=False
+    )
     assert "Failure" in rendered and "Check configuration" in rendered
 
 

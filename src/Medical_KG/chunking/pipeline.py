@@ -84,9 +84,13 @@ class ChunkingPipeline:
         )
 
     def _apply_embeddings(self, chunks: List[Chunk]) -> List[FacetVectorRecord]:
+        if self._embedding_service is None:
+            msg = "Embedding service must be configured to apply embeddings"
+            raise RuntimeError(msg)
+        service = self._embedding_service
         texts = [chunk.to_embedding_text() for chunk in chunks]
         sparse_inputs = [chunk.to_sparse_text() for chunk in chunks]
-        dense_vectors, sparse_vectors = self._embedding_service.embed_texts(
+        dense_vectors, sparse_vectors = service.embed_texts(
             texts, sparse_texts=sparse_inputs
         )
         for chunk, dense, sparse in zip(chunks, dense_vectors, sparse_vectors):
@@ -102,7 +106,7 @@ class ChunkingPipeline:
         facet_records: List[FacetVectorRecord] = []
         if not payloads:
             return facet_records
-        dense_vectors, _ = self._embedding_service.embed_texts([payload for _, payload in payloads])
+        dense_vectors, _ = service.embed_texts([payload for _, payload in payloads])
         for (chunk, _), vector in zip(payloads, dense_vectors):
             chunk.facet_embedding_qwen = vector
             facet_records.append(

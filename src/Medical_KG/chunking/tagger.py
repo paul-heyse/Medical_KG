@@ -94,11 +94,11 @@ class ClinicalIntentTagger:
         return ClinicalIntent.GENERAL
 
     def tag_sentences(
-        self, sentences: Sequence[str], *, sections: Sequence[str] | None = None
+        self, sentences: Sequence[str], *, sections: Sequence[str | None] | None = None
     ) -> List[ClinicalIntent]:
-        intents = []
-        sections = sections or [None] * len(sentences)
-        for sentence, section in zip(sentences, sections):
+        intents: List[ClinicalIntent] = []
+        section_sequence = list(sections) if sections is not None else [None] * len(sentences)
+        for sentence, section in zip(sentences, section_sequence):
             intents.append(self.tag_sentence(sentence, section=section))
         return intents
 

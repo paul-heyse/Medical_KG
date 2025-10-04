@@ -71,7 +71,9 @@ class NiceGuidelineAdapter(_BootstrapAdapter[JSONMapping]):
                 yield record
             return
         params = {"licence": licence} if licence else None
-        payload_value = await self.fetch_json("https://api.nice.org.uk/guidance", params=params or {})
+        payload_value = await self.fetch_json(
+            "https://api.nice.org.uk/guidance", params=params or {}
+        )
         payload_map: JSONMapping = ensure_json_mapping(
             ensure_json_value(payload_value, context="nice guidance response value"),
             context="nice guidance response",
@@ -197,7 +199,9 @@ class CdcSocrataAdapter(_BootstrapAdapter[JSONMapping]):
                 yield record
             return
         params = {"$limit": limit}
-        payload = await self.fetch_json(f"https://data.cdc.gov/resource/{dataset}.json", params=params)
+        payload = await self.fetch_json(
+            f"https://data.cdc.gov/resource/{dataset}.json", params=params
+        )
         rows = ensure_json_sequence(payload, context="cdc socrata rows")
         # CDC Socrata datasets expose each table as an array of row objects; keep
         # boundary validation tied to the 2024-02 API schema.
@@ -278,7 +282,9 @@ class CdcWonderAdapter(_BootstrapAdapter[str]):
 class WhoGhoAdapter(_BootstrapAdapter[JSONMapping]):
     source = "who_gho"
 
-    async def fetch(self, indicator: str, *, spatial: str | None = None) -> AsyncIterator[JSONMapping]:
+    async def fetch(
+        self, indicator: str, *, spatial: str | None = None
+    ) -> AsyncIterator[JSONMapping]:
         if self._bootstrap:
             async for record in self._yield_bootstrap():
                 yield record
@@ -311,7 +317,9 @@ class WhoGhoAdapter(_BootstrapAdapter[JSONMapping]):
             value: JSONValue = value_raw
         elif isinstance(value_raw, Mapping):
             value = dict(value_raw)
-        elif isinstance(value_raw, SequenceABC) and not isinstance(value_raw, (str, bytes, bytearray)):
+        elif isinstance(value_raw, SequenceABC) and not isinstance(
+            value_raw, (str, bytes, bytearray)
+        ):
             value = list(value_raw)
         else:
             value = str(value_raw)

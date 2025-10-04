@@ -42,7 +42,9 @@ class IngestionLedger:
                     metadata: dict[str, JSONValue]
                     if isinstance(metadata_raw, Mapping):
                         metadata = {
-                            str(key): cast(JSONValue, value)  # External JSONL file stores arbitrary JSON-compatible values.
+                            str(key): cast(
+                                JSONValue, value
+                            )  # External JSONL file stores arbitrary JSON-compatible values.
                             for key, value in metadata_raw.items()
                         }
                     else:
@@ -55,7 +57,9 @@ class IngestionLedger:
                     )
                     self._latest[entry.doc_id] = entry
 
-    def record(self, doc_id: str, state: str, metadata: Mapping[str, JSONValue] | None = None) -> LedgerEntry:
+    def record(
+        self, doc_id: str, state: str, metadata: Mapping[str, JSONValue] | None = None
+    ) -> LedgerEntry:
         entry_metadata: dict[str, JSONValue] = dict(metadata) if metadata is not None else {}
         entry = LedgerEntry(
             doc_id=doc_id,

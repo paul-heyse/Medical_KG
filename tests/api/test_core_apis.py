@@ -16,6 +16,7 @@ from Medical_KG.utils.optional_dependencies import HttpxModule, get_httpx_module
 class FastAPI(Protocol):  # pragma: no cover - minimal contract for typing
     state: Any
 
+
 HTTPX: HttpxModule = get_httpx_module()
 ASGITransport = HTTPX.ASGITransport
 

@@ -85,7 +85,9 @@ def _string_list(values: object) -> list[str]:
 class PubMedAdapter(HttpAdapter[Any]):
     source = "pubmed"
 
-    def __init__(self, context: AdapterContext, client: AsyncHttpClient, *, api_key: str | None = None) -> None:
+    def __init__(
+        self, context: AdapterContext, client: AsyncHttpClient, *, api_key: str | None = None
+    ) -> None:
         super().__init__(context, client)
         self.api_key = api_key
         host = urlparse(PUBMED_SEARCH_URL).netloc
@@ -131,14 +133,14 @@ class PubMedAdapter(HttpAdapter[Any]):
                 count = int(count_value)
             except ValueError:
                 count = len(id_list)
-        if not (
-            isinstance(webenv, str)
-            and isinstance(query_key, str)
-            and count
-        ):
+        if not (isinstance(webenv, str) and isinstance(query_key, str) and count):
             if not id_list:
                 return
-            summary_params: dict[str, object] = {"db": "pubmed", "retmode": "json", "id": ",".join(id_list)}
+            summary_params: dict[str, object] = {
+                "db": "pubmed",
+                "retmode": "json",
+                "id": ",".join(id_list),
+            }
             if self.api_key:
                 summary_params["api_key"] = self.api_key
             summary = ensure_json_mapping(
@@ -268,7 +270,13 @@ class PubMedAdapter(HttpAdapter[Any]):
             "journal": _optional_str(raw_map.get("fulljournalname")),
             "pmid": uid,
         }
-        return Document(doc_id=doc_id, source=self.source, content=abstract or title, metadata=metadata, raw=payload)
+        return Document(
+            doc_id=doc_id,
+            source=self.source,
+            content=abstract or title,
+            metadata=metadata,
+            raw=payload,
+        )
 
     def validate(self, document: Document) -> None:
         raw = document.raw
@@ -356,8 +364,14 @@ class PubMedAdapter(HttpAdapter[Any]):
                     )
                 journal = article_data.findtext("Journal/Title")
                 pub_year = article_data.findtext("Journal/JournalIssue/PubDate/Year")
-                pub_types = [normalize_text(pt.text or "") for pt in article_data.findall("PublicationTypeList/PublicationType")]
-            mesh_terms = [normalize_text(node.text or "") for node in medline.findall("MeshHeadingList/MeshHeading/DescriptorName")]
+                pub_types = [
+                    normalize_text(pt.text or "")
+                    for pt in article_data.findall("PublicationTypeList/PublicationType")
+                ]
+            mesh_terms = [
+                normalize_text(node.text or "")
+                for node in medline.findall("MeshHeadingList/MeshHeading/DescriptorName")
+            ]
             article_ids = article.findall("PubmedData/ArticleIdList/ArticleId")
             pmcid = None
             doi = None
@@ -370,9 +384,11 @@ class PubMedAdapter(HttpAdapter[Any]):
                     doi = value
             detail: MutableJSONMapping = {
                 "pmid": pmid,
-                "title": normalize_text(article_data.findtext("ArticleTitle", default=""))
-                if article_data is not None
-                else "",
+                "title": (
+                    normalize_text(article_data.findtext("ArticleTitle", default=""))
+                    if article_data is not None
+                    else ""
+                ),
                 "abstract": normalize_text("\n".join(filter(None, abstract_text))),
                 "authors": authors,
                 "mesh_terms": [term for term in mesh_terms if term],
@@ -402,7 +418,11 @@ class PmcAdapter(HttpAdapter[ET.Element]):
         from_date: str | None = None,
         until_date: str | None = None,
     ) -> AsyncIterator[ET.Element]:
-        params: dict[str, object] = {"verb": "ListRecords", "set": set_spec, "metadataPrefix": metadata_prefix}
+        params: dict[str, object] = {
+            "verb": "ListRecords",
+            "set": set_spec,
+            "metadataPrefix": metadata_prefix,
+        }
         if from_date:
             params["from"] = from_date
         if until_date:
@@ -429,8 +449,12 @@ class PmcAdapter(HttpAdapter[ET.Element]):
         article = None
         if metadata is not None:
             article = self._find(metadata, "article") or metadata
-        title = normalize_text(self._findtext(article, "article-title") or self._findtext(metadata, "title") or "")
-        abstract = normalize_text(self._collect_text(article, "abstract")) if article is not None else ""
+        title = normalize_text(
+            self._findtext(article, "article-title") or self._findtext(metadata, "title") or ""
+        )
+        abstract = (
+            normalize_text(self._collect_text(article, "abstract")) if article is not None else ""
+        )
         sections = self._collect_sections(article)
         tables = self._collect_table_like(article, "table-wrap")
         figures = self._collect_table_like(article, "fig")
@@ -452,7 +476,9 @@ class PmcAdapter(HttpAdapter[ET.Element]):
         meta: MutableJSONMapping = {"title": title, "datestamp": datestamp, "pmcid": pmcid}
         body_text = "\n\n".join(section["text"] for section in sections if section["text"])
         document_content = abstract or body_text or title
-        return Document(doc_id=doc_id, source=self.source, content=document_content, metadata=meta, raw=payload)
+        return Document(
+            doc_id=doc_id, source=self.source, content=document_content, metadata=meta, raw=payload
+        )
 
     def validate(self, document: Document) -> None:
         raw = document.raw
@@ -504,7 +530,11 @@ class PmcAdapter(HttpAdapter[ET.Element]):
             if self._strip(section.tag) != "sec":
                 continue
             title = normalize_text(self._findtext(section, "title") or "")
-            text_chunks = [normalize_text("".join(node.itertext())) for node in section if self._strip(node.tag) != "title"]
+            text_chunks = [
+                normalize_text("".join(node.itertext()))
+                for node in section
+                if self._strip(node.tag) != "title"
+            ]
             text = "\n".join(chunk for chunk in text_chunks if chunk)
             sections.append({"title": title, "text": text})
         return sections
@@ -521,7 +551,9 @@ class PmcAdapter(HttpAdapter[ET.Element]):
             uri = None
             graphic = self._find(node, "graphic")
             if graphic is not None:
-                uri = graphic.attrib.get("{http://www.w3.org/1999/xlink}href") or graphic.attrib.get("href")
+                uri = graphic.attrib.get(
+                    "{http://www.w3.org/1999/xlink}href"
+                ) or graphic.attrib.get("href")
             items.append({"label": label, "caption": caption, "uri": uri or ""})
         return items
 
@@ -575,12 +607,16 @@ class MedRxivAdapter(HttpAdapter[JSONMapping]):
             )
             # medRxiv JSON API (2024-02 docs) returns paginated ``results`` arrays;
             # keep boundary validation to surface API changes quickly.
-            for entry in ensure_json_sequence(response.get("results", []), context="medrxiv results"):
+            for entry in ensure_json_sequence(
+                response.get("results", []), context="medrxiv results"
+            ):
                 if not isinstance(entry, MappingABC):
                     continue
                 yield ensure_json_mapping(entry, context="medrxiv result entry")
             next_cursor_value = response.get("next_cursor")
-            next_cursor = str(next_cursor_value) if isinstance(next_cursor_value, (str, int)) else None
+            next_cursor = (
+                str(next_cursor_value) if isinstance(next_cursor_value, (str, int)) else None
+            )
             if not next_cursor:
                 break
 
@@ -604,10 +640,18 @@ class MedRxivAdapter(HttpAdapter[JSONMapping]):
         }
         content = canonical_json(payload)
         version_value = raw_map.get("version", "1")
-        doc_id = self.build_doc_id(identifier=identifier, version=str(version_value), content=content)
+        doc_id = self.build_doc_id(
+            identifier=identifier, version=str(version_value), content=content
+        )
         authors = _string_list(raw_map.get("authors", []))
         metadata: MutableJSONMapping = {"title": title, "authors": authors}
-        return Document(doc_id=doc_id, source=self.source, content=abstract or title, metadata=metadata, raw=payload)
+        return Document(
+            doc_id=doc_id,
+            source=self.source,
+            content=abstract or title,
+            metadata=metadata,
+            raw=payload,
+        )
 
     def validate(self, document: Document) -> None:
         raw = document.raw

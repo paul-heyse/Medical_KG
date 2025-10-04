@@ -217,13 +217,14 @@ class IRValidator:
                 if pmcid_source is None:
                     pmcid_source = provenance.get("pmcid")
                 if pmcid_source != expected_pmcid:
-                    raise ValidationError("PubMed IR documents must include PMCID provenance when available")
+                    raise ValidationError(
+                        "PubMed IR documents must include PMCID provenance when available"
+                    )
         if is_pmc_payload(raw):
             pmcid_source = provenance.get("pmcid")
             if pmcid_source != raw["pmcid"]:
                 pubmed_info = provenance.get("pubmed")
                 if not (
-                    isinstance(pubmed_info, Mapping)
-                    and pubmed_info.get("pmcid") == raw["pmcid"]
+                    isinstance(pubmed_info, Mapping) and pubmed_info.get("pmcid") == raw["pmcid"]
                 ):
                     raise ValidationError("PMC IR documents must include PMCID provenance")

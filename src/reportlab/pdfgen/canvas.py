@@ -62,14 +62,13 @@ def _build_pdf(
     for index, font_name in enumerate(sorted(fonts), start=1):
         alias = f"F{index}"
         obj_num = reserve_object()
-        font_body = (
-            f"<< /Type /Font /Subtype /Type1 /BaseFont /{font_name} >>".encode("utf-8")
-        )
+        font_body = f"<< /Type /Font /Subtype /Type1 /BaseFont /{font_name} >>".encode("utf-8")
         set_object(obj_num, font_body)
         font_aliases[font_name] = (alias, obj_num)
 
     resource_entries = " ".join(
-        f"/{alias} {obj_num} 0 R" for alias, obj_num in (font_aliases[name] for name in sorted(font_aliases))
+        f"/{alias} {obj_num} 0 R"
+        for alias, obj_num in (font_aliases[name] for name in sorted(font_aliases))
     )
     resources_text = f"<< /Font << {resource_entries} >> >>"
     page_command_lists = list(pages)
@@ -88,9 +87,7 @@ def _build_pdf(
             x = float(cast(float, arg1))
             y = float(cast(float, arg2))
             text = str(arg3).replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-            stream_lines.append(
-                f"BT /{alias} {font_size:.2f} Tf {x:.2f} {y:.2f} Td ({text}) Tj ET"
-            )
+            stream_lines.append(f"BT /{alias} {font_size:.2f} Tf {x:.2f} {y:.2f} Td ({text}) Tj ET")
         stream_bytes = "\n".join(stream_lines).encode("utf-8")
         obj_num = reserve_object()
         content = (

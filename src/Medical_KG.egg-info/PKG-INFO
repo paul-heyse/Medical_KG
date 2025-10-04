@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: Medical_KG
-Version: 0.1.0
+Version: 2.0.0
 Summary: Production-ready Medical Knowledge Graph with GPU-accelerated processing
 Requires-Python: >=3.12
 Description-Content-Type: text/markdown
@@ -8,6 +8,8 @@ Requires-Dist: httpx[http2]==0.28.1
 Requires-Dist: tenacity==9.1.2
 Requires-Dist: aiolimiter==1.2.1
 Requires-Dist: anyio==4.11.0
+Requires-Dist: pytest-cov==4.1.0
+Requires-Dist: coverage==7.6.10
 Requires-Dist: typer==0.17.5
 Requires-Dist: rich==14.1.0
 Requires-Dist: tqdm==4.67.1
@@ -93,6 +95,10 @@ Baseline template for Python projects in Cursor on Ubuntu.
 4. Run target tasks: **pytest**, **lint**, **format**.
 
 See `.cursor/rules`, `.vscode/*`, and `environment.yml` for configuration details.
+
+## Command-line interface
+
+- Use `med ingest <adapter> [options]` for all ingestion workflows. The legacy `med ingest-legacy` alias was removed in version 2.0.0.
 
 ## Testing & Coverage
 

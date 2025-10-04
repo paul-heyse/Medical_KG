@@ -58,6 +58,7 @@ src/Medical_KG/config/manager.py
 src/Medical_KG/config/models.py
 src/Medical_KG/embeddings/__init__.py
 src/Medical_KG/embeddings/gpu.py
+src/Medical_KG/embeddings/metrics.py
 src/Medical_KG/embeddings/monitoring.py
 src/Medical_KG/embeddings/qwen.py
 src/Medical_KG/embeddings/service.py
@@ -97,9 +98,11 @@ src/Medical_KG/infrastructure/models.py
 src/Medical_KG/infrastructure/planner.py
 src/Medical_KG/ingestion/__init__.py
 src/Medical_KG/ingestion/cli.py
+src/Medical_KG/ingestion/cli_helpers.py
 src/Medical_KG/ingestion/http_client.py
 src/Medical_KG/ingestion/ledger.py
 src/Medical_KG/ingestion/models.py
+src/Medical_KG/ingestion/pipeline.py
 src/Medical_KG/ingestion/registry.py
 src/Medical_KG/ingestion/types.py
 src/Medical_KG/ingestion/utils.py

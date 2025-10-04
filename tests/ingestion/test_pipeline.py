@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
+from Medical_KG.ingestion.adapters.guidelines import NiceGuidelineAdapter
 from Medical_KG.ingestion.events import (
     AdapterStateChange,
     BatchProgress,
@@ -334,3 +335,233 @@ def test_stream_events_reports_backpressure_metrics(tmp_path: Path) -> None:
     tail = progress_events[-1]
     assert tail.backpressure_wait_count >= 1
     assert tail.backpressure_wait_seconds >= 0.0
+
+
+def test_stream_events_include_checkpoint_metadata(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "ledger.jsonl"
+    ledger = IngestionLedger(ledger_path)
+    records = [
+        {"id": "doc-1", "content": "ok"},
+        {"id": "doc-2", "content": "ok"},
+    ]
+    adapter = _StubAdapter(AdapterContext(ledger), records=records)
+    pipeline = IngestionPipeline(
+        ledger,
+        registry=_Registry(adapter),
+        client_factory=lambda: _NoopClient(),
+    )
+
+    async def _collect() -> list[BatchProgress]:
+        checkpoints: list[BatchProgress] = []
+        async for event in pipeline.stream_events(
+            "stub",
+            checkpoint_interval=1,
+            progress_interval=10,
+        ):
+            if isinstance(event, BatchProgress) and event.is_checkpoint:
+                checkpoints.append(event)
+        return checkpoints
+
+    progress_events = asyncio.run(_collect())
+    assert progress_events
+    assert any(event.checkpoint_doc_ids for event in progress_events)
+    assert progress_events[-1].checkpoint_doc_ids == ["doc-1", "doc-2"]
+
+
+def test_stream_events_resume_skips_completed_ids(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "ledger.jsonl"
+    ledger = IngestionLedger(ledger_path)
+    records = [
+        {"id": "doc-1", "content": "ok"},
+        {"id": "doc-2", "content": "ok"},
+    ]
+    adapter = _StubAdapter(AdapterContext(ledger), records=records)
+    pipeline = IngestionPipeline(
+        ledger,
+        registry=_Registry(adapter),
+        client_factory=lambda: _NoopClient(),
+    )
+
+    async def _collect(completed: list[str]) -> list[str]:
+        seen: list[str] = []
+        async for event in pipeline.stream_events(
+            "stub",
+            completed_ids=completed,
+            progress_interval=1,
+        ):
+            if isinstance(event, DocumentCompleted):
+                seen.append(event.document.doc_id)
+        return seen
+
+    first_run = asyncio.run(_collect([]))
+    assert first_run == ["doc-1", "doc-2"]
+    resumed = asyncio.run(_collect(["doc-1"]))
+    assert resumed == ["doc-2"]
+
+
+def test_stream_events_with_real_nice_adapter_bootstrap(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "ledger-nice.jsonl"
+    ledger = IngestionLedger(ledger_path)
+    bootstrap = [
+        {
+            "uid": "CG1",
+            "title": "Guideline",
+            "summary": "Summary",
+            "url": "https://example.org/guideline",
+            "licence": "OpenGov",
+        }
+    ]
+
+    class _ClientStub:
+        def bind_retry_callback(self, _callback: object) -> None:
+            return None
+
+    adapter = NiceGuidelineAdapter(
+        AdapterContext(ledger),
+        client=_ClientStub(),
+        bootstrap_records=bootstrap,
+    )
+    pipeline = IngestionPipeline(
+        ledger,
+        registry=_Registry(adapter),
+        client_factory=lambda: _NoopClient(),
+    )
+
+    async def _collect() -> list[str]:
+        doc_ids: list[str] = []
+        async for event in pipeline.stream_events("nice", progress_interval=1):
+            if isinstance(event, DocumentCompleted):
+                doc_ids.append(event.document.doc_id)
+        return doc_ids
+
+    emitted_ids = asyncio.run(_collect())
+    assert emitted_ids
+    assert emitted_ids[0].startswith("nice")
+
+
+def test_stream_events_handle_large_batches(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "ledger-large.jsonl"
+    ledger = IngestionLedger(ledger_path)
+    record_count = 10_000
+    records = [{"id": f"doc-{index}", "content": "payload"} for index in range(record_count)]
+    adapter = _StubAdapter(AdapterContext(ledger), records=records)
+    pipeline = IngestionPipeline(
+        ledger,
+        registry=_Registry(adapter),
+        client_factory=lambda: _NoopClient(),
+    )
+
+    async def _count() -> int:
+        total = 0
+        async for event in pipeline.stream_events("stub", progress_interval=5000):
+            if isinstance(event, DocumentCompleted):
+                total += 1
+        return total
+
+    processed = asyncio.run(_count())
+    assert processed == record_count
+
+
+def test_stream_events_support_concurrent_execution(tmp_path: Path) -> None:
+    ledger_a = IngestionLedger(tmp_path / "ledger-a.jsonl")
+    ledger_b = IngestionLedger(tmp_path / "ledger-b.jsonl")
+    records_a = [{"id": "a-1", "content": "ok"}, {"id": "a-2", "content": "ok"}]
+    records_b = [{"id": "b-1", "content": "ok"}]
+    adapter_a = _StubAdapter(AdapterContext(ledger_a), records=records_a)
+    adapter_b = _StubAdapter(AdapterContext(ledger_b), records=records_b)
+    pipeline_a = IngestionPipeline(
+        ledger_a,
+        registry=_Registry(adapter_a),
+        client_factory=lambda: _NoopClient(),
+    )
+    pipeline_b = IngestionPipeline(
+        ledger_b,
+        registry=_Registry(adapter_b),
+        client_factory=lambda: _NoopClient(),
+    )
+
+    async def _consume(pipeline: IngestionPipeline) -> list[str]:
+        seen: list[str] = []
+        async for event in pipeline.stream_events("stub", progress_interval=1):
+            if isinstance(event, DocumentCompleted):
+                seen.append(event.document.doc_id)
+        return seen
+
+    results_a, results_b = asyncio.run(
+        asyncio.gather(_consume(pipeline_a), _consume(pipeline_b))
+    )
+    assert results_a == ["a-1", "a-2"]
+    assert results_b == ["b-1"]
+
+
+def test_pipeline_records_consumption_modes(monkeypatch, tmp_path: Path) -> None:
+    from Medical_KG.ingestion import pipeline as pipeline_module
+
+    class _CounterStub:
+        def __init__(self) -> None:
+            self.records: list[dict[str, str]] = []
+            self._pending: dict[str, str] | None = None
+
+        def labels(self, **labels: Any) -> "_CounterStub":
+            self._pending = {key: str(value) for key, value in labels.items()}
+            return self
+
+        def inc(self, amount: float = 1.0) -> None:
+            labels = self._pending or {}
+            record = dict(labels)
+            record["amount"] = str(amount)
+            self.records.append(record)
+            self._pending = None
+
+    counter = _CounterStub()
+    monkeypatch.setattr(pipeline_module, "PIPELINE_CONSUMPTION_COUNTER", counter)
+
+    ledger_stream = IngestionLedger(tmp_path / "stream-ledger.jsonl")
+    stream_adapter = _StubAdapter(
+        AdapterContext(ledger_stream), records=[{"id": "stream-doc", "content": "ok"}]
+    )
+    pipeline_stream = IngestionPipeline(
+        ledger_stream,
+        registry=_Registry(stream_adapter),
+        client_factory=lambda: _NoopClient(),
+    )
+
+    async def _drain_stream() -> None:
+        async for _ in pipeline_stream.stream_events("stub", progress_interval=1):
+            pass
+
+    asyncio.run(_drain_stream())
+    assert any(record.get("mode") == "stream" for record in counter.records)
+
+    counter.records.clear()
+
+    ledger_async = IngestionLedger(tmp_path / "async-ledger.jsonl")
+    async_adapter = _StubAdapter(
+        AdapterContext(ledger_async), records=[{"id": "async-doc", "content": "ok"}]
+    )
+    pipeline_async = IngestionPipeline(
+        ledger_async,
+        registry=_Registry(async_adapter),
+        client_factory=lambda: _NoopClient(),
+    )
+
+    asyncio.run(pipeline_async.run_async("stub"))
+    assert any(record.get("mode") == "run_async" for record in counter.records)
+
+    counter.records.clear()
+
+    ledger_legacy = IngestionLedger(tmp_path / "legacy-ledger.jsonl")
+    legacy_adapter = _StubAdapter(
+        AdapterContext(ledger_legacy), records=[{"id": "legacy-doc", "content": "ok"}]
+    )
+    pipeline_legacy = IngestionPipeline(
+        ledger_legacy,
+        registry=_Registry(legacy_adapter),
+        client_factory=lambda: _NoopClient(),
+    )
+
+    monkeypatch.setenv(pipeline_module._LEGACY_WARNING_ENV, "1")
+    asyncio.run(pipeline_legacy.run_async_legacy("stub"))
+    assert any(
+        record.get("mode") == "run_async_legacy" for record in counter.records
+    )

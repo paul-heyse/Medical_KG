@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+from collections.abc import AsyncIterator
 from typing import Any, Protocol, cast
 
 import pytest
@@ -9,6 +11,8 @@ import pytest
 from Medical_KG.api.auth import Authenticator
 from Medical_KG.app import create_app
 from Medical_KG.config.manager import SecretResolver
+from Medical_KG.ingestion.events import BatchProgress, DocumentCompleted, DocumentStarted
+from Medical_KG.ingestion.models import Document
 from Medical_KG.services.chunks import Chunk
 from Medical_KG.utils.optional_dependencies import HttpxModule, get_httpx_module
 
@@ -36,6 +40,7 @@ def app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
                     "facets:write",
                     "extract:write",
                     "kg:write",
+                    "ingest:write",
                 }
             }
         )
@@ -204,5 +209,72 @@ def test_kg_write_happy_path_and_validation_error(app: FastAPI) -> None:
             error = failure.json()["detail"]
             assert error["code"] == "kg_validation_failed"
             assert error["issues"]
+
+    asyncio.run(run())
+
+
+def test_ingestion_stream_endpoint(app: FastAPI) -> None:
+    headers: dict[str, str] = {"X-API-Key": "demo-key"}
+
+    class _PipelineStub:
+        async def stream_events(self, *_: Any, **__: Any) -> AsyncIterator[object]:
+            document = Document(
+                doc_id="ingest-1",
+                source="demo",
+                content="",
+                metadata={},
+            )
+            yield DocumentStarted(
+                timestamp=0.0,
+                pipeline_id="test",
+                doc_id=document.doc_id,
+                adapter="demo",
+                parameters={},
+            )
+            yield DocumentCompleted(
+                timestamp=0.1,
+                pipeline_id="test",
+                document=document,
+                duration=0.1,
+                adapter_metadata={},
+            )
+            yield BatchProgress(
+                timestamp=0.2,
+                pipeline_id="test",
+                completed_count=1,
+                failed_count=0,
+                in_flight_count=0,
+                queue_depth=0,
+                buffer_size=1,
+                remaining=0,
+                eta_seconds=None,
+                backpressure_wait_seconds=0.0,
+                backpressure_wait_count=0,
+                checkpoint_doc_ids=[document.doc_id],
+                is_checkpoint=True,
+            )
+
+    app.state.api_router._pipeline = _PipelineStub()
+
+    async def run() -> None:
+        async with HTTPX.AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            async with client.stream(
+                "POST",
+                "/ingestion/stream",
+                json={"adapter": "demo"},
+                headers=headers,
+            ) as response:
+                assert response.status_code == 200
+                body = await response.aread()
+                payload = body.decode("utf-8")
+                assert "Cache-Control" in response.headers
+                assert "no-cache" == response.headers["Cache-Control"]
+                events = [chunk for chunk in payload.split("\n\n") if chunk]
+                assert any("DocumentCompleted" in event for event in events)
+                data_lines = [line for line in payload.splitlines() if line.startswith("data:")]
+                parsed = [json.loads(line.removeprefix("data: ")) for line in data_lines]
+                assert parsed[1]["document"]["doc_id"] == "ingest-1"
 
     asyncio.run(run())

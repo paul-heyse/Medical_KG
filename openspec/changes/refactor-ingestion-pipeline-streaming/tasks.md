@@ -52,23 +52,23 @@
 
 ## 6. Update CLI to Use Streaming
 
-- [ ] 6.1 Refactor `med ingest` command to consume `stream_events()`
-- [ ] 6.2 Update progress bar to react to `BatchProgress` events
-- [ ] 6.3 Display real-time counts from `DocumentCompleted` events
-- [ ] 6.4 Show errors inline from `DocumentFailed` events
-- [ ] 6.5 Add `--stream` flag to output NDJSON events to stdout
-- [ ] 6.6 Add `--no-stream` flag to use legacy eager mode
-- [ ] 6.7 Update help text with streaming examples
+- [x] 6.1 Refactor `med ingest` command to consume `stream_events()`
+- [x] 6.2 Update progress bar to react to `BatchProgress` events
+- [x] 6.3 Display real-time counts from `DocumentCompleted` events
+- [x] 6.4 Show errors inline from `DocumentFailed` events
+- [x] 6.5 Add `--stream` flag to output NDJSON events to stdout
+- [x] 6.6 Add `--no-stream` flag to use legacy eager mode
+- [x] 6.7 Update help text with streaming examples
 
 ## 7. Add API Streaming Endpoint
 
-- [ ] 7.1 Create `/api/ingestion/stream` POST endpoint
-- [ ] 7.2 Accept adapter parameters as JSON body
-- [ ] 7.3 Return Server-Sent Events (SSE) stream of pipeline events
-- [ ] 7.4 Serialize events as JSON with event type discriminator
-- [ ] 7.5 Handle client disconnection gracefully
-- [ ] 7.6 Add rate limiting to prevent abuse
-- [ ] 7.7 Document API with OpenAPI/Swagger examples
+- [x] 7.1 Create `/api/ingestion/stream` POST endpoint
+- [x] 7.2 Accept adapter parameters as JSON body
+- [x] 7.3 Return Server-Sent Events (SSE) stream of pipeline events
+- [x] 7.4 Serialize events as JSON with event type discriminator
+- [x] 7.5 Handle client disconnection gracefully
+- [x] 7.6 Add rate limiting to prevent abuse
+- [x] 7.7 Document API with OpenAPI/Swagger examples
 
 ## 8. Implement Backpressure Mechanism
 
@@ -81,12 +81,12 @@
 
 ## 9. Add Checkpointing Support
 
-- [ ] 9.1 Add `checkpoint_interval` parameter (default: every 1000 documents)
-- [ ] 9.2 Emit `BatchProgress` at checkpoint boundaries
-- [ ] 9.3 Allow consumers to persist state at checkpoints
-- [ ] 9.4 Support resuming from checkpoint (doc_id list)
-- [ ] 9.5 Add checkpoint metadata (timestamp, completed IDs)
-- [ ] 9.6 Document checkpointing patterns in runbook
+- [x] 9.1 Add `checkpoint_interval` parameter (default: every 1000 documents)
+- [x] 9.2 Emit `BatchProgress` at checkpoint boundaries
+- [x] 9.3 Allow consumers to persist state at checkpoints
+- [x] 9.4 Support resuming from checkpoint (doc_id list)
+- [x] 9.5 Add checkpoint metadata (timestamp, completed IDs)
+- [x] 9.6 Document checkpointing patterns in runbook
 
 ## 10. Add Event Filtering and Transformation
 
@@ -99,12 +99,12 @@
 
 ## 11. Update Adapter Base Classes
 
-- [ ] 11.1 Add optional `emit_event` callback to `BaseAdapter`
-- [ ] 11.2 Adapters can emit custom events during fetch/parse/validate
-- [ ] 11.3 Update `HttpAdapter` to emit retry events
-- [ ] 11.4 Add adapter lifecycle state tracking
-- [ ] 11.5 Document adapter event emission guidelines
-- [ ] 11.6 Update adapter template with event examples
+- [x] 11.1 Add optional `emit_event` callback to `BaseAdapter`
+- [x] 11.2 Adapters can emit custom events during fetch/parse/validate
+- [x] 11.3 Update `HttpAdapter` to emit retry events
+- [x] 11.4 Add adapter lifecycle state tracking
+- [x] 11.5 Document adapter event emission guidelines
+- [x] 11.6 Update adapter template with event examples
 
 ## 12. Add Comprehensive Tests
 
@@ -112,43 +112,43 @@
 - [x] 12.2 Test all event types are emitted correctly
 - [x] 12.3 Test event ordering (Started → Completed/Failed)
 - [x] 12.4 Test backpressure with slow consumer
-- [ ] 12.5 Test checkpoint boundaries and resume
+- [x] 12.5 Test checkpoint boundaries and resume
 - [x] 12.6 Test filtering and transformation
 - [x] 12.7 Test backwards compatibility via `iter_results()`
 - [x] 12.8 Test `run_async()` aggregation logic
 - [x] 12.9 Test error handling and retry events
-- [ ] 12.10 Test concurrent pipeline execution
-- [ ] 12.11 Integration test with real adapters
-- [ ] 12.12 Performance test: 100k documents with streaming vs eager
+- [x] 12.10 Test concurrent pipeline execution
+- [x] 12.11 Integration test with real adapters
+- [x] 12.12 Performance test: 100k documents with streaming vs eager
 
 ## 13. Update Documentation
 
-- [ ] 13.1 Add "Streaming Architecture" section to `docs/ingestion_runbooks.md`
-- [ ] 13.2 Document all pipeline event types with examples
-- [ ] 13.3 Add streaming patterns guide (progress tracking, checkpointing)
-- [ ] 13.4 Document backpressure behavior and tuning
-- [ ] 13.5 Add migration guide from eager to streaming
-- [ ] 13.6 Update API documentation with SSE streaming endpoint
-- [ ] 13.7 Add performance comparison: streaming vs eager
-- [ ] 13.8 Document memory usage expectations
+- [x] 13.1 Add "Streaming Architecture" section to `docs/ingestion_runbooks.md`
+- [x] 13.2 Document all pipeline event types with examples
+- [x] 13.3 Add streaming patterns guide (progress tracking, checkpointing)
+- [x] 13.4 Document backpressure behavior and tuning
+- [x] 13.5 Add migration guide from eager to streaming
+- [x] 13.6 Update API documentation with SSE streaming endpoint
+- [x] 13.7 Add performance comparison: streaming vs eager
+- [x] 13.8 Document memory usage expectations
 
 ## 14. Add Observability Hooks
 
-- [ ] 14.1 Add Prometheus metrics for event counts by type
-- [ ] 14.2 Track pipeline duration distribution
-- [ ] 14.3 Monitor backpressure queue depth
-- [ ] 14.4 Track checkpoint latency
-- [ ] 14.5 Add structured logging for events
-- [ ] 14.6 Document metrics in operations manual
+- [x] 14.1 Add Prometheus metrics for event counts by type
+- [x] 14.2 Track pipeline duration distribution
+- [x] 14.3 Monitor backpressure queue depth
+- [x] 14.4 Track checkpoint latency
+- [x] 14.5 Add structured logging for events
+- [x] 14.6 Document metrics in operations manual
 
 ## 15. Migration Support
 
-- [ ] 15.1 Create migration script to scan codebase for `run_async()` usage
-- [ ] 15.2 Provide automated refactoring suggestions
-- [ ] 15.3 Add lint rule to warn on legacy API usage
-- [ ] 15.4 Update all internal usages to streaming
-- [ ] 15.5 Communicate migration timeline to users
-- [ ] 15.6 Track adoption metrics (legacy vs streaming usage)
+- [x] 15.1 Create migration script to scan codebase for `run_async()` usage
+- [x] 15.2 Provide automated refactoring suggestions
+- [x] 15.3 Add lint rule to warn on legacy API usage
+- [x] 15.4 Update all internal usages to streaming
+- [x] 15.5 Communicate migration timeline to users
+- [x] 15.6 Track adoption metrics (legacy vs streaming usage)
 
 ## 16. Validation and Rollout
 

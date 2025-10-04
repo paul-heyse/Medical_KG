@@ -22,6 +22,7 @@
 
 - Entry point: `med ingest <adapter> [options]` with a positional adapter argument validated against the registry.
 - Format selection: `--output text|json|table`, plus `--summary-only` for log-friendly output and `--show-timings` for runtime metrics.
+- Streaming control: `--stream` emits NDJSON pipeline events to stdout while summaries move to stderr, `--no-stream` retains the eager wrapper for legacy scripts that expect full materialisation.
 - Batch orchestration: `--batch path.ndjson` (chunked automatically with `--chunk-size`), `--id` for targeted document replays, and `--limit` to cap records.
 - Resume & auto pipelines: `--resume`, `--auto`, `--page-size`, `--start-date`, `--end-date`, and `--rate-limit` control long-running fetches.
 - Validation toggles: `--strict-validation`, `--skip-validation`, `--fail-fast`, `--dry-run`, and the new `--schema schema.json` guardrail to validate NDJSON rows against JSON Schema when available.
@@ -89,7 +90,69 @@ Running `med ingest --help` lists all adapters discovered in the registry and hi
   `BatchProgress` carries `backpressure_wait_seconds`/`backpressure_wait_count` so you can alert on the build-up.
 - Example patterns:
   - `event_filter=errors_only` to forward only `DocumentFailed` events into incident pipelines
-  - `event_transformer=lambda event: enrich(event)` to attach SLA metadata before publishing to SSE or WebSocket clients
+- `event_transformer=lambda event: enrich(event)` to attach SLA metadata before publishing to SSE or WebSocket clients
+
+### Streaming architecture overview
+
+- `IngestionPipeline.stream_events()` is the authoritative execution surface. All other helpers (`iter_results()`, `run_async()`) consume this stream so progress, backpressure, and failure data stay consistent.
+- Event queue backpressure is enforced via the `buffer_size` argument (default 100). When the consumer lags, the queue depth saturates and the adapter automatically pauses until space becomes available.
+- `BatchProgress` events now include `checkpoint_doc_ids` and an `is_checkpoint` flag, allowing orchestrators to persist progress atomically without replaying the entire stream.
+- Adapter authors can raise structured signals using `BaseAdapter.emit_event()`. The HTTP base adapter automatically emits `AdapterRetry` whenever the underlying client retries a request, exposing status codes and attempt counts.
+- Structured logging captures every emitted event at DEBUG level with JSON payloads so operators can replay executions by tailing the ingestion service logs.
+
+#### Event catalogue
+
+| Event | Description |
+| --- | --- |
+| `DocumentStarted` | Document handed to the adapter for parse/validate; includes adapter name and invocation parameters. |
+| `DocumentCompleted` | Successful parse/validate/write; payload contains the serialised `Document` and adapter metadata. |
+| `DocumentFailed` | Terminal failure; captures retry metadata (`retry_count`, `is_retryable`) and the exception type. |
+| `AdapterRetry` | HTTP transport issued a retry (status codes 429/502/503/504); exposes attempt number and upstream status. |
+| `BatchProgress` | Periodic heartbeat; now carries queue depth, ETA, backpressure metrics, and checkpoint doc IDs. |
+| `AdapterStateChange` | Lifecycle transitions for adapter startup, invocation boundaries, completion, or failure. |
+
+### Checkpointing recipes
+
+- Configure `checkpoint_interval` to the cadence that downstream storage can persist (e.g., 1,000 documents for S3 checkpoints). Each checkpoint event includes `checkpoint_doc_ids` so you can durably record the most recent batch.
+- Supply `completed_ids` when restarting a run to skip already-processed documents; the pipeline filters these before emitting `DocumentStarted`, preserving idempotence.
+- Combine checkpoint metadata with ledger snapshots for full recovery: store `checkpoint_doc_ids`, ledger offsets, and the `BatchProgress.timestamp` value to resume precisely where the previous run paused.
+
+#### Adapter template snippet
+
+```python
+class ExampleAdapter(HttpAdapter[JSONMapping]):
+    async def fetch(self, *_: Any, **__: Any) -> AsyncIterator[JSONMapping]:
+        for page in self._pages:
+            try:
+                yield await self._fetch_page(page)
+            except HTTPError as exc:
+                self.emit_event(
+                    AdapterRetry(
+                        timestamp=time.time(),
+                        pipeline_id="",
+                        adapter=self.source,
+                        attempt=getattr(exc, "request", {}).get("attempt", 1),
+                        error=str(exc),
+                        status_code=getattr(exc.response, "status_code", None),
+                    )
+                )
+                raise
+```
+
+Include `self.emit_event` calls at meaningful checkpoints (long-running fetch loops, retries, schema warnings) so downstream consumers receive the same visibility as first-party adapters.
+
+### Backpressure tuning
+
+- Monitor `BatchProgress.queue_depth` and `BatchProgress.buffer_size` to detect when consumers fall behind. Sustained ratios near 1 indicate downstream bottlenecks.
+- Alert on `backpressure_wait_seconds` and `backpressure_wait_count`. Rising values mean the producer is frequently pausing; consider increasing `buffer_size` or scaling consumers.
+- New Prometheus metrics (`ingest_pipeline_events_total`, `ingest_pipeline_queue_depth`, `ingest_pipeline_checkpoint_latency_seconds`, `ingest_pipeline_duration_seconds`, `ingest_pipeline_consumption_total`) expose event mix, queue health, checkpoint latencies, run-time distribution, and how far teams have migrated off eager wrappers.
+
+### Streaming API endpoint
+
+- `POST /api/ingestion/stream` returns Server-Sent Events (SSE) with the same event payloads produced by `stream_events()`. Each SSE message includes the event type in the `event:` field and the JSON body in `data:`.
+- Request body mirrors CLI options: `adapter`, optional `params` array, `resume`, `buffer_size`, `progress_interval`, `checkpoint_interval`, `completed_ids`, and `total_estimated`.
+- SSE responses set `Cache-Control: no-cache` and `X-Accel-Buffering: no` so intermediaries forward events immediately. Client disconnects are detected via `Request.is_disconnected()` to stop work promptly.
+- Rate limiting shares the same fixed-window policy as other APIs and returns `X-RateLimit-*` headers on the SSE response.
 
 ## Licensing Requirements
 

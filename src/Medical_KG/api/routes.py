@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import time
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi.responses import StreamingResponse
 
 from Medical_KG.api.auth import Authenticator, Principal, build_default_authenticator
 from Medical_KG.api.models import (
@@ -18,6 +22,7 @@ from Medical_KG.api.models import (
     HealthResponse,
     KgWriteRequest,
     KgWriteResponse,
+    IngestionStreamRequest,
     RetrieveRequest,
     RetrieveResponse,
     RetrieveResult,
@@ -31,6 +36,9 @@ from Medical_KG.facets.models import AdverseEventFacet, DoseFacet, EndpointFacet
 from Medical_KG.facets.service import Chunk as FacetChunk
 from Medical_KG.facets.service import FacetService
 from Medical_KG.kg.service import KgWriteFailure, KgWriteService
+from Medical_KG.ingestion.events import event_to_dict
+from Medical_KG.ingestion.ledger import IngestionLedger
+from Medical_KG.ingestion.pipeline import IngestionPipeline
 from Medical_KG.services.chunks import ChunkRepository
 from Medical_KG.services.retrieval import RetrievalResult as RetrievalResultModel
 from Medical_KG.services.retrieval import RetrievalService
@@ -115,6 +123,8 @@ class ApiRouter(APIRouter):
         extraction_service: ClinicalExtractionService | None = None,
         retrieval_service: RetrievalService | None = None,
         kg_service: KgWriteService | None = None,
+        ingestion_pipeline: IngestionPipeline | None = None,
+        ingestion_ledger: IngestionLedger | None = None,
     ) -> None:
         super().__init__()
         self._authenticator = authenticator or build_default_authenticator()
@@ -123,6 +133,10 @@ class ApiRouter(APIRouter):
         self._extractions = extraction_service or ClinicalExtractionService()
         self._retrieval = retrieval_service or RetrievalService()
         self._kg = kg_service or KgWriteService()
+        self._ingestion_ledger = ingestion_ledger or IngestionLedger(
+            Path(".ingest-ledger.jsonl")
+        )
+        self._pipeline = ingestion_pipeline or IngestionPipeline(self._ingestion_ledger)
         self._idempotency = IdempotencyCache()
         self._rate_limiter = RateLimiter(limit=30, window_seconds=60)
         self._register_routes()
@@ -257,6 +271,48 @@ class ApiRouter(APIRouter):
                 results=[self._map_result(result) for result in results],
                 query_meta={"facet_type": facet_type},
             )
+
+        @self.post("/ingestion/stream", tags=["ingestion"])
+        async def stream_ingestion(
+            payload: IngestionStreamRequest,
+            request: Request,
+            response: Response,
+            principal: Principal = Depends(self._require_scope("ingest:write")),
+        ) -> StreamingResponse:
+            self._apply_rate_limit(principal, response)
+            params_list = [dict(entry) for entry in payload.params] or None
+            completed_ids = payload.completed_ids or None
+
+            async def event_iterator() -> AsyncIterator[bytes]:
+                try:
+                    async for event in self._pipeline.stream_events(
+                        payload.adapter,
+                        params=params_list,
+                        resume=payload.resume,
+                        buffer_size=payload.buffer_size,
+                        progress_interval=payload.progress_interval,
+                        checkpoint_interval=payload.checkpoint_interval,
+                        completed_ids=completed_ids,
+                        total_estimated=payload.total_estimated,
+                    ):
+                        if await request.is_disconnected():
+                            break
+                        event_payload = json.dumps(event_to_dict(event))
+                        chunk = (
+                            f"event: {type(event).__name__}\n"
+                            f"data: {event_payload}\n\n"
+                        )
+                        yield chunk.encode("utf-8")
+                except Exception as exc:  # pragma: no cover - propagated to clients
+                    error_payload = json.dumps({"type": "error", "message": str(exc)})
+                    yield f"event: error\ndata: {error_payload}\n\n".encode("utf-8")
+
+            stream = StreamingResponse(event_iterator(), media_type="text/event-stream")
+            for key, value in response.headers.items():
+                stream.headers[key] = value
+            stream.headers["Cache-Control"] = "no-cache"
+            stream.headers.setdefault("X-Accel-Buffering", "no")
+            return stream
 
         @self.post("/extract/pico", response_model=ExtractionResponse, tags=["extract"])
         async def extract_pico(

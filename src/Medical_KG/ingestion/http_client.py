@@ -11,6 +11,7 @@ from time import time
 from types import TracebackType
 from typing import (
     AsyncIterator,
+    Callable,
     Generic,
     Mapping,
     MutableMapping,
@@ -129,6 +130,7 @@ class AsyncHttpClient:
         self._default_rate = default_rate or RateLimit(rate=5, per=1.0)
         self._limiters: dict[str, _SimpleLimiter] = {}
         self._retries = retries
+        self._retry_callback: Callable[[str, str, int, HTTPError], None] | None = None
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -162,6 +164,13 @@ class AsyncHttpClient:
             self._limiters[host] = _SimpleLimiter(limit.rate, limit.per)
         return self._limiters[host]
 
+    def bind_retry_callback(
+        self, callback: Callable[[str, str, int, HTTPError], None] | None
+    ) -> None:
+        """Register a callback invoked prior to retrying a request."""
+
+        self._retry_callback = callback
+
     async def _execute(self, method: str, url: str, **kwargs: object) -> ResponseProtocol:
         parsed = urlparse(url)
         limiter = self._get_limiter(parsed.netloc)
@@ -169,7 +178,7 @@ class AsyncHttpClient:
         async with limiter:
             backoff = 0.5
             last_error: Exception | None = None
-            for _ in range(self._retries):
+            for attempt in range(1, self._retries + 1):
                 try:
                     start = time()
                     response = await self._client.request(method, url, **kwargs)
@@ -187,6 +196,8 @@ class AsyncHttpClient:
                     HTTP_REQUESTS.labels(
                         method=method, host=parsed.netloc, status=exc.__class__.__name__
                     ).inc()
+                    if self._retry_callback is not None and attempt < self._retries:
+                        self._retry_callback(method, url, attempt, exc)
                     jitter = random.uniform(0, backoff / 2)
                     await asyncio.sleep(backoff + jitter)
                     backoff = min(backoff * 2, 5.0)

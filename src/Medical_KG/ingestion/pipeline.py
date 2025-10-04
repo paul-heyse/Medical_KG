@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import os
 import time
 import traceback
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Iterable, Sequence
 from datetime import datetime, timezone
 from typing import Any, Callable, Protocol
 
@@ -13,6 +14,7 @@ from Medical_KG.ingestion import registry as ingestion_registry
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
 from Medical_KG.ingestion.events import (
     AdapterStateChange,
+    AdapterRetry,
     BatchProgress,
     DocumentCompleted,
     DocumentFailed,
@@ -22,10 +24,19 @@ from Medical_KG.ingestion.events import (
     PipelineEvent,
     PipelineResult,
     build_pipeline_id,
+    event_to_dict,
 )
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion.models import Document
+from Medical_KG.utils.optional_dependencies import (
+    CounterProtocol,
+    GaugeProtocol,
+    HistogramProtocol,
+    build_counter,
+    build_gauge,
+    build_histogram,
+)
 
 
 class AdapterRegistry(Protocol):
@@ -44,6 +55,36 @@ _DEFAULT_BUFFER_SIZE = 100
 _DEFAULT_PROGRESS_INTERVAL = 100
 _DEFAULT_CHECKPOINT_INTERVAL = 1000
 _LEGACY_WARNING_ENV = "MEDICAL_KG_SUPPRESS_PIPELINE_DEPRECATION"
+
+
+LOGGER = logging.getLogger(__name__)
+
+PIPELINE_EVENT_COUNTER: CounterProtocol = build_counter(
+    "ingest_pipeline_events_total",
+    "Number of ingestion pipeline events emitted",
+    ("event_type", "adapter"),
+)
+PIPELINE_DURATION_SECONDS: HistogramProtocol = build_histogram(
+    "ingest_pipeline_duration_seconds",
+    "Duration of ingestion pipeline executions",
+    (0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0),
+)
+PIPELINE_QUEUE_DEPTH: GaugeProtocol = build_gauge(
+    "ingest_pipeline_queue_depth",
+    "Depth of the ingestion pipeline event queue",
+    ("adapter",),
+)
+PIPELINE_CHECKPOINT_LATENCY: HistogramProtocol = build_histogram(
+    "ingest_pipeline_checkpoint_latency_seconds",
+    "Latency between checkpoint progress events",
+    (0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0),
+)
+
+PIPELINE_CONSUMPTION_COUNTER: CounterProtocol = build_counter(
+    "ingest_pipeline_consumption_total",
+    "Number of ingestion pipeline consumptions by mode",
+    ("mode", "adapter"),
+)
 
 
 class IngestionPipeline:
@@ -69,7 +110,21 @@ class IngestionPipeline:
     ) -> list[PipelineResult]:
         """Execute an adapter synchronously."""
 
-        return asyncio.run(self.run_async(source, params=params, resume=resume))
+        return asyncio.run(
+            self._collect_results(
+                source,
+                params=params,
+                resume=resume,
+                buffer_size=_DEFAULT_BUFFER_SIZE,
+                progress_interval=_DEFAULT_PROGRESS_INTERVAL,
+                checkpoint_interval=_DEFAULT_CHECKPOINT_INTERVAL,
+                event_filter=None,
+                event_transformer=None,
+                completed_ids=None,
+                total_estimated=None,
+                consumption_mode="run_sync",
+            )
+        )
 
     async def run_async(
         self,
@@ -92,42 +147,19 @@ class IngestionPipeline:
         observability-friendly, backpressured consumption of pipeline activity.
         """
 
-        invocations = self._normalise_params(params)
-        results: list[PipelineResult] = []
-        for invocation in invocations:
-            documents: list[Document] = []
-            failures: list[DocumentFailed] = []
-            started_at_dt = self._utcnow()
-            stream = self.stream_events(
-                source,
-                params=None if invocation is None else [invocation],
-                resume=resume,
-                buffer_size=buffer_size,
-                progress_interval=progress_interval,
-                checkpoint_interval=checkpoint_interval,
-                event_filter=event_filter,
-                event_transformer=event_transformer,
-                completed_ids=completed_ids,
-                total_estimated=total_estimated,
-            )
-            async for event in stream:
-                if isinstance(event, DocumentCompleted):
-                    documents.append(event.document)
-                elif isinstance(event, DocumentFailed):
-                    failures.append(event)
-            completed_at_dt = self._utcnow()
-            results.append(
-                PipelineResult(
-                    source=source,
-                    documents=documents,
-                    errors=failures,
-                    success_count=len(documents),
-                    failure_count=len(failures),
-                    started_at=started_at_dt,
-                    completed_at=completed_at_dt,
-                )
-            )
-        return results
+        return await self._collect_results(
+            source,
+            params=params,
+            resume=resume,
+            buffer_size=buffer_size,
+            progress_interval=progress_interval,
+            checkpoint_interval=checkpoint_interval,
+            event_filter=event_filter,
+            event_transformer=event_transformer,
+            completed_ids=completed_ids,
+            total_estimated=total_estimated,
+            consumption_mode="run_async",
+        )
 
     def status(self) -> dict[str, list[dict[str, Any]]]:
         summary: dict[str, list[dict[str, Any]]] = {}
@@ -171,6 +203,7 @@ class IngestionPipeline:
                 event_transformer=event_transformer,
                 completed_ids=completed_ids,
                 total_estimated=total_estimated,
+                _consumption_mode="iter_results",
             ):
                 if isinstance(event, DocumentCompleted):
                     yield event.document
@@ -197,12 +230,77 @@ class IngestionPipeline:
 
             warnings.warn(
                 "IngestionPipeline.run_async_legacy is deprecated and will be removed after the migration window. "
-                "Use stream_events() or run_async() instead.",
+                "Use stream_events() or the run_async helper instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
-        results = await self.run_async(source, params=params, resume=resume)
+        results = await self._collect_results(
+            source,
+            params=params,
+            resume=resume,
+            buffer_size=_DEFAULT_BUFFER_SIZE,
+            progress_interval=_DEFAULT_PROGRESS_INTERVAL,
+            checkpoint_interval=_DEFAULT_CHECKPOINT_INTERVAL,
+            event_filter=None,
+            event_transformer=None,
+            completed_ids=None,
+            total_estimated=None,
+            consumption_mode="run_async_legacy",
+        )
         self._log_legacy_usage(source)
+        return results
+
+    async def _collect_results(
+        self,
+        source: str,
+        *,
+        params: Iterable[dict[str, Any]] | None,
+        resume: bool,
+        buffer_size: int,
+        progress_interval: int,
+        checkpoint_interval: int,
+        event_filter: EventFilter | None,
+        event_transformer: EventTransformer | None,
+        completed_ids: Iterable[str] | None,
+        total_estimated: int | None,
+        consumption_mode: str,
+    ) -> list[PipelineResult]:
+        invocations = self._normalise_params(params)
+        results: list[PipelineResult] = []
+        for invocation in invocations:
+            documents: list[Document] = []
+            failures: list[DocumentFailed] = []
+            started_at_dt = self._utcnow()
+            stream = self.stream_events(
+                source,
+                params=None if invocation is None else [invocation],
+                resume=resume,
+                buffer_size=buffer_size,
+                progress_interval=progress_interval,
+                checkpoint_interval=checkpoint_interval,
+                event_filter=event_filter,
+                event_transformer=event_transformer,
+                completed_ids=completed_ids,
+                total_estimated=total_estimated,
+                _consumption_mode=consumption_mode,
+            )
+            async for event in stream:
+                if isinstance(event, DocumentCompleted):
+                    documents.append(event.document)
+                elif isinstance(event, DocumentFailed):
+                    failures.append(event)
+            completed_at_dt = self._utcnow()
+            results.append(
+                PipelineResult(
+                    source=source,
+                    documents=documents,
+                    errors=failures,
+                    success_count=len(documents),
+                    failure_count=len(failures),
+                    started_at=started_at_dt,
+                    completed_at=completed_at_dt,
+                )
+            )
         return results
 
     async def stream_events(
@@ -218,6 +316,7 @@ class IngestionPipeline:
         event_transformer: EventTransformer | None = None,
         completed_ids: Iterable[str] | None = None,
         total_estimated: int | None = None,
+        _consumption_mode: str | None = None,
     ) -> AsyncIterator[PipelineEvent]:
         """Stream structured pipeline events with backpressure support.
 
@@ -227,6 +326,8 @@ class IngestionPipeline:
         ``event_transformer`` callbacks to declaratively tailor the stream.
         """
 
+        mode = _consumption_mode or "stream"
+        self._record_consumption(mode, source)
         pipeline_id = build_pipeline_id(source)
         queue: asyncio.Queue[PipelineEvent | object] = asyncio.Queue(maxsize=max(buffer_size, 1))
         sentinel = object()
@@ -244,6 +345,10 @@ class IngestionPipeline:
         start_time = time.perf_counter()
         backpressure_wait_seconds = 0.0
         backpressure_wait_count = 0
+        completed_since_checkpoint: list[str] = []
+        last_checkpoint_at = start_time
+        queue_gauge = PIPELINE_QUEUE_DEPTH.labels(adapter=source)
+        queue_gauge.set(0.0)
 
         async def emit(event: PipelineEvent) -> None:
             transformed = transform_fn(event)
@@ -252,12 +357,44 @@ class IngestionPipeline:
             if not filter_fn(transformed):
                 return
             nonlocal backpressure_wait_seconds, backpressure_wait_count
+            event_type = type(transformed).__name__
+            PIPELINE_EVENT_COUNTER.labels(
+                event_type=event_type, adapter=source
+            ).inc()
+            LOGGER.debug("pipeline_event", extra={"event": event_to_dict(transformed)})
             wait_started = time.perf_counter()
             await queue.put(transformed)
             waited = time.perf_counter() - wait_started
             if waited > 0:
                 backpressure_wait_seconds += waited
                 backpressure_wait_count += 1
+
+        async def emit_progress(*, is_checkpoint: bool) -> None:
+            nonlocal completed_since_checkpoint, last_checkpoint_at
+            docs_for_checkpoint = (
+                list(completed_since_checkpoint) if is_checkpoint else []
+            )
+            event = self._build_progress_event(
+                pipeline_id,
+                completed_total,
+                failed_total,
+                in_flight_count,
+                estimated_total,
+                start_time,
+                queue.qsize(),
+                queue.maxsize,
+                backpressure_wait_seconds,
+                backpressure_wait_count,
+                docs_for_checkpoint,
+                is_checkpoint,
+            )
+            queue_gauge.set(float(event.queue_depth))
+            if is_checkpoint:
+                latency = max(time.perf_counter() - last_checkpoint_at, 0.0)
+                PIPELINE_CHECKPOINT_LATENCY.observe(latency)
+                completed_since_checkpoint.clear()
+                last_checkpoint_at = time.perf_counter()
+            await emit(event)
 
         async def producer() -> None:
             nonlocal completed_total, failed_total, completed_checkpoint, in_flight_count
@@ -342,42 +479,17 @@ class IngestionPipeline:
                                         )
                                     )
                                     completed_total += 1
+                                    completed_since_checkpoint.append(document.doc_id)
                                     in_flight_count = max(in_flight_count - 1, 0)
                                     completed_checkpoint += 1
                                     if progress_interval > 0 and completed_total % progress_interval == 0:
-                                        await emit(
-                                            self._build_progress_event(
-                                                pipeline_id,
-                                                completed_total,
-                                                failed_total,
-                                                in_flight_count,
-                                                estimated_total,
-                                                start_time,
-                                                queue.qsize(),
-                                                queue.maxsize,
-                                                backpressure_wait_seconds,
-                                                backpressure_wait_count,
-                                            )
-                                        )
+                                        await emit_progress(is_checkpoint=False)
                                     if (
                                         checkpoint_target is not None
                                         and completed_checkpoint >= checkpoint_target
                                     ):
                                         completed_checkpoint = 0
-                                        await emit(
-                                            self._build_progress_event(
-                                                pipeline_id,
-                                                completed_total,
-                                                failed_total,
-                                                in_flight_count,
-                                                estimated_total,
-                                                start_time,
-                                                queue.qsize(),
-                                                queue.maxsize,
-                                                backpressure_wait_seconds,
-                                                backpressure_wait_count,
-                                            )
-                                        )
+                                        await emit_progress(is_checkpoint=True)
                             except Exception as exc:  # pragma: no cover - defensive
                                 failed_total += 1
                                 in_flight_count = max(in_flight_count - 1, 0)
@@ -429,19 +541,9 @@ class IngestionPipeline:
                     )
                 )
             finally:
-                await emit(
-                    self._build_progress_event(
-                        pipeline_id,
-                        completed_total,
-                        failed_total,
-                        in_flight_count,
-                        estimated_total,
-                        start_time,
-                        queue.qsize(),
-                        queue.maxsize,
-                        backpressure_wait_seconds,
-                        backpressure_wait_count,
-                    )
+                await emit_progress(is_checkpoint=True)
+                PIPELINE_DURATION_SECONDS.observe(
+                    max(time.perf_counter() - start_time, 0.0)
                 )
                 await queue.put(sentinel)
 
@@ -454,6 +556,7 @@ class IngestionPipeline:
                     break
                 yield item  # type: ignore[misc]
         finally:
+            queue_gauge.set(0.0)
             if not producer_task.done():
                 producer_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -487,6 +590,8 @@ class IngestionPipeline:
         buffer_size: int,
         backpressure_wait_seconds: float,
         backpressure_wait_count: int,
+        checkpoint_doc_ids: Sequence[str],
+        is_checkpoint: bool,
     ) -> BatchProgress:
         elapsed = max(time.perf_counter() - start_time, 0.0)
         processed = completed_total + failed_total
@@ -510,6 +615,8 @@ class IngestionPipeline:
             eta_seconds=eta_seconds,
             backpressure_wait_seconds=max(backpressure_wait_seconds, 0.0),
             backpressure_wait_count=max(backpressure_wait_count, 0),
+            checkpoint_doc_ids=list(checkpoint_doc_ids),
+            is_checkpoint=is_checkpoint,
         )
 
     @staticmethod
@@ -523,6 +630,10 @@ class IngestionPipeline:
         logging.getLogger(__name__).info(
             "run_async_legacy invoked for adapter %s", source
         )
+
+    @staticmethod
+    def _record_consumption(mode: str, adapter: str) -> None:
+        PIPELINE_CONSUMPTION_COUNTER.labels(mode=mode, adapter=adapter).inc()
 
 
 __all__ = [

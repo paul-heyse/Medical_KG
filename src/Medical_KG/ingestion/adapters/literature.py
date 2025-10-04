@@ -27,12 +27,13 @@ import re
 import xml.etree.ElementTree as ET
 from collections.abc import AsyncIterator, Mapping
 from collections.abc import Sequence as SequenceABC
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterable, Iterator, Sequence
 from urllib.parse import urlparse
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
 from Medical_KG.ingestion.http_client import AsyncHttpClient, RateLimit
+from Medical_KG.ingestion.telemetry import HttpTelemetry
 from Medical_KG.ingestion.models import Document
 from Medical_KG.ingestion.types import (
     JSONMapping,
@@ -86,9 +87,19 @@ class PubMedAdapter(HttpAdapter[Any]):
     source = "pubmed"
 
     def __init__(
-        self, context: AdapterContext, client: AsyncHttpClient, *, api_key: str | None = None
+        self,
+        context: AdapterContext,
+        client: AsyncHttpClient,
+        *,
+        api_key: str | None = None,
+        telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+        )
+        | None = None,
     ) -> None:
-        super().__init__(context, client)
+        super().__init__(context, client, telemetry=telemetry)
         self.api_key = api_key
         host = urlparse(PUBMED_SEARCH_URL).netloc
         rate = RateLimit(rate=10 if api_key else 3, per=1.0)
@@ -405,8 +416,19 @@ class PubMedAdapter(HttpAdapter[Any]):
 class PmcAdapter(HttpAdapter[ET.Element]):
     source = "pmc"
 
-    def __init__(self, context: AdapterContext, client: AsyncHttpClient) -> None:
-        super().__init__(context, client)
+    def __init__(
+        self,
+        context: AdapterContext,
+        client: AsyncHttpClient,
+        *,
+        telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+        )
+        | None = None,
+    ) -> None:
+        super().__init__(context, client, telemetry=telemetry)
         host = urlparse(PMC_LIST_URL).netloc
         self.client.set_rate_limit(host, RateLimit(rate=3, per=1.0))
 
@@ -579,8 +601,14 @@ class MedRxivAdapter(HttpAdapter[JSONMapping]):
         client: AsyncHttpClient,
         *,
         bootstrap_records: Iterable[JSONMapping] | None = None,
+        telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+        )
+        | None = None,
     ) -> None:
-        super().__init__(context, client)
+        super().__init__(context, client, telemetry=telemetry)
         self._bootstrap = list(bootstrap_records or [])
 
     async def fetch(

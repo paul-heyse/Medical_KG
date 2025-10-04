@@ -649,7 +649,13 @@ def build_counter(name: str, documentation: str, labelnames: Sequence[str]) -> C
     return cast(CounterProtocol, counter)
 
 
-def build_histogram(name: str, documentation: str, buckets: Sequence[float]) -> HistogramProtocol:
+def build_histogram(
+    name: str,
+    documentation: str,
+    buckets: Sequence[float],
+    *,
+    labelnames: Sequence[str] | None = None,
+) -> HistogramProtocol:
     """Construct a Prometheus histogram or a typed no-op substitute."""
 
     try:
@@ -663,7 +669,12 @@ def build_histogram(name: str, documentation: str, buckets: Sequence[float]) -> 
     histogram_cls = getattr(prom_module, "Histogram", None)
     if histogram_cls is None:
         return _NoopHistogram()
-    histogram = histogram_cls(name, documentation, buckets=buckets)
+    histogram: "prometheus_client.Histogram" = PromHistogram(
+        name,
+        documentation,
+        buckets=buckets,
+        labelnames=labelnames,
+    )
     return cast(HistogramProtocol, histogram)
 
 

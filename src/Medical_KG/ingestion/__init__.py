@@ -5,6 +5,18 @@ from .ledger import IngestionLedger
 from .models import Document, IngestionResult
 from .pipeline import IngestionPipeline, PipelineResult
 from .registry import available_sources, get_adapter
+from .telemetry import (
+    CompositeTelemetry,
+    HttpBackoffEvent,
+    HttpErrorEvent,
+    HttpRequestEvent,
+    HttpResponseEvent,
+    HttpRetryEvent,
+    LoggingTelemetry,
+    PrometheusTelemetry,
+    TracingTelemetry,
+    generate_request_id,
+)
 
 __all__ = [
     "AsyncHttpClient",
@@ -15,4 +27,14 @@ __all__ = [
     "PipelineResult",
     "available_sources",
     "get_adapter",
+    "CompositeTelemetry",
+    "HttpBackoffEvent",
+    "HttpErrorEvent",
+    "HttpRequestEvent",
+    "HttpResponseEvent",
+    "HttpRetryEvent",
+    "LoggingTelemetry",
+    "PrometheusTelemetry",
+    "TracingTelemetry",
+    "generate_request_id",
 ]

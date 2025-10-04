@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from Medical_KG.ingestion.ledger import IngestionLedger
+from Medical_KG.ingestion.ledger import IngestionLedger, LedgerState
 from Medical_KG.ingestion.types import JSONValue
 from Medical_KG.ingestion.utils import ensure_json_value
 
@@ -126,7 +126,11 @@ class PdfPipeline:
 
     def process(self, document: PdfDocument) -> Mapping[str, object]:
         ensure_gpu(require_flag=True)
-        self._ledger.record(document.doc_key, "mineru_inflight")
+        self._ledger.update_state(
+            document.doc_key,
+            LedgerState.IR_BUILDING,
+            adapter="mineru",
+        )
         run = self._mineru.run(document.local_path, document.doc_key)
         blocks = self._load_blocks(run)
         tables = self._load_tables(run)
@@ -179,7 +183,12 @@ class PdfPipeline:
             "figures": ensure_json_value(figures, context="mineru figures"),
             "qa_metrics": ensure_json_value(asdict(metrics), context="qa metrics"),
         }
-        self._ledger.record(document.doc_key, "pdf_ir_ready", metadata)
+        self._ledger.update_state(
+            document.doc_key,
+            LedgerState.IR_READY,
+            metadata=metadata,
+            adapter="mineru",
+        )
         return metadata
 
 

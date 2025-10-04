@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Mapping
 
+from Medical_KG.ingestion.ledger import LedgerState
 from Medical_KG.ingestion.types import DocumentRaw, JSONMapping, MutableJSONMapping
 
 
@@ -34,6 +35,6 @@ class Document:
 @dataclass(slots=True)
 class IngestionResult:
     document: Document
-    state: str
+    state: LedgerState
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: JSONMapping = field(default_factory=dict)

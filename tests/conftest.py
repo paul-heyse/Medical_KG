@@ -213,7 +213,13 @@ if "httpx" not in sys.modules:
         sys.modules["httpx"] = httpx_module
 
 
-from Medical_KG.ingestion.ledger import LedgerEntry  # noqa: E402
+from Medical_KG.ingestion.ledger import (  # noqa: E402
+    LedgerAuditRecord,
+    LedgerDocumentState,
+    LedgerState,
+    coerce_state,
+    validate_transition,
+)
 from Medical_KG.ingestion.models import Document  # noqa: E402
 from Medical_KG.retrieval.models import (  # noqa: E402
     RetrievalRequest,
@@ -372,32 +378,74 @@ def _statement_lines(path: Path) -> set[int]:
 
 @dataclass
 class FakeLedger:
-    """In-memory ledger that mirrors :class:`IngestionLedger`."""
+    """In-memory ledger mirroring :class:`IngestionLedger` behaviour."""
 
-    records: MutableMapping[str, LedgerEntry] = field(default_factory=dict)
-    writes: list[LedgerEntry] = field(default_factory=list)
+    records: MutableMapping[str, LedgerDocumentState] = field(default_factory=dict)
+    writes: list[LedgerAuditRecord] = field(default_factory=list)
 
-    def record(
-        self, doc_id: str, state: str, metadata: Mapping[str, Any] | None = None
-    ) -> LedgerEntry:
-        entry = LedgerEntry(
+    def update_state(
+        self,
+        doc_id: str,
+        state: LedgerState,
+        *,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> LedgerAuditRecord:
+        existing = self.records.get(doc_id)
+        old_state = existing.state if existing else LedgerState.LEGACY
+        validate_transition(old_state, state)
+        now = datetime.now(timezone.utc)
+        audit = LedgerAuditRecord(
             doc_id=doc_id,
-            state=state,
-            timestamp=datetime.now(timezone.utc),
+            old_state=old_state,
+            new_state=state,
+            timestamp=now.timestamp(),
+            adapter=None,
             metadata=dict(metadata or {}),
         )
-        self.records[doc_id] = entry
-        self.writes.append(entry)
-        return entry
+        if existing is None:
+            document = LedgerDocumentState(
+                doc_id=doc_id,
+                state=state,
+                updated_at=now,
+                metadata=dict(metadata or {}),
+                history=[audit],
+            )
+            self.records[doc_id] = document
+        else:
+            existing.state = state
+            existing.updated_at = now
+            existing.metadata = dict(metadata or {})
+            existing.history.append(audit)
+        self.writes.append(audit)
+        return audit
 
-    def get(self, doc_id: str) -> LedgerEntry | None:
+    def record(
+        self,
+        doc_id: str,
+        state: LedgerState | str,
+        metadata: Mapping[str, Any] | None = None,
+        *,
+        adapter: str | None = None,
+        error: BaseException | None = None,
+        retry_count: int | None = None,
+        duration_seconds: float | None = None,
+        parameters: Mapping[str, Any] | None = None,
+    ) -> LedgerAuditRecord:
+        del adapter, error, retry_count, duration_seconds, parameters
+        coerced = coerce_state(state)
+        return self.update_state(doc_id, coerced, metadata=metadata)
+
+    def get(self, doc_id: str) -> LedgerDocumentState | None:
         return self.records.get(doc_id)
 
-    def entries(self, *, state: str | None = None) -> Iterable[LedgerEntry]:
+    def entries(
+        self, *, state: LedgerState | str | None = None
+    ) -> Iterable[LedgerDocumentState]:
         values = list(self.records.values())
         if state is None:
             return values
-        return [entry for entry in values if entry.state == state]
+        coerced = coerce_state(state)
+        return [entry for entry in values if entry.state == coerced]
 
 
 @dataclass

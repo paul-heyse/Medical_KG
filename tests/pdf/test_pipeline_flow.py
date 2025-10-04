@@ -5,6 +5,7 @@ from typing import Dict, Mapping
 
 import pytest
 
+from Medical_KG.ingestion.ledger import LedgerAuditRecord, LedgerState, coerce_state
 from Medical_KG.pdf.mineru import MinerUArtifacts, MinerURunResult
 from Medical_KG.pdf.postprocess import TextBlock
 from Medical_KG.pdf.qa import QaGates, QaMetrics
@@ -18,12 +19,31 @@ from tests.fixtures.pdf_samples import (
 
 class RecordingLedger:
     def __init__(self) -> None:
-        self.records: list[tuple[str, str, Mapping[str, object] | None]] = []
+        self.records: list[tuple[str, LedgerState, Mapping[str, object] | None]] = []
+
+    def update_state(
+        self,
+        doc_key: str,
+        state: LedgerState,
+        *,
+        metadata: Mapping[str, object] | None = None,
+        **_: object,
+    ) -> LedgerAuditRecord:
+        self.records.append((doc_key, state, metadata))
+        return LedgerAuditRecord(
+            doc_id=doc_key,
+            old_state=LedgerState.LEGACY,
+            new_state=state,
+            timestamp=0.0,
+            adapter=None,
+            metadata=dict(metadata or {}),
+        )
 
     def record(
         self, doc_key: str, state: str, metadata: Mapping[str, object] | None = None
-    ) -> None:
-        self.records.append((doc_key, state, metadata))
+    ) -> LedgerAuditRecord:
+        coerced = coerce_state(state)
+        return self.update_state(doc_key, coerced, metadata=metadata)
 
 
 class RecordingArtifactStore(ArtifactStore):
@@ -140,7 +160,10 @@ def test_pdf_pipeline_end_to_end(
     qa: RecordingQa = pipeline_components["qa"]
     artifact_store: RecordingArtifactStore = pipeline_components["artifact_store"]
 
-    assert [state for _, state, _ in ledger.records] == ["mineru_inflight", "pdf_ir_ready"]
+    assert [state for _, state, _ in ledger.records] == [
+        LedgerState.IR_BUILDING,
+        LedgerState.IR_READY,
+    ]
     assert metadata["mineru_artifacts"]["markdown_uri"].endswith("markdown.json")
     assert metadata["mineru_cli_args"][0] == "mineru"
     assert metadata["qa_metrics"]["reading_order_score"] == pytest.approx(0.95)

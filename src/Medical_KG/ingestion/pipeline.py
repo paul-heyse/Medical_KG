@@ -127,7 +127,7 @@ class IngestionPipeline:
     def status(self) -> dict[str, list[dict[str, Any]]]:
         summary: dict[str, list[dict[str, Any]]] = {}
         for entry in self.ledger.entries():
-            summary.setdefault(entry.state, []).append(
+            summary.setdefault(entry.state.value, []).append(
                 {"doc_id": entry.doc_id, "metadata": dict(entry.metadata)}
             )
         return summary

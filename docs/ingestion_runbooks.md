@@ -9,6 +9,53 @@
 - **RxNav** – register at <https://rxnav.nlm.nih.gov/> for `RXNAV_APP_ID`/`RXNAV_APP_KEY`.
 - **CDC / WHO open data** – configure `CDC_SOCRATA_APP_TOKEN` and `WHO_GHO_APP_TOKEN` for higher throttling tiers.
 
+## Ledger State Machine
+
+- **States** – ingestion transitions are constrained to the `LedgerState` enum (`pending → fetching → fetched → parsing → parsed → validating → validated → ir_building → ir_ready → embedding → indexed → completed`). Error branches move to `failed`, optionally cycling through `retrying`. Terminal outcomes are `completed`, `failed`, and `skipped`.
+- **Transition graph** – invalid edges raise `InvalidStateTransition` and increment the `med_ledger_errors_total` counter. The ASCII diagram below mirrors the implementation in `Medical_KG.ingestion.ledger`:
+
+```
+[PENDING] -> [FETCHING] -> [FETCHED] -> [PARSING] -> [PARSED] -> [VALIDATING]
+                                                              |
+                                                              v
+                                                         [VALIDATED]
+                                                              |
+                                                              v
+[IR_BUILDING] -> [IR_READY] -> [EMBEDDING] -> [INDEXED] -> [COMPLETED]
+
+Retry loop: any retryable state -> [RETRYING] -> [FETCHING]
+Failure: any stage can fall back to [FAILED]
+```
+
+- **State semantics** – PDF ingestion now emits `ir_building` during MinerU execution, `ir_ready` when artifacts are persisted, and `embedding` when downstream processors are triggered. Legacy string values (`pdf_downloaded`, `mineru_inflight`, `auto_done`, …) are coerced automatically for historical records but emit deprecation warnings when observed at runtime.
+
+### Snapshots and Compaction
+
+- Snapshots live beside the ledger at `ledger.snapshots/snapshot-<timestamp>.json` and contain the full document state plus audit history. The append-only JSONL file now acts purely as a delta log.
+- `IngestionLedger` checks for a snapshot on initialisation, then applies the delta log, yielding O(1) startup time regardless of historical volume.
+- Automatic compaction runs daily (configurable via `auto_snapshot_interval`) and truncates the delta log after a successful snapshot. Manual compaction is available via `med ledger compact`.
+- Previous snapshots are rotated automatically, retaining the most recent seven by default.
+
+### CLI Utilities
+
+- `med ledger stats` prints the live document count per state, matching the Prometheus gauge `med_ledger_documents_by_state`.
+- `med ledger stuck --hours 12` surfaces documents lingering in non-terminal states beyond the threshold and logs a warning for alerting systems.
+- `med ledger history <doc_id>` renders the structured audit timeline pulled from the JSONL delta log.
+- `med ledger migrate` wraps the migration helper and can perform dry runs (`--dry-run`) before writing enum-based audit records.
+
+### Metrics and Alerting
+
+- Counters: `med_ledger_state_transitions_total` (labelled by `from_state`/`to_state`), `med_ledger_initialization_total` (snapshot vs. full load), `med_ledger_errors_total` (invalid transitions, serialization failures).
+- Gauges: `med_ledger_documents_by_state`, `med_ledger_stuck_documents` (non-terminal backlog).
+- Histogram: `med_ledger_state_duration_seconds` observes time spent in each state prior to transition.
+- Dashboard recommendations: chart distribution, track retry loops, and alert on sustained growth in `failed`/`retrying` buckets.
+
+### Migration Process
+
+- Use `scripts/migrate_ledger_to_state_machine.py --input ledger.jsonl --output migrated.jsonl --progress 1000` to convert legacy rows. The tool backs up the original file (`.bak`) unless `--no-backup` is supplied and validates the result by instantiating `IngestionLedger`.
+- Dry runs (`--dry-run`) parse the legacy ledger, apply state coercion, and report invalid historical transitions without touching disk.
+- After migration, run `med ledger validate --ledger-path migrated.jsonl` to confirm the new audit log loads cleanly before swapping into production.
+
 ## Runbooks for Common Failures
 
 | Scenario | Detection | Mitigation |

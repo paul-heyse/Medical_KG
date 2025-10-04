@@ -5,8 +5,8 @@ from __future__ import annotations
 import dataclasses
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Callable, Iterable, Mapping, MutableMapping, Sequence
+from datetime import datetime
+from typing import Any, Callable, Mapping, MutableMapping
 
 from Medical_KG.ingestion.models import Document
 

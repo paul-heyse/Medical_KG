@@ -20,7 +20,7 @@ from Medical_KG.ingestion.cli_helpers import (
     load_ndjson_batch,
     should_display_progress,
 )
-from Medical_KG.ingestion.ledger import IngestionLedger
+from Medical_KG.ingestion.ledger import IngestionLedger, LedgerState
 from Medical_KG.ingestion.models import Document, IngestionResult
 from Medical_KG.ingestion.pipeline import PipelineResult
 
@@ -47,7 +47,7 @@ class _StubAdapter(BaseAdapter):
     async def iter_results(self, **kwargs: Any) -> Iterable[IngestionResult]:
         for record in self._records:
             document = self.parse(record)
-            yield IngestionResult(document=document, state="auto_done")
+            yield IngestionResult(document=document, state=LedgerState.COMPLETED)
 
 
 class _Registry:
@@ -142,8 +142,8 @@ def test_format_cli_error_includes_remediation() -> None:
 
 def test_handle_ledger_resume_returns_stats(tmp_path: Path) -> None:
     ledger = IngestionLedger(tmp_path / "ledger.jsonl")
-    ledger.record("doc-1", "auto_done", {})
-    ledger.record("doc-2", "auto_failed", {})
+    ledger.update_state("doc-1", LedgerState.COMPLETED)
+    ledger.update_state("doc-2", LedgerState.FAILED)
 
     plan = handle_ledger_resume(ledger)
     assert plan.resume_ids == ["doc-2"]
@@ -152,7 +152,7 @@ def test_handle_ledger_resume_returns_stats(tmp_path: Path) -> None:
 
 def test_handle_ledger_resume_filters_candidates(tmp_path: Path) -> None:
     ledger = IngestionLedger(tmp_path / "ledger.jsonl")
-    ledger.record("doc-1", "auto_done", {})
+    ledger.update_state("doc-1", LedgerState.COMPLETED)
 
     plan = handle_ledger_resume(ledger, candidate_doc_ids=["doc-1", "doc-2"])
     assert plan.resume_ids == ["doc-2"]

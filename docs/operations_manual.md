@@ -22,6 +22,7 @@ Central index for Medical KG runbooks, contacts, and cadences.
 | Incident response & comms         | `ops/runbooks/05-incident-response.md`       |
 | Catalog refresh / license checks  | `ops/runbooks/06-catalog-refresh.md`         |
 | Unified ingestion CLI operations  | `docs/ingestion_runbooks.md`                 |
+| Ledger state machine & compaction | `docs/ingestion_runbooks.md#ledger-state-machine` |
 | Datastore failover (Neo4j/OS)     | `ops/runbooks/07-datastore-failover.md`      |
 | Briefing generation gaps          | `ops/runbooks/08-briefing-troubleshooting.md` |
 | Unified ingestion CLI operations  | `docs/ingestion_cli_reference.md`             |
@@ -49,6 +50,12 @@ Central index for Medical KG runbooks, contacts, and cadences.
 - Quarterly DR drill – execute `ops/release/pipeline.md` on staging + restore from backup.
 
 Refer to `docs/continuous_improvement.md` for KPIs and retrospection process.
+
+## Ledger Health Dashboards
+
+- **Prometheus metrics** – scrape `med_ledger_documents_by_state`, `med_ledger_state_transitions_total`, `med_ledger_state_duration_seconds`, and `med_ledger_errors_total` to populate the "Ledger Overview" Grafana dashboard. Alert when `failed` or `retrying` states exceed 5% of active documents for 10 minutes.
+- **Snapshot freshness** – schedule `med ledger compact --ledger-path <path>` nightly and ensure snapshots appear in `ledger.snapshots`. If a snapshot is older than 36h, raise a P2 incident and rebuild from the JSONL delta log.
+- **Stuck document checks** – run `med ledger stuck --hours 6` during daily ops review; investigate any entries with metadata indicating adapter errors or missing artifacts.
 
 ## Briefing Exports
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from Medical_KG.ingestion.ledger import IngestionLedger
+from Medical_KG.ingestion.ledger import IngestionLedger, LedgerState
 from Medical_KG.pdf import (
     GpuNotAvailableError,
     MinerUConfig,
@@ -41,7 +41,9 @@ def test_pdf_pipeline_updates_ledger(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
     metadata = pipeline.process(document)
 
-    assert ledger.get("DOC1").state == "pdf_ir_ready"
+    state = ledger.get("DOC1")
+    assert state is not None
+    assert state.state is LedgerState.IR_READY
     assert "mineru_artifacts" in metadata
     assert runner.commands, "MinerU command should be invoked"
 

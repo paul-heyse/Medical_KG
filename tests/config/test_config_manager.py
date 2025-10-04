@@ -7,6 +7,8 @@ import json
 import shutil
 from pathlib import Path
 
+import logging
+
 import pytest
 
 from Medical_KG.config.manager import ConfigError, ConfigManager, mask_secrets
@@ -165,12 +167,32 @@ def test_invalid_schedule_reports_pointer_and_hint(
     assert "format 'adapter_name'" in message
     assert 'Value: "unknown"' in message
     assert "Hint:" in message
+    assert "/pipelines/scheduled/0/interval" in message
+    assert "format 'duration'" in message
 
 
-def test_schema_version_mismatch_raises(
+def test_schema_version_mismatch_warns_by_default(
+    config_dir: Path, base_env: None, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setenv("CONFIG_ENV", "dev")
+    monkeypatch.delenv("MEDCFG_ALLOW_OLD_SCHEMA", raising=False)
+    override = config_dir / "config-override.yaml"
+    override.write_text(
+        json.dumps({"$schema": "./config.schema.json#v0.9.0"}, indent=2)
+    )
+    with caplog.at_level(logging.WARNING):
+        manager = ConfigManager(base_path=config_dir, env="dev")
+    assert manager.config.data()["config_version"] == "1.0.0"
+    warning = "".join(record.message for record in caplog.records)
+    assert "older than supported" in warning
+    assert "MEDCFG_ALLOW_OLD_SCHEMA" in warning
+
+
+def test_schema_version_mismatch_errors_when_disallowed(
     config_dir: Path, base_env: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("CONFIG_ENV", "dev")
+    monkeypatch.setenv("MEDCFG_ALLOW_OLD_SCHEMA", "false")
     override = config_dir / "config-override.yaml"
     override.write_text(
         json.dumps({"$schema": "./config.schema.json#v0.9.0"}, indent=2)
@@ -178,8 +200,8 @@ def test_schema_version_mismatch_raises(
     with pytest.raises(ConfigError) as exc:
         ConfigManager(base_path=config_dir, env="dev")
     message = str(exc.value)
-    assert "declares schema version 0.9.0" in message
-    assert "docs/configuration.md" in message
+    assert "older than supported" in message
+    assert "MEDCFG_ALLOW_OLD_SCHEMA" in message
 
 
 def test_validate_jwt_scope(config_dir: Path, base_env: None) -> None:

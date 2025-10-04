@@ -207,6 +207,10 @@ class PrometheusTelemetry:
 
         return importlib.util.find_spec("prometheus_client") is not None
 
+    def on_request(self, event: HttpRequestEvent) -> None:  # pragma: no cover - no-op hook
+        if not self._enabled:
+            return
+
     def on_response(self, event: HttpResponseEvent) -> None:
         if not self._enabled:
             return

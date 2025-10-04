@@ -8,11 +8,21 @@ from typing import TYPE_CHECKING, Any, Iterable, Iterator, cast
 import typer
 
 if TYPE_CHECKING:  # pragma: no cover - typing support only
-    from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
+    from rich.progress import (  # type: ignore[import-not-found]
+        BarColumn,
+        Progress,
+        TextColumn,
+        TimeRemainingColumn,
+    )
     RICH_AVAILABLE = True
 else:  # pragma: no cover - optional progress dependency
     try:
-        from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
+        from rich.progress import (  # type: ignore[import-not-found]
+            BarColumn,
+            Progress,
+            TextColumn,
+            TimeRemainingColumn,
+        )
     except ImportError:
         Progress = cast(Any, None)
         BarColumn = cast(Any, None)
@@ -22,6 +32,17 @@ else:  # pragma: no cover - optional progress dependency
     else:
         RICH_AVAILABLE = True
 
+from Medical_KG.ingestion.cli_helpers import (
+    EXIT_DATA_ERROR,
+    EXIT_RUNTIME_ERROR,
+    AdapterInvocationError,
+    LedgerResumeError,
+    format_cli_error,
+    format_results,
+    handle_ledger_resume,
+    invoke_adapter_sync,
+    load_ndjson_batch,
+)
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion.pipeline import AdapterRegistry, IngestionPipeline, PipelineResult
 
@@ -39,27 +60,14 @@ def _available_sources() -> list[str]:
 
 
 def _load_batch(path: Path) -> Iterator[dict[str, Any]]:
-    with path.open("r", encoding="utf-8") as handle:
-        for index, line in enumerate(handle, start=1):
-            if not line.strip():
-                continue
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError as exc:  # pragma: no cover - CLI validation
-                raise typer.BadParameter(
-                    f"Invalid JSON on line {index} of {path}: {exc.msg}"
-                ) from exc
-            if not isinstance(payload, dict):
-                raise typer.BadParameter(
-                    "Batch entries must be JSON objects; "
-                    f"found {type(payload).__name__} on line {index}"
-                )
-            yield payload
+    try:
+        return load_ndjson_batch(path, error_factory=lambda msg: typer.BadParameter(msg))
+    except OSError as exc:  # pragma: no cover - filesystem failure
+        raise typer.BadParameter(f"Unable to read batch file {path}: {exc}") from exc
 
 
 def _count_batch_records(path: Path) -> int:
-    with path.open("r", encoding="utf-8") as handle:
-        return sum(1 for line in handle if line.strip())
+    return sum(1 for _ in load_ndjson_batch(path, error_factory=lambda msg: typer.BadParameter(msg)))
 
 
 def _chunk_parameters(
@@ -96,14 +104,10 @@ def _build_pipeline(ledger_path: Path) -> IngestionPipeline:
     return IngestionPipeline(ledger)
 
 
-def _emit_results(results: Iterable[PipelineResult]) -> None:
-    for result in results:
-        typer.echo(json.dumps(result.doc_ids))
-
-
 def _process_parameters(
-    pipeline: IngestionPipeline,
     source: str,
+    ledger: IngestionLedger,
+    registry: AdapterRegistry,
     *,
     params: Iterable[dict[str, Any]] | None,
     resume: bool,
@@ -112,30 +116,54 @@ def _process_parameters(
     quiet: bool,
     total: int | None,
 ) -> None:
+    def _invoke(chunk: Iterable[dict[str, Any]] | None) -> list[PipelineResult]:
+        try:
+            return invoke_adapter_sync(
+                source,
+                ledger=ledger,
+                registry=registry,
+                params=chunk,
+                resume=resume,
+            )
+        except AdapterInvocationError as exc:
+            typer.echo(
+                format_cli_error(
+                    exc,
+                    prefix="Ingestion failed",
+                    remediation="Inspect the ledger for failing documents or retry with --resume.",
+                ),
+                err=True,
+            )
+            raise typer.Exit(code=EXIT_RUNTIME_ERROR) from exc
+
+    def _emit(outputs: list[PipelineResult]) -> None:
+        if not auto:
+            return
+        for line in format_results(outputs, output_format="jsonl"):
+            typer.echo(line)
+
     if params is None:
-        results = pipeline.run(source, params=None, resume=resume)
-        if auto:
-            _emit_results(results)
+        outputs = _invoke(None)
+        _emit(outputs)
         return
 
     display_progress = _should_display_progress(quiet)
     chunks = _chunk_parameters(params, chunk_size)
     progress = _create_progress() if display_progress else None
+
     if progress is None:
         for chunk in chunks:
-            outputs = pipeline.run(source, params=chunk, resume=resume)
-            if auto:
-                _emit_results(outputs)
+            outputs = _invoke(chunk)
+            _emit(outputs)
         return
 
     with progress:
         task_id = progress.add_task("Processing batch", total=total)
         for chunk in chunks:
-            outputs = pipeline.run(source, params=chunk, resume=resume)
+            outputs = _invoke(chunk)
             processed = sum(len(result.doc_ids) for result in outputs) or len(chunk)
             progress.advance(task_id, processed)
-            if auto:
-                _emit_results(outputs)
+            _emit(outputs)
 
 
 def ingest(
@@ -156,7 +184,8 @@ def ingest(
     if ids and batch:
         raise typer.BadParameter("--ids cannot be combined with --batch")
 
-    pipeline = _build_pipeline(ledger_path)
+    registry = _resolve_registry()
+    ledger = IngestionLedger(ledger_path)
     params: Iterable[dict[str, Any]] | None = None
     total: int | None = None
     if ids:
@@ -167,8 +196,9 @@ def ingest(
         params = _load_batch(batch)
 
     _process_parameters(
-        pipeline,
         source,
+        ledger,
+        registry,
         params=params,
         resume=False,
         auto=auto,
@@ -190,16 +220,36 @@ def resume(
     if source not in known:
         raise typer.BadParameter(f"Unknown source '{source}'. Known sources: {', '.join(known)}")
 
-    pipeline = _build_pipeline(ledger_path)
+    ledger = IngestionLedger(ledger_path)
+    registry = _resolve_registry()
+    try:
+        plan = handle_ledger_resume(ledger, dry_run=True)
+    except LedgerResumeError as exc:
+        typer.echo(
+            format_cli_error(
+                exc,
+                prefix="Resume unavailable",
+                remediation="Verify the ledger file is intact before retrying.",
+            ),
+            err=True,
+        )
+        raise typer.Exit(code=EXIT_DATA_ERROR) from exc
+
+    if not quiet and plan.stats.total:
+        typer.echo(
+            f"Skipping {plan.stats.skipped} completed documents; resuming {plan.stats.remaining} pending."
+        )
+
     _process_parameters(
-        pipeline,
         source,
+        ledger,
+        registry,
         params=None,
         resume=True,
         auto=auto,
         chunk_size=1,
         quiet=quiet,
-        total=None,
+        total=plan.stats.remaining or None,
     )
 
 

@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from Medical_KG.cli import build_parser
+from Medical_KG.ingestion.pipeline import PipelineResult
 
 
 def test_ingest_cli_batch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -25,21 +25,9 @@ def test_ingest_cli_batch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
         ]
     )
 
-    class DummyAdapter:
-        async def run(self, **kwargs: Any) -> list[object]:
-            return []
-
-    class DummyClient:
-        async def aclose(self) -> None:
-            return None
-
-        async def __aenter__(self) -> "DummyClient":
-            return self
-
-        async def __aexit__(self, *_exc: Any) -> bool:
-            return False
-
-    monkeypatch.setattr("Medical_KG.cli.get_adapter", lambda *args, **kwargs: DummyAdapter())
-    monkeypatch.setattr("Medical_KG.cli.AsyncHttpClient", lambda: DummyClient())
+    monkeypatch.setattr(
+        "Medical_KG.cli.invoke_adapter_sync",
+        lambda *_, **__: [PipelineResult(source="pubmed", doc_ids=["doc-1"])],
+    )
     result = args.func(args)
     assert result == 0

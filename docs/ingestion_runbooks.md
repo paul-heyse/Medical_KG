@@ -57,7 +57,7 @@ Running `med ingest --help` lists all adapters discovered in the registry and hi
 
 ### Shared CLI Helper Module
 
-- Import `Medical_KG.ingestion.cli_helpers` to keep both the legacy `med ingest` and Typer ingestion CLIs in sync.
+- Import `Medical_KG.ingestion.cli_helpers` to share ingestion orchestration logic between the unified CLI and automation scripts.
 - `load_ndjson_batch(path_or_stream, *, progress=None)` parses NDJSON safely, skips blank lines, and optionally reports a running count for progress bars.
 - `invoke_adapter_sync(source, ledger, params=None, resume=False)` resolves the adapter, manages the shared HTTP client, and returns `PipelineResult` summaries for each parameter set.
 - `handle_ledger_resume(ledger_path_or_instance, candidate_doc_ids=None)` inspects the ingestion ledger to compute resume statistics (skipped vs. pending) and provides the filtered ID list for dry-run previews.

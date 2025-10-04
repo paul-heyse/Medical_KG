@@ -21,6 +21,7 @@ Central index for Medical KG runbooks, contacts, and cadences.
 | GPU / vLLM failure recovery       | `ops/runbooks/04-gpu-node-failure.md`        |
 | Incident response & comms         | `ops/runbooks/05-incident-response.md`       |
 | Catalog refresh / license checks  | `ops/runbooks/06-catalog-refresh.md`         |
+| Unified ingestion CLI operations  | `docs/ingestion_runbooks.md`                 |
 | Datastore failover (Neo4j/OS)     | `ops/runbooks/07-datastore-failover.md`      |
 | Briefing generation gaps          | `ops/runbooks/08-briefing-troubleshooting.md` |
 | Unified ingestion CLI operations  | `docs/ingestion_cli_reference.md`             |

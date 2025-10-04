@@ -8,7 +8,7 @@ import tracemalloc
 import types
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, List
+from typing import Any, Callable, Iterable, List
 
 import pytest
 
@@ -69,6 +69,7 @@ if "typer" not in sys.modules:
 
 
 from Medical_KG.ingestion import cli
+from Medical_KG.ingestion.cli_helpers import LedgerResumePlan, LedgerResumeStats
 from Medical_KG.ingestion.models import Document, IngestionResult
 from Medical_KG.ingestion.pipeline import PipelineResult
 
@@ -103,6 +104,41 @@ def make_pipeline(
         pipeline = FakePipeline(results=results, status=status)
         monkeypatch.setattr(cli, "_build_pipeline", lambda _ledger: pipeline)
         return pipeline
+
+    return _factory
+
+
+class _Invoker:
+    def __init__(self, results: List[PipelineResult]) -> None:
+        self.results = list(results)
+        self.calls: list[dict[str, Any]] = []
+
+    def __call__(
+        self,
+        source: str,
+        *,
+        ledger: Any,
+        registry: Any | None = None,
+        params: Iterable[dict[str, Any]] | None = None,
+        resume: bool = False,
+        **_: Any,
+    ) -> List[PipelineResult]:
+        if params is None:
+            serialised: Iterable[dict[str, Any]] | None = None
+        else:
+            serialised = [dict(entry) for entry in params]
+        self.calls.append({"source": source, "params": serialised, "resume": resume})
+        return list(self.results)
+
+
+@pytest.fixture
+def make_invoker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[List[PipelineResult] | None], _Invoker]:
+    def _factory(results: List[PipelineResult] | None = None) -> _Invoker:
+        invoker = _Invoker(results or [])
+        monkeypatch.setattr(cli, "invoke_adapter_sync", invoker)
+        return invoker
 
     return _factory
 
@@ -158,9 +194,7 @@ def test_load_batch_rejects_non_mapping(tmp_path: Path) -> None:
 
 
 def test_ingest_with_batch_outputs_doc_ids(
-    make_pipeline: Callable[
-        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
-    ],
+    make_invoker: Callable[[List[PipelineResult] | None], _Invoker],
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -168,7 +202,7 @@ def test_ingest_with_batch_outputs_doc_ids(
         PipelineResult(source="demo", doc_ids=["doc-1", "doc-2"]),
         PipelineResult(source="demo", doc_ids=["doc-1", "doc-2"]),
     ]
-    pipeline = make_pipeline(results, None)
+    invoker = make_invoker(results)
 
     batch = tmp_path / "batch.jsonl"
     batch.write_text("\n".join([json.dumps({"param": "value"}), json.dumps({"param": "second"})]))
@@ -179,16 +213,14 @@ def test_ingest_with_batch_outputs_doc_ids(
     captured = capsys.readouterr()
     lines = [json.loads(line) for line in captured.out.strip().splitlines() if line]
     assert lines == [["doc-1", "doc-2"], ["doc-1", "doc-2"]]
-    assert pipeline.calls[0]["params"] == [{"param": "value"}, {"param": "second"}]
+    assert invoker.calls[0]["params"] == [{"param": "value"}, {"param": "second"}]
 
 
 def test_ingest_honours_chunk_size(
-    make_pipeline: Callable[
-        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
-    ],
+    make_invoker: Callable[[List[PipelineResult] | None], _Invoker],
     tmp_path: Path,
 ) -> None:
-    pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=["doc-1"])], None)
+    invoker = make_invoker([PipelineResult(source="demo", doc_ids=["doc-1"])])
 
     batch = tmp_path / "chunked.jsonl"
     batch.write_text(
@@ -203,18 +235,16 @@ def test_ingest_honours_chunk_size(
 
     cli.ingest("demo", batch=batch, ledger_path=tmp_path / "ledger.jsonl", chunk_size=2, quiet=True)
 
-    assert len(pipeline.calls) == 2
-    assert pipeline.calls[0]["params"] == [{"param": "first"}, {"param": "second"}]
-    assert pipeline.calls[1]["params"] == [{"param": "third"}]
+    assert len(invoker.calls) == 2
+    assert invoker.calls[0]["params"] == [{"param": "first"}, {"param": "second"}]
+    assert invoker.calls[1]["params"] == [{"param": "third"}]
 
 
 def test_ingest_large_batch_streams_in_chunks(
-    make_pipeline: Callable[
-        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
-    ],
+    make_invoker: Callable[[List[PipelineResult] | None], _Invoker],
     tmp_path: Path,
 ) -> None:
-    pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=[])], None)
+    invoker = make_invoker([PipelineResult(source="demo", doc_ids=[])])
 
     batch = tmp_path / "large.jsonl"
     records = [json.dumps({"param": f"item-{index}"}) for index in range(2500)]
@@ -222,17 +252,15 @@ def test_ingest_large_batch_streams_in_chunks(
 
     cli.ingest("demo", batch=batch, ledger_path=tmp_path / "ledger.jsonl", chunk_size=500, quiet=True)
 
-    assert len(pipeline.calls) == 5
-    assert all(len(call["params"]) <= 500 for call in pipeline.calls)
+    assert len(invoker.calls) == 5
+    assert all(len(call["params"]) <= 500 for call in invoker.calls)
 
 
 def test_ingest_maintains_memory_profile_for_10k_records(
-    make_pipeline: Callable[
-        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
-    ],
+    make_invoker: Callable[[List[PipelineResult] | None], _Invoker],
     tmp_path: Path,
 ) -> None:
-    make_pipeline([PipelineResult(source="demo", doc_ids=[])], None)
+    make_invoker([PipelineResult(source="demo", doc_ids=[])])
     batch = tmp_path / "memory-10k.jsonl"
     _write_batch_file(batch, 10_000)
 
@@ -248,12 +276,10 @@ def test_ingest_maintains_memory_profile_for_10k_records(
 
 
 def test_ingest_maintains_memory_profile_for_100k_records(
-    make_pipeline: Callable[
-        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
-    ],
+    make_invoker: Callable[[List[PipelineResult] | None], _Invoker],
     tmp_path: Path,
 ) -> None:
-    make_pipeline([PipelineResult(source="demo", doc_ids=[])], None)
+    make_invoker([PipelineResult(source="demo", doc_ids=[])])
     batch = tmp_path / "memory-100k.jsonl"
     _write_batch_file(batch, 100_000)
 
@@ -269,9 +295,7 @@ def test_ingest_maintains_memory_profile_for_100k_records(
 
 
 def test_ingest_reports_progress(
-    make_pipeline: Callable[
-        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
-    ],
+    make_invoker: Callable[[List[PipelineResult] | None], _Invoker],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -298,7 +322,7 @@ def test_ingest_reports_progress(
         PipelineResult(source="demo", doc_ids=["doc-1"]),
         PipelineResult(source="demo", doc_ids=["doc-2"]),
     ]
-    make_pipeline(results, None)
+    make_invoker(results)
 
     batch = tmp_path / "progress.jsonl"
     batch.write_text("\n".join([json.dumps({"param": "value"})]))
@@ -309,9 +333,7 @@ def test_ingest_reports_progress(
 
 
 def test_ingest_quiet_flag_skips_progress(
-    make_pipeline: Callable[
-        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
-    ],
+    make_invoker: Callable[[List[PipelineResult] | None], _Invoker],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -325,7 +347,7 @@ def test_ingest_quiet_flag_skips_progress(
     monkeypatch.setattr(cli, "_create_progress", _raise_progress)
     monkeypatch.setattr(cli, "_should_display_progress", lambda quiet: not quiet)
 
-    make_pipeline([PipelineResult(source="demo", doc_ids=[])], None)
+    make_invoker([PipelineResult(source="demo", doc_ids=[])])
     batch = tmp_path / "quiet.jsonl"
     batch.write_text("\n".join([json.dumps({"param": "value"})]))
 
@@ -335,14 +357,12 @@ def test_ingest_quiet_flag_skips_progress(
 
 
 def test_ingest_without_batch_runs_once(
-    make_pipeline: Callable[
-        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
-    ],
+    make_invoker: Callable[[List[PipelineResult] | None], _Invoker],
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     results = [PipelineResult(source="demo", doc_ids=["doc-3"])]
-    pipeline = make_pipeline(results, None)
+    invoker = make_invoker(results)
     ledger_path = tmp_path / "ledger.jsonl"
 
     cli.ingest("demo", batch=None, auto=True, ledger_path=ledger_path, quiet=True)
@@ -350,11 +370,10 @@ def test_ingest_without_batch_runs_once(
     captured = capsys.readouterr()
     lines = [json.loads(line) for line in captured.out.strip().splitlines() if line]
     assert lines == [["doc-3"]]
-    assert pipeline.calls[0]["params"] is None
+    assert invoker.calls[0]["params"] is None
 
 
-def test_ingest_rejects_unknown_source(make_pipeline: Callable[..., FakePipeline]) -> None:
-    make_pipeline()
+def test_ingest_rejects_unknown_source() -> None:
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(cli, "_available_sources", lambda: ["other"])
     with pytest.raises(sys.modules["typer"].BadParameter):
@@ -363,26 +382,31 @@ def test_ingest_rejects_unknown_source(make_pipeline: Callable[..., FakePipeline
 
 
 def test_ingest_accepts_ids_option(
-    make_pipeline: Callable[
-        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
-    ],
+    make_invoker: Callable[[List[PipelineResult] | None], _Invoker],
 ) -> None:
-    pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=["doc-1"])], None)
+    invoker = make_invoker([PipelineResult(source="demo", doc_ids=["doc-1"])])
     cli.ingest("demo", ids="NCT123,NCT456", quiet=True)
-    assert pipeline.calls[0]["params"] == [{"ids": ["NCT123", "NCT456"]}]
+    assert invoker.calls[0]["params"] == [{"ids": ["NCT123", "NCT456"]}]
 
 
 def test_resume_invokes_pipeline_in_resume_mode(
-    make_pipeline: Callable[
-        [List[PipelineResult] | None, dict[str, list[dict[str, Any]]] | None], FakePipeline
-    ],
+    make_invoker: Callable[[List[PipelineResult] | None], _Invoker],
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    pipeline = make_pipeline([PipelineResult(source="demo", doc_ids=["doc-x"])], None)
+    invoker = make_invoker([PipelineResult(source="demo", doc_ids=["doc-x"])])
+    plan = LedgerResumePlan(
+        resume_ids=["doc-x"],
+        skipped_ids=[],
+        stats=LedgerResumeStats(total=1, skipped=0, remaining=1),
+        dry_run=True,
+    )
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(cli, "handle_ledger_resume", lambda *_args, **_kwargs: plan)
     cli.resume("demo", auto=True, quiet=True)
-    assert pipeline.calls[0]["resume"] is True
+    assert invoker.calls[0]["resume"] is True
     captured = capsys.readouterr()
     assert json.loads(captured.out.strip()) == ["doc-x"]
+    monkeypatch.undo()
 
 
 def test_status_command_outputs_json(

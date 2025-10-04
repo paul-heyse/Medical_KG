@@ -29,6 +29,15 @@
 - When `--auto` is active the CLI emits chunk-level doc ID batches immediately after each chunk completes, so monitoring systems
   can tail progress without waiting for the entire dataset.
 
+### Shared CLI Helper Module
+
+- Import `Medical_KG.ingestion.cli_helpers` to keep both the legacy `med ingest` and Typer ingestion CLIs in sync.
+- `load_ndjson_batch(path_or_stream, *, progress=None)` parses NDJSON safely, skips blank lines, and optionally reports a running count for progress bars.
+- `invoke_adapter_sync(source, ledger, params=None, resume=False)` resolves the adapter, manages the shared HTTP client, and returns `PipelineResult` summaries for each parameter set.
+- `handle_ledger_resume(ledger_path_or_instance, candidate_doc_ids=None)` inspects the ingestion ledger to compute resume statistics (skipped vs. pending) and provides the filtered ID list for dry-run previews.
+- `format_cli_error(exc, prefix="Error", remediation=None)` renders coloured, user-friendly errors that can be reused across CLIs and scripts.
+- `format_results(results, output_format="jsonl")` produces consistent summaries for automation (JSONL) or operator dashboards (text/table) and exposes aggregated counts.
+
 ## Streaming Pipelines & Memory Guardrails
 
 - `IngestionPipeline.iter_results()` exposes an async iterator that yields `Document` instances as soon as adapters complete

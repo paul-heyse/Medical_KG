@@ -3,20 +3,28 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import importlib
 import json
 import sys
 from pathlib import Path
 from types import TracebackType
-from typing import Protocol, cast
+from typing import Any, Iterable, Protocol, cast
 
 from Medical_KG.config.manager import ConfigError, ConfigManager, ConfigValidator, mask_secrets
 from Medical_KG.config.models import PdfPipelineSettings
-from Medical_KG.ingestion.adapters.base import AdapterContext
-from Medical_KG.ingestion.http_client import AsyncHttpClient
+from Medical_KG.ingestion.cli_helpers import (
+    EXIT_DATA_ERROR,
+    EXIT_RUNTIME_ERROR,
+    EXIT_SUCCESS,
+    AdapterInvocationError,
+    BatchLoadError,
+    format_cli_error,
+    format_results,
+    invoke_adapter_sync,
+    load_ndjson_batch,
+)
 from Medical_KG.ingestion.ledger import IngestionLedger
-from Medical_KG.ingestion.registry import available_sources, get_adapter
+from Medical_KG.ingestion.registry import available_sources
 from Medical_KG.pdf import (
     GpuNotAvailableError,
     MinerUConfig,
@@ -224,30 +232,46 @@ def _command_postpdf(args: argparse.Namespace) -> int:
 def _command_ingest(args: argparse.Namespace) -> int:
     if args.source not in available_sources():
         print(f"Unknown source '{args.source}'. Known sources: {', '.join(available_sources())}")
-        return 1
+        return EXIT_DATA_ERROR
 
     ledger = IngestionLedger(args.ledger)
-    context = AdapterContext(ledger=ledger)
+    params_iter: Iterable[dict[str, Any]] | None = None
+    if args.batch:
+        try:
+            params_iter = load_ndjson_batch(args.batch)
+        except BatchLoadError as exc:
+            print(
+                format_cli_error(
+                    exc,
+                    prefix="Failed to read batch",
+                    remediation="Ensure the file contains one JSON object per line.",
+                ),
+                file=sys.stderr,
+            )
+            return EXIT_DATA_ERROR
 
-    async def _run() -> None:
-        async with AsyncHttpClient() as client:
-            adapter = get_adapter(args.source, context, client)
-            if args.batch:
-                with args.batch.open() as handle:
-                    for line in handle:
-                        if not line.strip():
-                            continue
-                        params = json.loads(line)
-                        results = await adapter.run(**params)
-                        if args.auto:
-                            print(json.dumps([res.document.doc_id for res in results]))
-            else:
-                results = await adapter.run()
-                if args.auto:
-                    print(json.dumps([res.document.doc_id for res in results]))
+    try:
+        results = invoke_adapter_sync(
+            args.source,
+            ledger=ledger,
+            params=params_iter,
+        )
+    except AdapterInvocationError as exc:
+        print(
+            format_cli_error(
+                exc,
+                prefix="Ingestion failed",
+                remediation="Retry with --resume or inspect the ledger for failing documents.",
+            ),
+            file=sys.stderr,
+        )
+        return EXIT_RUNTIME_ERROR
 
-    asyncio.run(_run())
-    return 0
+    if args.auto:
+        for line in format_results(results, output_format="jsonl"):
+            print(line)
+
+    return EXIT_SUCCESS
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-from typing import Any, Callable, ParamSpec, Protocol, Tuple, TypeVar, cast
-
-P = ParamSpec("P")
-R = TypeVar("R")
+from typing import Any, Callable, Protocol, Tuple, cast
 
 
 class HttpUserProtocol(Protocol):
@@ -17,7 +14,7 @@ class HttpUserProtocol(Protocol):
 
 
 WaitTimeFactory = Callable[[float, float], Callable[[], float]]
-TaskDecorator = Callable[[Callable[P, R]], Callable[P, R]]
+TaskDecorator = Callable[[Callable[..., Any]], Callable[..., Any]]
 
 
 def load_locust() -> Tuple[type[HttpUserProtocol], WaitTimeFactory, TaskDecorator] | None:

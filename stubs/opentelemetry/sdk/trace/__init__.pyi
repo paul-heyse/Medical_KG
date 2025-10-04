@@ -1,0 +1,6 @@
+from typing import Any
+
+class TracerProvider:
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+    def add_span_processor(self, processor: Any) -> None: ...
+

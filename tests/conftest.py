@@ -234,7 +234,6 @@ from Medical_KG.ingestion.ledger import (  # noqa: E402
     LedgerAuditRecord,
     LedgerDocumentState,
     LedgerState,
-    coerce_state,
     validate_transition,
 )
 from Medical_KG.ingestion.models import Document  # noqa: E402
@@ -407,13 +406,15 @@ class FakeLedger:
         *,
         metadata: Mapping[str, Any] | None = None,
     ) -> LedgerAuditRecord:
+        if not isinstance(state, LedgerState):
+            raise TypeError("state must be a LedgerState instance")
         existing = self.records.get(doc_id)
-        old_state = existing.state if existing else LedgerState.LEGACY
-        validate_transition(old_state, state)
+        if existing is not None:
+            validate_transition(existing.state, state)
         now = datetime.now(timezone.utc)
         audit = LedgerAuditRecord(
             doc_id=doc_id,
-            old_state=old_state,
+            old_state=existing.state if existing else state,
             new_state=state,
             timestamp=now.timestamp(),
             adapter=None,
@@ -439,7 +440,7 @@ class FakeLedger:
     def record(
         self,
         doc_id: str,
-        state: LedgerState | str,
+        state: LedgerState,
         metadata: Mapping[str, Any] | None = None,
         *,
         adapter: str | None = None,
@@ -449,20 +450,22 @@ class FakeLedger:
         parameters: Mapping[str, Any] | None = None,
     ) -> LedgerAuditRecord:
         del adapter, error, retry_count, duration_seconds, parameters
-        coerced = coerce_state(state)
-        return self.update_state(doc_id, coerced, metadata=metadata)
+        if not isinstance(state, LedgerState):
+            raise TypeError("state must be a LedgerState instance")
+        return self.update_state(doc_id, state, metadata=metadata)
 
     def get(self, doc_id: str) -> LedgerDocumentState | None:
         return self.records.get(doc_id)
 
     def entries(
-        self, *, state: LedgerState | str | None = None
+        self, *, state: LedgerState | None = None
     ) -> Iterable[LedgerDocumentState]:
         values = list(self.records.values())
         if state is None:
             return values
-        coerced = coerce_state(state)
-        return [entry for entry in values if entry.state == coerced]
+        if not isinstance(state, LedgerState):
+            raise TypeError("state must be a LedgerState instance")
+        return [entry for entry in values if entry.state == state]
 
 
 @dataclass

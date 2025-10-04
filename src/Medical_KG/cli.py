@@ -338,20 +338,6 @@ def _command_ledger_history(args: argparse.Namespace) -> int:
     return 0
 
 
-def _command_ledger_migrate(args: argparse.Namespace) -> int:
-    from scripts.migrate_ledger_to_state_machine import migrate_ledger
-
-    migrate_ledger(
-        args.ledger_path,
-        output_path=args.output,
-        dry_run=args.dry_run,
-        create_backup=not args.no_backup,
-        progress_interval=args.progress,
-    )
-    print("Ledger migration complete")
-    return 0
-
-
 def _command_ingest(args: argparse.Namespace) -> int:
     from Medical_KG.ingestion import cli as ingestion_cli
 
@@ -433,15 +419,6 @@ def build_parser() -> argparse.ArgumentParser:
     ledger_history = ledger_sub.add_parser("history", help="Show document state history")
     ledger_history.add_argument("doc_id", help="Document identifier")
     ledger_history.set_defaults(func=_command_ledger_history)
-
-    ledger_migrate = ledger_sub.add_parser("migrate", help="Migrate ledger to enum states")
-    ledger_migrate.add_argument("--output", type=Path, default=None, help="Output ledger path")
-    ledger_migrate.add_argument("--dry-run", action="store_true", help="Validate without writing")
-    ledger_migrate.add_argument("--no-backup", action="store_true", help="Skip creating backup")
-    ledger_migrate.add_argument(
-        "--progress", type=int, default=None, help="Emit progress updates every N entries"
-    )
-    ledger_migrate.set_defaults(func=_command_ledger_migrate)
 
     # Data ingestion commands
     ingest = subparsers.add_parser(

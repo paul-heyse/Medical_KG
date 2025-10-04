@@ -40,6 +40,7 @@ from Medical_KG.ingestion.adapters.terminology import (
     UMLSAdapter,
 )
 from Medical_KG.ingestion.http_client import AsyncHttpClient
+from Medical_KG.ingestion.ledger import LedgerState
 from Medical_KG.ingestion.models import Document
 from Medical_KG.utils.optional_dependencies import get_httpx_module
 from tests.ingestion.fixtures.clinical import (
@@ -891,7 +892,7 @@ def test_base_adapter_records_failures(fake_ledger: Any) -> None:
         _run(adapter.run())
     entry = fake_ledger.get("doc-1")
     assert entry is not None
-    assert entry.state == "auto_failed"
+    assert entry.state is LedgerState.FAILED
     assert "boom" in entry.metadata.get("error", "")
 
 
@@ -900,4 +901,4 @@ def test_base_adapter_records_success(fake_ledger: Any) -> None:
     results = _run(adapter.run())
     assert results[0].document.doc_id == "doc-7"
     entry = fake_ledger.get("doc-7")
-    assert entry is not None and entry.state == "auto_done"
+    assert entry is not None and entry.state is LedgerState.COMPLETED

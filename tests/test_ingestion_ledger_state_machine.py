@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -10,7 +11,6 @@ from Medical_KG.ingestion.ledger import (
     InvalidStateTransition,
     LedgerAuditRecord,
     LedgerState,
-    coerce_state,
     get_valid_next_states,
     is_retryable_state,
     is_terminal_state,
@@ -54,6 +54,9 @@ def test_audit_record_round_trip() -> None:
         retry_count=2,
         duration_seconds=0.5,
     )
+    payload = record.to_dict()
+    assert payload["old_state"] == "FETCHING"
+    assert payload["new_state"] == "FETCHED"
     restored = LedgerAuditRecord.from_dict(record.to_dict())
     assert restored.doc_id == record.doc_id
     assert restored.new_state is LedgerState.FETCHED
@@ -85,30 +88,56 @@ def test_stuck_documents_detection(tmp_path: Path) -> None:
     assert stuck and stuck[0].doc_id == "doc-stuck"
 
 
-def test_coerce_state_handles_legacy_aliases() -> None:
-    assert coerce_state("pdf_downloaded") is LedgerState.FETCHED
-    assert coerce_state("unknown_state") is LedgerState.LEGACY
+def test_update_state_rejects_string_values(tmp_path: Path) -> None:
+    ledger = IngestionLedger(tmp_path / "ledger.jsonl")
+    with pytest.raises(TypeError) as excinfo:
+        ledger.update_state("doc-1", "completed")  # type: ignore[arg-type]
+    assert "LedgerState enum" in str(excinfo.value)
 
 
-def test_migration_script_produces_valid_ledger(tmp_path: Path) -> None:
-    from scripts.migrate_ledger_to_state_machine import migrate_ledger
+def test_record_requires_enum(tmp_path: Path) -> None:
+    ledger = IngestionLedger(tmp_path / "ledger.jsonl")
+    with pytest.raises(TypeError) as excinfo:
+        ledger.record("doc-1", "completed")  # type: ignore[arg-type]
+    assert "LedgerState enum" in str(excinfo.value)
 
+
+def test_legacy_alias_entries_still_parse(tmp_path: Path) -> None:
     ledger_path = tmp_path / "legacy.jsonl"
+    timestamp = datetime.now(timezone.utc).timestamp()
     ledger_path.write_text(
         "\n".join(
             [
-                '{"doc_id": "doc-1", "state": "pdf_downloaded", "timestamp": "2024-01-01T00:00:00"}',
-                '{"doc_id": "doc-1", "state": "pdf_ir_ready", "timestamp": "2024-01-01T00:10:00"}',
+                json.dumps(
+                    {
+                        "doc_id": "doc-1",
+                        "old_state": "legacy",
+                        "new_state": "pdf_ir_ready",
+                        "timestamp": timestamp,
+                        "adapter": "stub",
+                        "metadata": {},
+                        "parameters": {},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "doc_id": "doc-1",
+                        "old_state": "IR_READY",
+                        "new_state": "COMPLETED",
+                        "timestamp": timestamp + 1,
+                        "adapter": "stub",
+                        "metadata": {},
+                        "parameters": {},
+                    }
+                ),
             ]
         ),
         encoding="utf-8",
     )
-    output_path = tmp_path / "migrated.jsonl"
-    migrate_ledger(ledger_path, output_path=output_path, create_backup=False)
-    reloaded = IngestionLedger(output_path)
-    state = reloaded.get("doc-1")
+    ledger = IngestionLedger(ledger_path)
+    state = ledger.get("doc-1")
     assert state is not None
-    assert state.state is LedgerState.IR_READY
+    assert state.state is LedgerState.COMPLETED
 
 
 def test_delta_application(tmp_path: Path) -> None:

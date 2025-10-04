@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from Medical_KG.ingestion.ledger import LedgerState
 from Medical_KG.ir.builder import (
     ClinicalTrialsBuilder,
     DailyMedBuilder,
@@ -18,10 +19,22 @@ from Medical_KG.ir.validator import IRValidator, ValidationError
 
 class _MemoryLedger:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str, dict[str, str]]] = []
+        self.calls: list[tuple[str, LedgerState, dict[str, str]]] = []
 
-    def record(self, doc_id: str, state: str, metadata: dict[str, str]) -> None:
+    def record(self, doc_id: str, state: LedgerState, metadata: dict[str, str]) -> None:
+        if not isinstance(state, LedgerState):
+            raise TypeError("state must be a LedgerState instance")
         self.calls.append((doc_id, state, metadata))
+
+    def update_state(
+        self,
+        doc_id: str,
+        state: LedgerState,
+        *,
+        metadata: dict[str, str] | None = None,
+        **_: object,
+    ) -> None:
+        self.record(doc_id, state, metadata or {})
 
 
 def test_text_normalization_handles_dehyphenation() -> None:
@@ -53,7 +66,7 @@ def test_clinical_trials_builder_creates_blocks(tmp_path: Path) -> None:
     ledger = _MemoryLedger()
     path = storage.write(document, ledger=ledger)
     assert path.exists()
-    assert any(state == "ir_written" for _, state, _ in ledger.calls)
+    assert any(state is LedgerState.IR_READY for _, state, _ in ledger.calls)
 
 
 def test_daily_med_builder_creates_loinc_blocks() -> None:

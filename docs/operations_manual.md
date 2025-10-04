@@ -67,6 +67,7 @@ Refer to `docs/continuous_improvement.md` for KPIs and retrospection process.
 - **Prometheus metrics** – scrape `med_ledger_documents_by_state`, `med_ledger_state_transitions_total`, `med_ledger_state_duration_seconds`, and `med_ledger_errors_total` to populate the "Ledger Overview" Grafana dashboard. Alert when `failed` or `retrying` states exceed 5% of active documents for 10 minutes.
 - **Snapshot freshness** – schedule `med ledger compact --ledger-path <path>` nightly and ensure snapshots appear in `ledger.snapshots`. If a snapshot is older than 36h, raise a P2 incident and rebuild from the JSONL delta log.
 - **Stuck document checks** – run `med ledger stuck --hours 6` during daily ops review; investigate any entries with metadata indicating adapter errors or missing artifacts.
+- **Runbook** – `ops/runbooks/09-ledger-maintenance.md` covers the enum-only audit, compaction, dashboards, and communication templates introduced after removing `LedgerState.LEGACY`.
 
 ## Briefing Exports
 

@@ -94,21 +94,32 @@
         "type": "prometheus",
         "uid": "PROMETHEUS_DS"
       },
-      "description": "Legacy run_async_legacy labels were removed; this panel tracks supported consumption modes.",
+      "description": "Enum-only ledger states; any legacy bucket should remain at zero.",
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps"
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth"
+          }
         },
         "overrides": []
       },
       "gridPos": {"h": 8, "w": 24, "x": 0, "y": 17},
       "id": 4,
-      "title": "Streaming vs Eager Consumption",
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "right"
+        }
+      },
+      "title": "Ledger State Distribution",
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum by (mode)(rate(ingest_pipeline_consumption_total[5m]))",
-          "legendFormat": "{{mode}}",
+          "expr": "sum by(state) (med_ledger_documents_by_state)",
+          "legendFormat": "{{state}}",
           "refId": "A"
         }
       ]

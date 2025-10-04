@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Mapping, MutableMapping
 
@@ -84,6 +84,18 @@ class BatchProgress(PipelineEvent):
     eta_seconds: float | None
     backpressure_wait_seconds: float
     backpressure_wait_count: int
+    checkpoint_doc_ids: list[str] = field(default_factory=list)
+    is_checkpoint: bool = False
+
+
+@dataclass(slots=True)
+class AdapterRetry(PipelineEvent):
+    """Emitted when an HTTP adapter issues a retry for an upstream request."""
+
+    adapter: str
+    attempt: int
+    error: str
+    status_code: int | None
 
 
 @dataclass(slots=True)
@@ -159,6 +171,7 @@ def event_to_dict(event: PipelineEvent) -> MutableMapping[str, Any]:
 
 __all__ = [
     "AdapterStateChange",
+    "AdapterRetry",
     "BatchProgress",
     "DocumentCompleted",
     "DocumentFailed",

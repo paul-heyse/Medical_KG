@@ -14,6 +14,7 @@ Stream auto mode results with JSON output:
 from __future__ import annotations
 
 import contextlib
+import asyncio
 import importlib
 import itertools
 import json
@@ -43,7 +44,14 @@ from Medical_KG.ingestion.cli_helpers import (
     summarise_results,
     throttle,
 )
+from Medical_KG.ingestion.events import (
+    BatchProgress,
+    DocumentCompleted,
+    DocumentFailed,
+    event_to_dict,
+)
 from Medical_KG.ingestion.ledger import IngestionLedger
+from Medical_KG.ingestion.models import Document
 from Medical_KG.ingestion.pipeline import IngestionPipeline, PipelineResult
 
 try:  # pragma: no cover - optional rich dependency
@@ -70,6 +78,7 @@ _INGEST_HELP = textwrap.dedent(
     • `med ingest demo --batch params.ndjson --resume`
     • `med ingest umls --auto --limit 1000 --output json`
     • `med ingest nice --batch nice.ndjson --schema schemas/nice.json`
+    • `med ingest demo --stream --summary-only > events.ndjson`
     """
 )
 
@@ -200,6 +209,7 @@ def _emit_summary(
     output: OutputFormat,
     show_timings: bool,
     summary_only: bool,
+    use_stderr: bool = False,
 ) -> None:
     if output is OutputFormat.JSON:
         payload = render_json_summary(summary)
@@ -212,7 +222,7 @@ def _emit_summary(
             show_timings=show_timings,
             summary_only=summary_only,
         )
-    typer.echo(payload)
+    typer.echo(payload, err=use_stderr)
 
 
 def _log_error(error_log: Path | None, *, payload: dict[str, Any]) -> None:
@@ -221,6 +231,135 @@ def _log_error(error_log: Path | None, *, payload: dict[str, Any]) -> None:
     error_log.parent.mkdir(parents=True, exist_ok=True)
     with error_log.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload) + "\n")
+
+
+async def _run_streaming_pipeline(
+    pipeline: IngestionPipeline,
+    adapter: str,
+    *,
+    params_iter: Iterator[dict[str, Any]] | None,
+    base_options: dict[str, Any],
+    resume: bool,
+    auto: bool,
+    summary_only: bool,
+    total_records: int | None,
+    chunk_size: int,
+    limit: int | None,
+    rate_limit: float | None,
+    progress_bar: Any | None,
+    progress_task: int | None,
+    fail_fast: bool,
+    error_log: Path | None,
+    stream_output: bool,
+) -> tuple[list[PipelineResult], list[str]]:
+    results: list[PipelineResult] = []
+    errors: list[str] = []
+    processed_params = 0
+    last_tick: float | None = None
+    progress_label_base = "Ingesting"
+
+    async def _consume_invocation(
+        invocation_params: list[dict[str, Any]] | None,
+        total_hint: int | None,
+    ) -> PipelineResult:
+        documents: list[Document] = []
+        failures: list[DocumentFailed] = []
+        started_at = datetime.now(timezone.utc)
+
+        async for event in pipeline.stream_events(
+            adapter,
+            params=invocation_params,
+            resume=resume,
+            total_estimated=total_hint,
+        ):
+            if stream_output:
+                typer.echo(json.dumps(event_to_dict(event)))
+            if isinstance(event, DocumentCompleted):
+                documents.append(event.document)
+                if progress_bar is not None and progress_task is not None:
+                    progress_bar.advance(progress_task, 1)
+            elif isinstance(event, DocumentFailed):
+                failures.append(event)
+                message = format_cli_error(
+                    f"{event.doc_id or '<unknown>'}: {event.error}",
+                    prefix="Adapter error",
+                )
+                typer.echo(message, err=True)
+                _log_error(
+                    error_log,
+                    payload={
+                        "adapter": adapter,
+                        "doc_id": event.doc_id,
+                        "error": event.error,
+                        "error_type": event.error_type,
+                        "retry_count": event.retry_count,
+                        "retryable": event.is_retryable,
+                    },
+                )
+                errors.append(message)
+                if progress_bar is not None and progress_task is not None:
+                    progress_bar.advance(progress_task, 1)
+                if fail_fast:
+                    raise RuntimeError(
+                        "Adapter reported failure; aborting due to --fail-fast"
+                    )
+            elif isinstance(event, BatchProgress):
+                if progress_bar is not None and progress_task is not None:
+                    completed_total = event.completed_count + event.failed_count
+                    remaining = event.remaining or 0
+                    total = (
+                        total_records
+                        if total_records is not None
+                        else completed_total + remaining
+                    )
+                    description = (
+                        f"{progress_label_base} (ok {event.completed_count}"
+                        f" | failed {event.failed_count})"
+                    )
+                    update_kwargs: dict[str, Any] = {
+                        "completed": completed_total,
+                        "description": description,
+                    }
+                    if total and total > 0:
+                        update_kwargs["total"] = total
+                    progress_bar.update(progress_task, **update_kwargs)
+
+        completed_at = datetime.now(timezone.utc)
+        result = PipelineResult(
+            source=adapter,
+            documents=documents,
+            errors=failures,
+            success_count=len(documents),
+            failure_count=len(failures),
+            started_at=started_at,
+            completed_at=completed_at,
+        )
+        if auto and not summary_only and not stream_output:
+            _emit_doc_ids([result])
+        return result
+
+    if params_iter is None:
+        invocation_params = [base_options] if base_options else None
+        result = await _consume_invocation(invocation_params, total_records)
+        results.append(result)
+    else:
+        for chunk in chunk_parameters(params_iter, chunk_size):
+            chunk_with_options = [_merge_options(base_options, entry) for entry in chunk]
+            if not chunk_with_options:
+                continue
+            if limit is not None and processed_params >= limit:
+                break
+            if limit is not None and processed_params + len(chunk_with_options) > limit:
+                allowed = max(limit - processed_params, 0)
+                chunk_with_options = chunk_with_options[:allowed]
+            result = await _consume_invocation(chunk_with_options, len(chunk_with_options))
+            results.append(result)
+            processed_params += len(chunk_with_options)
+            if limit is not None and processed_params >= limit:
+                break
+            last_tick = throttle(rate_limit, last_run=last_tick)
+
+    return results, errors
 
 
 def _validate_dates(start_date: datetime | None, end_date: datetime | None) -> None:
@@ -283,7 +422,13 @@ def _dry_run(
         warnings=warnings,
         errors=[],
     )
-    _emit_summary(summary, output=output, show_timings=show_timings, summary_only=summary_only)
+    _emit_summary(
+        summary,
+        output=output,
+        show_timings=show_timings,
+        summary_only=summary_only,
+        use_stderr=stream_events,
+    )
 
 
 def _parameter_stream(
@@ -440,6 +585,16 @@ def ingest(
         False, "--show-timings", help="Include duration in summary output"
     ),
     summary_only: bool = typer.Option(False, "--summary-only", help="Suppress per-result output"),
+    stream_events: bool = typer.Option(
+        False,
+        "--stream",
+        help="Stream pipeline events as NDJSON to stdout (disables progress display)",
+    ),
+    legacy_mode: bool = typer.Option(
+        False,
+        "--no-stream",
+        help="Use legacy eager execution instead of streaming",
+    ),
     schema_path: Path | None = typer.Option(
         None,
         "--schema",
@@ -471,6 +626,8 @@ def ingest(
         raise typer.BadParameter("--id cannot be combined with --batch")
     if strict_validation and skip_validation:
         raise typer.BadParameter("--strict-validation cannot be combined with --skip-validation")
+    if stream_events and legacy_mode:
+        raise typer.BadParameter("--stream cannot be combined with --no-stream")
     _configure_logging(log_level, log_file, verbose)
     schema_validator: Callable[[dict[str, Any]], None] | None = None
     if schema_path is not None:
@@ -520,6 +677,8 @@ def ingest(
     if schema_validator is not None and batch is not None:
         warnings.append("Batch entries validated against provided JSON schema")
     display_progress = should_display_progress(progress, quiet)
+    if stream_events:
+        display_progress = False
     progress_bar: Any | None = None
     progress_task: int | None = None
     if display_progress:
@@ -529,39 +688,70 @@ def ingest(
     errors: list[str] = []
     results: list[PipelineResult] = []
     started_at = datetime.now(timezone.utc)
-    last_tick: float | None = None
     progress_context = progress_bar if progress_bar is not None else contextlib.nullcontext()
     try:
         with progress_context:
-            if params_iter is None:
-                invocation_params = [base_options] if base_options else None
-                outputs = pipeline.run(adapter_name, params=invocation_params, resume=resume)
-                results.extend(outputs)
-                if auto and not summary_only:
-                    _emit_doc_ids(outputs)
-            else:
-                processed = 0
-                for chunk in chunk_parameters(params_iter, chunk_size):
-                    chunk_with_options = [_merge_options(base_options, entry) for entry in chunk]
-                    if not chunk_with_options:
-                        continue
-                    outputs = pipeline.run(adapter_name, params=chunk_with_options, resume=resume)
-                    results.extend(outputs)
-                    processed += len(chunk_with_options)
-                    processed_docs = sum(len(item.doc_ids) for item in outputs) or len(
-                        chunk_with_options
+            if legacy_mode:
+                last_tick: float | None = None
+                if params_iter is None:
+                    invocation_params = [base_options] if base_options else None
+                    outputs = pipeline.run(
+                        adapter_name, params=invocation_params, resume=resume
                     )
-                    if progress_bar is not None and progress_task is not None:
-                        progress_bar.advance(progress_task, processed_docs)
+                    results.extend(outputs)
                     if auto and not summary_only:
                         _emit_doc_ids(outputs)
-                    if fail_fast and any(len(item.doc_ids) == 0 for item in outputs):
-                        raise RuntimeError(
-                            "Adapter returned no documents for at least one invocation"
+                else:
+                    processed = 0
+                    for chunk in chunk_parameters(params_iter, chunk_size):
+                        chunk_with_options = [
+                            _merge_options(base_options, entry) for entry in chunk
+                        ]
+                        if not chunk_with_options:
+                            continue
+                        outputs = pipeline.run(
+                            adapter_name, params=chunk_with_options, resume=resume
                         )
-                    if limit is not None and processed >= limit:
-                        break
-                    last_tick = throttle(rate_limit, last_run=last_tick)
+                        results.extend(outputs)
+                        processed += len(chunk_with_options)
+                        processed_docs = (
+                            sum(len(item.doc_ids) for item in outputs)
+                            or len(chunk_with_options)
+                        )
+                        if progress_bar is not None and progress_task is not None:
+                            progress_bar.advance(progress_task, processed_docs)
+                        if auto and not summary_only:
+                            _emit_doc_ids(outputs)
+                        if fail_fast and any(len(item.doc_ids) == 0 for item in outputs):
+                            raise RuntimeError(
+                                "Adapter returned no documents for at least one invocation"
+                            )
+                        if limit is not None and processed >= limit:
+                            break
+                        last_tick = throttle(rate_limit, last_run=last_tick)
+            else:
+                streaming_results, streaming_errors = asyncio.run(
+                    _run_streaming_pipeline(
+                        pipeline,
+                        adapter_name,
+                        params_iter=params_iter,
+                        base_options=base_options,
+                        resume=resume,
+                        auto=auto,
+                        summary_only=summary_only,
+                        total_records=total_records,
+                        chunk_size=chunk_size,
+                        limit=limit,
+                        rate_limit=rate_limit,
+                        progress_bar=progress_bar,
+                        progress_task=progress_task,
+                        fail_fast=fail_fast,
+                        error_log=error_log,
+                        stream_output=stream_events,
+                    )
+                )
+                results.extend(streaming_results)
+                errors.extend(streaming_errors)
     except BatchValidationError as exc:
         message = format_cli_error(str(exc), hint=exc.hint)
         _log_error(error_log, payload={"adapter": adapter_name, "error": message})

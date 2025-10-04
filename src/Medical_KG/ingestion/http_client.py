@@ -217,39 +217,7 @@ class AsyncHttpClient:
         self._default_rate = default_rate or RateLimit(rate=5, per=1.0)
         self._limiters: dict[str, _SimpleLimiter] = {}
         self._retries = retries
-        self._queue_alert_threshold = QUEUE_ALERT_THRESHOLD
-        self._telemetry = _TelemetryRegistry(LOGGER)
-
-        if on_request is not None:
-            self._telemetry.add(
-                "request", cast(Callable[[HttpEvent], None], on_request)
-            )
-        if on_response is not None:
-            self._telemetry.add(
-                "response", cast(Callable[[HttpEvent], None], on_response)
-            )
-        if on_retry is not None:
-            self._telemetry.add(
-                "retry", cast(Callable[[HttpEvent], None], on_retry)
-            )
-        if on_backoff is not None:
-            self._telemetry.add(
-                "backoff", cast(Callable[[HttpEvent], None], on_backoff)
-            )
-        if on_error is not None:
-            self._telemetry.add(
-                "error", cast(Callable[[HttpEvent], None], on_error)
-            )
-
-        if enable_metrics is None:
-            enable_metrics = PrometheusTelemetry.is_available()
-        self._metrics_enabled = enable_metrics
-        if self._metrics_enabled:
-            self._register_telemetry(PrometheusTelemetry())
-
-        if telemetry is not None:
-            for telemetry_obj, host_filter in self._expand_telemetry_sources(telemetry):
-                self._register_telemetry(telemetry_obj, host=host_filter)
+        self._retry_callback: Callable[[str, str, int, HTTPError], None] | None = None
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -283,138 +251,14 @@ class AsyncHttpClient:
             self._limiters[host] = _SimpleLimiter(limit.rate, limit.per)
         return self._limiters[host]
 
-    @staticmethod
-    def _coerce_telemetry_sequence(
-        telemetry: HttpTelemetry | Sequence[HttpTelemetry],
-    ) -> list[HttpTelemetry]:
-        if isinstance(telemetry, Sequence) and not isinstance(telemetry, (str, bytes)):
-            return [*telemetry]
-        return [cast(HttpTelemetry, telemetry)]
-
-    @staticmethod
-    def _expand_telemetry_sources(
-        telemetry: (
-            HttpTelemetry
-            | Sequence[HttpTelemetry]
-            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
-        ),
-    ) -> list[tuple[HttpTelemetry, str | None]]:
-        if isinstance(telemetry, Mapping):
-            expanded: list[tuple[HttpTelemetry, str | None]] = []
-            for host, handlers in telemetry.items():
-                for item in AsyncHttpClient._coerce_telemetry_sequence(handlers):
-                    expanded.append((item, host))
-            return expanded
-        return [
-            (item, None)
-            for item in AsyncHttpClient._coerce_telemetry_sequence(telemetry)
-        ]
-
-    def _register_telemetry(
-        self, telemetry: HttpTelemetry, *, host: str | None = None
+    def bind_retry_callback(
+        self, callback: Callable[[str, str, int, HTTPError], None] | None
     ) -> None:
-        request_cb = getattr(telemetry, "on_request", None)
-        if request_cb is not None:
-            self._telemetry.add(
-                "request", cast(Callable[[HttpEvent], None], request_cb), host=host
-            )
-        response_cb = getattr(telemetry, "on_response", None)
-        if response_cb is not None:
-            self._telemetry.add(
-                "response", cast(Callable[[HttpEvent], None], response_cb), host=host
-            )
-        retry_cb = getattr(telemetry, "on_retry", None)
-        if retry_cb is not None:
-            self._telemetry.add(
-                "retry", cast(Callable[[HttpEvent], None], retry_cb), host=host
-            )
-        backoff_cb = getattr(telemetry, "on_backoff", None)
-        if backoff_cb is not None:
-            self._telemetry.add(
-                "backoff", cast(Callable[[HttpEvent], None], backoff_cb), host=host
-            )
-        error_cb = getattr(telemetry, "on_error", None)
-        if error_cb is not None:
-            self._telemetry.add(
-                "error", cast(Callable[[HttpEvent], None], error_cb), host=host
-            )
+        """Register a callback invoked prior to retrying a request."""
 
-    def add_telemetry(
-        self,
-        telemetry: (
-            HttpTelemetry
-            | Sequence[HttpTelemetry]
-            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
-        ),
-        *,
-        host: str | None = None,
-    ) -> None:
-        """Register additional telemetry callbacks at runtime."""
+        self._retry_callback = callback
 
-        if isinstance(telemetry, Mapping):
-            for host_key, handlers in telemetry.items():
-                for item in self._coerce_telemetry_sequence(handlers):
-                    self._register_telemetry(item, host=host_key)
-            return
-        for item in self._coerce_telemetry_sequence(telemetry):
-            self._register_telemetry(item, host=host)
-
-    def _emit(self, event: _EventKey, payload: HttpEvent) -> None:
-        self._telemetry.notify(event, payload, payload.host)
-
-    def _resolve_request_headers(
-        self, headers: Mapping[str, str] | None
-    ) -> Mapping[str, str]:
-        merged: dict[str, str] = {}
-        client_headers = getattr(self._client, "headers", None)
-        if isinstance(client_headers, Mapping):
-            for key, value in client_headers.items():
-                merged[str(key)] = str(value)
-        if headers:
-            for key, value in headers.items():
-                merged[str(key)] = str(value)
-        return self._sanitize_headers(merged)
-
-    @staticmethod
-    def _sanitize_headers(headers: Mapping[str, str] | None) -> dict[str, str]:
-        sanitized: dict[str, str] = {}
-        if headers is None:
-            return sanitized
-        redact = {"authorization", "cookie", "x-api-key"}
-        for key, value in headers.items():
-            normalized_key = str(key)
-            lower_key = normalized_key.lower()
-            sanitized[normalized_key] = (
-                "<redacted>" if lower_key in redact else str(value)
-            )
-        return sanitized
-
-    @staticmethod
-    def _extract_response_size(response: ResponseProtocol) -> int:
-        headers = getattr(response, "headers", {})
-        if isinstance(headers, Mapping):
-            length = headers.get("content-length")
-            if length is not None:
-                try:
-                    return int(length)
-                except (TypeError, ValueError):
-                    pass
-        content = getattr(response, "content", b"")
-        if isinstance(content, (bytes, bytearray)):
-            return len(content)
-        if hasattr(content, "__len__"):
-            try:
-                return len(content)  # type: ignore[arg-type]
-            except TypeError:
-                return 0
-        return 0
-
-    async def _prepare_request(
-        self,
-        method: str,
-        url: str,
-        headers: Mapping[str, str] | None,
-    ) -> tuple[str, str]:
+    async def _execute(self, method: str, url: str, **kwargs: object) -> ResponseProtocol:
         parsed = urlparse(url)
         host = parsed.netloc or parsed.path or ""
         limiter = self._get_limiter(host)
@@ -458,113 +302,35 @@ class AsyncHttpClient:
         self._emit("request", request_event)
         return request_id, host
 
-    def _emit_response_event(
-        self,
-        *,
-        request_id: str,
-        method: str,
-        url: str,
-        host: str,
-        response: ResponseProtocol,
-        start_time: float,
-    ) -> None:
-        end_time = time()
-        event = HttpResponseEvent(
-            request_id=request_id,
-            url=url,
-            method=method,
-            host=host,
-            timestamp=end_time,
-            status_code=response.status_code,
-            duration_seconds=max(end_time - start_time, 0.0),
-            response_size_bytes=self._extract_response_size(response),
-            headers=self._sanitize_headers(getattr(response, "headers", {})),
-        )
-        self._emit("response", event)
-
-    def _emit_error_event(
-        self,
-        *,
-        request_id: str,
-        method: str,
-        url: str,
-        host: str,
-        exc: Exception,
-        retryable: bool,
-    ) -> None:
-        error_event = HttpErrorEvent(
-            request_id=request_id,
-            url=url,
-            method=method,
-            host=host,
-            timestamp=time(),
-            error_type=exc.__class__.__name__,
-            message=str(exc),
-            retryable=retryable,
-        )
-        self._emit("error", error_event)
-
-    async def _execute(self, method: str, url: str, **kwargs: object) -> ResponseProtocol:
-        headers = cast(Mapping[str, str] | None, kwargs.get("headers"))
-        request_id, host = await self._prepare_request(method, url, headers)
-        backoff = 0.5
-        for attempt in range(1, self._retries + 1):
-            start_time = time()
-            try:
-                response = await self._client.request(method, url, **kwargs)
-                response.raise_for_status()
-                self._emit_response_event(
-                    request_id=request_id,
-                    method=method,
-                    url=url,
-                    host=host,
-                    response=response,
-                    start_time=start_time,
-                )
-                return response
-            except HTTPError as exc:  # pragma: no cover - exercised via tests
-                status = getattr(getattr(exc, "response", None), "status_code", None)
-                retryable = status in {429, 502, 503, 504}
-                self._emit_error_event(
-                    request_id=request_id,
-                    method=method,
-                    url=url,
-                    host=host,
-                    exc=exc,
-                    retryable=retryable,
-                )
-                if not retryable or attempt >= self._retries:
-                    raise
-                reason = (
-                    f"status_{status}" if status is not None else exc.__class__.__name__
-                )
-                jitter = random.uniform(0.0, backoff / 2)
-                delay = backoff + jitter
-                retry_event = HttpRetryEvent(
-                    request_id=request_id,
-                    url=url,
-                    method=method,
-                    host=host,
-                    timestamp=time(),
-                    attempt=attempt,
-                    delay_seconds=delay,
-                    reason=reason,
-                    will_retry=True,
-                )
-                self._emit("retry", retry_event)
-                await asyncio.sleep(delay)
-                backoff = min(backoff * 2, 5.0)
-            except Exception as exc:
-                self._emit_error_event(
-                    request_id=request_id,
-                    method=method,
-                    url=url,
-                    host=host,
-                    exc=exc,
-                    retryable=False,
-                )
-                raise
-        raise RuntimeError("Retry loop exhausted")
+        async with limiter:
+            backoff = 0.5
+            last_error: Exception | None = None
+            for attempt in range(1, self._retries + 1):
+                try:
+                    start = time()
+                    response = await self._client.request(method, url, **kwargs)
+                    HTTP_REQUESTS.labels(
+                        method=method, host=parsed.netloc, status=str(response.status_code)
+                    ).inc()
+                    HTTP_LATENCY.observe(time() - start)
+                    response.raise_for_status()
+                    return response
+                except HTTPError as exc:  # pragma: no cover - exercised via tests
+                    status = getattr(getattr(exc, "response", None), "status_code", None)
+                    if status not in {429, 502, 503, 504}:
+                        raise
+                    last_error = exc
+                    HTTP_REQUESTS.labels(
+                        method=method, host=parsed.netloc, status=exc.__class__.__name__
+                    ).inc()
+                    if self._retry_callback is not None and attempt < self._retries:
+                        self._retry_callback(method, url, attempt, exc)
+                    jitter = random.uniform(0, backoff / 2)
+                    await asyncio.sleep(backoff + jitter)
+                    backoff = min(backoff * 2, 5.0)
+            if last_error:
+                raise last_error
+            raise RuntimeError("Retry loop exhausted")
 
     async def get(
         self,

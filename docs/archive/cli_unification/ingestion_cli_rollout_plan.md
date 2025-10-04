@@ -1,4 +1,6 @@
-# Unified Ingestion CLI Rollout Plan
+# ARCHIVED: Unified Ingestion CLI Rollout Plan
+
+_Archived 2025-10-04 – Migration milestones completed._
 
 ## Timeline
 

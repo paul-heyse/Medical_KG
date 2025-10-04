@@ -22,7 +22,7 @@ view via `med dependencies check` (add `--json` for automation pipelines).
 
 - Primary entry point: `med ingest ADAPTER [OPTIONS]`.
 - Highlights: dynamic adapter listing in help output, JSON Schema validation via `--schema`, Rich-powered progress bars, and JSON/table summaries.
-- Migration tooling lives under `scripts/cli_migration/` (see `docs/ingestion_cli_migration_guide.md`).
+- Historical migration materials are archived under `docs/archive/cli_unification/`.
 
 ## Testing & Coverage
 

@@ -1,4 +1,6 @@
-# Unified Ingestion CLI Migration Guide
+# ARCHIVED: Unified Ingestion CLI Migration Guide
+
+_Archived 2025-10-04 – Migration completed and tooling retired._
 
 The legacy ingestion entry points (`med ingest --source ...` and `med-ingest ...`) now delegate to the unified Typer-based CLI. Use this guide to update scripts, CI jobs, and operator runbooks.
 

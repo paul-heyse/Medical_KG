@@ -1,11 +1,18 @@
 # Changelog
 
+## [Unreleased]
+### Removed
+- Deleted CLI migration tooling and helper scripts now that the unified CLI is fully adopted.
+
+### Documentation
+- Archived CLI migration roadmaps and linked the documentation archive from active guides.
+
 ## [2.0.0] - 2025-10-03
 ### Removed
-- Legacy ingestion CLI entry points, including the `med ingest-legacy` command and flag translation layer.
+- Deprecated ingestion CLI entry points, including the `med ingest-legacy` command and flag translation layer.
 
 ### Changed
-- Bumped the package version to `2.0.0` to signal the breaking removal of the legacy CLI.
+- Bumped the package version to `2.0.0` to signal the breaking removal of the deprecated CLI.
 - Unified CLI invocation is now the sole supported path: use `med ingest <adapter> [options]`.
 
 ### Migration Guidance

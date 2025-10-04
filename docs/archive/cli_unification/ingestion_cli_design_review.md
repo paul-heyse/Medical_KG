@@ -1,4 +1,6 @@
-# Unified Ingestion CLI Design Review Summary
+# ARCHIVED: Unified Ingestion CLI Design Review Summary
+
+_Archived 2025-10-04 – Superseded by unified CLI operations docs._
 
 **Date:** 2025-03-04 (recorded asynchronously)
 

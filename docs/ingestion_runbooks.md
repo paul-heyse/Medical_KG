@@ -69,13 +69,12 @@ Failure: any stage can fall back to [FAILED]
 
 - Entry point: `med ingest <adapter> [options]` with a positional adapter argument validated against the registry.
 - Format selection: `--output text|json|table`, plus `--summary-only` for log-friendly output and `--show-timings` for runtime metrics.
-- Streaming control: `--stream` emits NDJSON pipeline events to stdout while summaries move to stderr, `--no-stream` retains the eager wrapper for legacy scripts that expect full materialisation.
+- Streaming control: `--stream` emits NDJSON pipeline events to stdout while summaries move to stderr, `--no-stream` retains the eager wrapper for scripts that expect full materialisation.
 - Batch orchestration: `--batch path.ndjson` (chunked automatically with `--chunk-size`), `--id` for targeted document replays, and `--limit` to cap records.
 - Resume & auto pipelines: `--resume`, `--auto`, `--page-size`, `--start-date`, `--end-date`, and `--rate-limit` control long-running fetches.
 - Validation toggles: `--strict-validation`, `--skip-validation`, `--fail-fast`, `--dry-run`, and the new `--schema schema.json` guardrail to validate NDJSON rows against JSON Schema when available.
 - Logging & UX: `--progress/--no-progress`, `--quiet`, `--verbose`, `--log-level`, `--log-file`, and `--error-log` tailor operator feedback.
-- Help output: `med ingest --help` renders an overview, dynamic adapter list, markdown-formatted examples, and links to the migration + reference docs.
-- Deprecation path: `med ingest-legacy` delegates with a warning; set `MEDICAL_KG_SUPPRESS_INGEST_DEPRECATED=1` to silence the notice during scripted migrations.
+- Help output: `med ingest --help` renders an overview, dynamic adapter list, markdown-formatted examples, and links to the reference docs.
 
 ### Command Overview & Examples
 
@@ -90,7 +89,7 @@ med ingest umls --auto --limit 1000 --output json --show-timings
 med ingest nice --id guideline-123 --id guideline-456 --dry-run --summary-only
 ```
 
-Running `med ingest --help` lists all adapters discovered in the registry and highlights the most common workflows. The "See also" epilog links directly to this runbook, the command reference, and the migration guide for quick onboarding.
+Running `med ingest --help` lists all adapters discovered in the registry and highlights the most common workflows. The "See also" epilog links directly to this runbook, the command reference, and the documentation archive for historical context.
 
 ## Batch & Auto Modes
 

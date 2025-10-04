@@ -8,11 +8,13 @@
 ## Recommendations
 
 ### 1. Consolidate CLI entrypoints on the Typer application
-**Opportunity.** The legacy `argparse` CLI proxies ingestion commands by shelling into the Typer app while reimplementing PDF/mineru/post-processing commands separately, so behavior drifts and argument handling differs depending on which path code uses.【F:src/Medical_KG/cli.py†L220-L307】 Meanwhile the Typer ingestion CLI already centralises adapter discovery, batching, schema validation, and progress reporting in a structured, reusable way.【F:src/Medical_KG/ingestion/cli.py†L31-L156】
+**Opportunity.** The original `argparse` CLI proxies ingestion commands by shelling into the Typer app while reimplementing PDF/mineru/post-processing commands separately, so behavior drifts and argument handling differs depending on which path code uses.【F:src/Medical_KG/cli.py†L220-L307】 Meanwhile the Typer ingestion CLI already centralises adapter discovery, batching, schema validation, and progress reporting in a structured, reusable way.【F:src/Medical_KG/ingestion/cli.py†L31-L156】
 
 **Proposal.** Move the remaining PDF and configuration commands into Typer subapps, exposing a single `med` entrypoint that shares option parsing, logging, and help text. Provide a thin compatibility shim for scripts that still import `Medical_KG.cli:main`, but have it call the Typer app directly instead of re-parsing arguments.
 
 **Benefits.** A single CLI stack reduces drift, makes it easier to add cross-cutting flags (logging level, dry-run), and eliminates custom parsing hacks (like manually stashing `argv`) that make future enhancements brittle.【F:src/Medical_KG/cli.py†L282-L298】
+
+**Status (2025-10-04).** Completed through the unified CLI migration; see `docs/archive/cli_unification/` for the rollout record.
 
 ### 2. Make the ingestion pipeline streaming-first and composable
 **Opportunity.** `IngestionPipeline.run_async` eagerly materialises every `doc_id` before returning, so large adapter runs accumulate all results in memory even though `iter_results` already streams documents lazily.【F:src/Medical_KG/ingestion/pipeline.py†L71-L120】 Downstream orchestration code must therefore choose between eager lists or rolling its own streaming loop.

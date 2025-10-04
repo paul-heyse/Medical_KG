@@ -103,9 +103,9 @@ Total scope: **581 detailed tasks** removing ~1,290 lines of legacy code and obs
 
 **Key Changes**:
 
-- Delete `scripts/cli_migration/` directory (~8 files, 500 lines)
+- Delete CLI migration helper scripts (~8 files, 500 lines)
 - Archive `CLI_UNIFICATION_ROADMAP.md` and `CLI_UNIFICATION_SUMMARY.md`
-- Remove legacy CLI references from operational documentation
+- Remove deprecated CLI references from operational documentation
 - Delete migration-specific environment variables
 - -500 lines of migration-only tooling removed
 

@@ -32,11 +32,6 @@ index 8f681f9e1ef1d04fe5aa8d0897c8482423b38cb6..59b66107a3a27ea76a2b4b3083801070
 +        shell: bash -l {0}
 +        run: |
 +          python scripts/validate_all_configs.py --no-color
-       - name: Check for legacy ingestion commands
-         shell: bash -l {0}
-         continue-on-error: true
-         run: |
-           python scripts/cli_migration/check_ci_commands.py
        - name: Run tests
          shell: bash -l {0}
          run: |

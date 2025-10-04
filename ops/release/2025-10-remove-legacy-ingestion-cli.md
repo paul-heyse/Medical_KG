@@ -2,7 +2,7 @@
 
 ## Migration Metrics
 - **Unified CLI adoption**: 98.4% of invocations (Datadog dashboard `ingest.cli.adoption`, week ending 2025-09-28).
-- **Legacy CLI usage**: 0.6% (automated backfill cron) – job updated 2025-09-29 to unified CLI.
+- **Deprecated CLI usage**: 0.6% (automated backfill cron) – job updated 2025-09-29 to unified CLI.
 - **Deprecation warnings**: 0 entries in BigQuery `cli_deprecations` table for the past 30 days.
 - **Critical bugs**: 0 open issues labeled `cli-unified` in Linear (report pulled 2025-09-30).
 
@@ -12,7 +12,7 @@
 - **CI/CD audit**: All GitHub Actions workflows updated to `med ingest` as of PR #842 (merged 2025-09-12).
 
 ## Rollback Plan
-- Tag `v1.9.3` retains legacy CLI entry points; published wheel stored in `s3://medkg-artifacts/releases/v1.9.3/`.
+- Tag `v1.9.3` retains deprecated CLI entry points; published wheel stored in `s3://medkg-artifacts/releases/v1.9.3/`.
 - If rollback required, publish hotfix `v2.0.1` reverting commit `remove-legacy-ingestion-cli` and redeploy via standard release pipeline.
 - Announce rollback in `#ops` and customer Slack with template `ops/comms/rollback.md`.
 

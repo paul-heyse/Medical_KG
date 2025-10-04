@@ -1,265 +1,204 @@
-{
-  "$schema": "./config.schema.json#v1.0.0",
-  "config_version": "1.0.0",
-  "feature_flags": {
-    "splade_enabled": true,
-    "reranker_enabled": true,
-    "extraction_experimental_enabled": false
-  },
-  "sources": {
-    "pubmed": {
-      "base_url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/",
-      "api_key": "${NCBI_API_KEY:demo-ncbi-key}",
-      "rate_limit": {
-        "requests_per_minute": 600,
-        "burst": 120
-      },
-      "retry": {
-        "max_attempts": 5,
-        "backoff_seconds": 2.0
-      }
-    },
-    "pmc": {
-      "base_url": "https://www.ncbi.nlm.nih.gov/pmc/oai/oai.cgi",
-      "api_key": "${PMC_API_KEY:demo-pmc-key}",
-      "rate_limit": {
-        "requests_per_minute": 300,
-        "burst": 60
-      },
-      "retry": {
-        "max_attempts": 5,
-        "backoff_seconds": 2.0
-      }
-    },
-    "clinicaltrials": {
-      "base_url": "https://clinicaltrials.gov/api/v2",
-      "api_key": "${CTGOV_API_KEY:demo-ctgov-key}",
-      "rate_limit": {
-        "requests_per_minute": 120,
-        "burst": 30
-      },
-      "retry": {
-        "max_attempts": 4,
-        "backoff_seconds": 3.0
-      }
-    },
-    "dailymed": {
-      "base_url": "https://api.fda.gov/drug/label.json",
-      "api_key": "${OPEN_FDA_API_KEY:demo-openfda-key}",
-      "rate_limit": {
-        "requests_per_minute": 240,
-        "burst": 60
-      },
-      "retry": {
-        "max_attempts": 4,
-        "backoff_seconds": 2.5
-      }
-    }
-  },
-  "chunking": {
-    "profiles": {
-      "imrad": {
-        "target_tokens": 512,
-        "overlap": 64,
-        "tau_coh": 0.82
-      },
-      "registry": {
-        "target_tokens": 400,
-        "overlap": 48,
-        "tau_coh": 0.8
-      },
-      "spl": {
-        "target_tokens": 350,
-        "overlap": 32,
-        "tau_coh": 0.78
-      },
-      "guideline": {
-        "target_tokens": 420,
-        "overlap": 40,
-        "tau_coh": 0.81
-      }
-    }
-  },
-  "embeddings": {
-    "vllm_api_base": "${VLLM_API_BASE:https://localhost:9001}",
-    "model": "qwen2.5-7b-instruct",
-    "batch_size": 16,
-    "splade_top_k": 1000,
-    "require_gpu": true
-  },
-  "retrieval": {
-    "fusion": {
-      "weights": {
-        "bm25": 0.4,
-        "splade": 0.3,
-        "dense": 0.3
-      },
-      "rrf_k": 60
-    },
-    "reranker": {
-      "enabled": true,
-      "top_n": 50,
-      "slo_ms": 1200.0
-    },
-    "neighbor_merge": {
-      "min_cosine": 0.82,
-      "max_tokens": 1800
-    },
-    "indices": {
-      "bm25": "chunks_v1",
-      "splade": "chunks_splade_v1",
-      "dense": "chunk_qwen_idx",
-      "paragraph": "paragraphs_v1",
-      "section": "sections_v1"
-    },
-    "top_k": {
-      "default": 20,
-      "max": 200
-    },
-    "cache": {
-      "query_seconds": 60,
-      "embedding_seconds": 60,
-      "expansion_seconds": 60
-    },
-    "multi_granularity": {
-      "enabled": true,
-      "indexes": {
-        "chunk": "chunks_v1",
-        "paragraph": "paragraphs_v1",
-        "section": "sections_v1"
-      }
-    }
-  },
-  "extraction": {
-    "pico": {
-      "intent": "pico",
-      "prompt": "Extract study Population, Intervention, Comparator, Outcomes with rationale.",
-      "temperature": 0.0,
-      "max_tokens": 512,
-      "confidence_threshold": 0.35
-    },
-    "effects": {
-      "intent": "endpoint",
-      "prompt": "Summarize the primary and secondary efficacy endpoints with metrics.",
-      "temperature": 0.0,
-      "max_tokens": 512,
-      "confidence_threshold": 0.4
-    },
-    "adverse_events": {
-      "intent": "ae",
-      "prompt": "List clinically significant adverse events with frequency and severity.",
-      "temperature": 0.1,
-      "max_tokens": 512,
-      "confidence_threshold": 0.45
-    },
-    "dosing": {
-      "intent": "dose",
-      "prompt": "Extract recommended dosing regimens including titration guidance.",
-      "temperature": 0.0,
-      "max_tokens": 400,
-      "confidence_threshold": 0.3
-    },
-    "eligibility": {
-      "intent": "eligibility",
-      "prompt": "Capture key inclusion and exclusion criteria verbatim with rationale.",
-      "temperature": 0.0,
-      "max_tokens": 512,
-      "confidence_threshold": 0.35
-    }
-  },
-  "kg": {
-    "neo4j_uri": "${NEO4J_URI:neo4j://localhost:7687}",
-    "username": "${NEO4J_USERNAME:neo4j}",
-    "password": "${NEO4J_PASSWORD:neo4jpass}",
-    "batch_size": 500,
-    "shacl_enabled": true
-  },
-  "catalog": {
-    "vocabs": {
-      "snomed": {
-        "enabled": false,
-        "requires_license": true,
-        "refresh_cron": "0 2 * * *",
-        "territory": "US"
-      },
-      "meddra": {
-        "enabled": true,
-        "requires_license": true,
-        "refresh_cron": "0 3 * * 1",
-        "territory": "US"
-      },
-      "loinc": {
-        "enabled": true,
-        "requires_license": true,
-        "refresh_cron": "0 4 * * 3"
-      },
-      "rxnorm": {
-        "enabled": true,
-        "requires_license": false,
-        "refresh_cron": "0 5 * * *"
-      },
-      "hpo": {
-        "enabled": true,
-        "requires_license": false,
-        "refresh_cron": "0 6 * * 0"
-      }
-    },
-    "license_policy": "policy.yaml"
-  },
-  "apis": {
-    "rate_limits": {
-      "public": {
-        "requests_per_minute": 120,
-        "burst": 60
-      },
-      "partner": {
-        "requests_per_minute": 300,
-        "burst": 120
-      },
-      "admin": {
-        "requests_per_minute": 600,
-        "burst": 240
-      }
-    },
-    "auth": {
-      "issuer": "https://medical-kg/auth",
-      "audience": "medical-kg-api",
-      "admin_scope": "admin:config",
-      "jwt_secret": "${API_JWT_SECRET:demo-jwt-secret}",
-      "token_ttl_seconds": 3600
-    },
-    "cors": {
-      "allowed_origins": [
-        "https://localhost:3000",
-        "https://medical-kg.dev"
-      ]
-    }
-  },
-  "observability": {
-    "logging": {
-      "level": "info"
-    },
-    "metrics": {
-      "push_interval_seconds": 15
-    },
-    "tracing": {
-      "endpoint": "http://localhost:4318",
-      "sample_rate": 0.1
-    }
-  },
-  "licensing": {
-    "policy_path": "policy.yaml"
-  },
-  "pipelines": {
-    "pdf": {
-      "ledger_path": "./data/ledger.jsonl",
-      "artifact_dir": "./data/mineru",
-      "require_gpu": true
-    }
-  },
-  "entity_linking": {
-    "acceptance_threshold": 0.7,
-    "rrf_k": 60,
-    "max_batch": 300
-  }
-}
+$schema: ./config.schema.json#v1.0.0
+config_version: 1.0.0  # Must stay aligned with schema migrations to avoid downgrade prompts.
+feature_flags:
+  # Feature flags remain explicit booleans so breaking change detection can diff defaults reliably.
+  splade_enabled: true
+  reranker_enabled: true
+  extraction_experimental_enabled: false
+sources:
+  pubmed:
+    base_url: https://eutils.ncbi.nlm.nih.gov/entrez/eutils/
+    api_key: "${NCBI_API_KEY:demo-ncbi-key}"  # Satisfies the credentials anyOf branch requiring API token auth.
+    rate_limit:
+      requests_per_minute: 600  # Must stay within integer bounds enforced by schema.
+      burst: 120
+    retry:
+      max_attempts: 5
+      backoff_seconds: 2.0
+  pmc:
+    base_url: https://www.ncbi.nlm.nih.gov/pmc/oai/oai.cgi
+    api_key: "${PMC_API_KEY:demo-pmc-key}"
+    rate_limit:
+      requests_per_minute: 300
+      burst: 60
+    retry:
+      max_attempts: 5
+      backoff_seconds: 2.0
+  clinicaltrials:
+    base_url: https://clinicaltrials.gov/api/v2
+    api_key: "${CTGOV_API_KEY:demo-ctgov-key}"
+    rate_limit:
+      requests_per_minute: 120
+      burst: 30
+    retry:
+      max_attempts: 4
+      backoff_seconds: 3.0
+  dailymed:
+    base_url: https://api.fda.gov/drug/label.json
+    api_key: "${OPEN_FDA_API_KEY:demo-openfda-key}"
+    rate_limit:
+      requests_per_minute: 240
+      burst: 60
+    retry:
+      max_attempts: 4
+      backoff_seconds: 2.5
+chunking:
+  profiles:
+    imrad:
+      target_tokens: 512
+      overlap: 64
+      tau_coh: 0.82
+    registry:
+      target_tokens: 400
+      overlap: 48
+      tau_coh: 0.8
+    spl:
+      target_tokens: 350
+      overlap: 32
+      tau_coh: 0.78
+    guideline:
+      target_tokens: 420
+      overlap: 40
+      tau_coh: 0.81
+embeddings:
+  vllm_api_base: "${VLLM_API_BASE:https://localhost:9001}"
+  model: qwen2.5-7b-instruct
+  batch_size: 16
+  splade_top_k: 1000
+  require_gpu: true
+retrieval:
+  fusion:
+    # Weights must sum to 1.0; schema enforces via allOf to guard retriever mix balance.
+    weights:
+      bm25: 0.4
+      splade: 0.3
+      dense: 0.3
+    rrf_k: 60
+  reranker:
+    enabled: true
+    top_n: 50
+    slo_ms: 1200.0
+  neighbor_merge:
+    min_cosine: 0.82
+    max_tokens: 1800
+  indices:
+    bm25: chunks_v1
+    splade: chunks_splade_v1
+    dense: chunk_qwen_idx
+    paragraph: paragraphs_v1
+    section: sections_v1
+  top_k:
+    default: 20
+    max: 200
+  cache:
+    query_seconds: 60
+    embedding_seconds: 60
+    expansion_seconds: 60
+  multi_granularity:
+    enabled: true
+    indexes:
+      chunk: chunks_v1
+      paragraph: paragraphs_v1
+      section: sections_v1
+extraction:
+  pico:
+    intent: pico
+    prompt: "Extract study Population, Intervention, Comparator, Outcomes with rationale."
+    temperature: 0.0
+    max_tokens: 512
+    confidence_threshold: 0.35
+  effects:
+    intent: endpoint
+    prompt: "Summarize the primary and secondary efficacy endpoints with metrics."
+    temperature: 0.0
+    max_tokens: 512
+    confidence_threshold: 0.4
+  adverse_events:
+    intent: ae
+    prompt: "List clinically significant adverse events with frequency and severity."
+    temperature: 0.1
+    max_tokens: 512
+    confidence_threshold: 0.45
+  dosing:
+    intent: dose
+    prompt: "Extract recommended dosing regimens including titration guidance."
+    temperature: 0.0
+    max_tokens: 400
+    confidence_threshold: 0.3
+  eligibility:
+    intent: eligibility
+    prompt: "Capture key inclusion and exclusion criteria verbatim with rationale."
+    temperature: 0.0
+    max_tokens: 512
+    confidence_threshold: 0.35
+kg:
+  neo4j_uri: "${NEO4J_URI:neo4j://localhost:7687}"
+  username: "${NEO4J_USERNAME:neo4j}"
+  password: "${NEO4J_PASSWORD:neo4jpass}"
+  batch_size: 500
+  shacl_enabled: true
+catalog:
+  vocabs:
+    snomed:
+      enabled: false
+      requires_license: true
+      refresh_cron: "0 2 * * *"
+      territory: US
+    meddra:
+      enabled: true
+      requires_license: true
+      refresh_cron: "0 3 * * 1"
+      territory: US
+    loinc:
+      enabled: true
+      requires_license: true
+      refresh_cron: "0 4 * * 3"
+    rxnorm:
+      enabled: true
+      requires_license: false
+      refresh_cron: "0 5 * * *"
+    hpo:
+      enabled: true
+      requires_license: false
+      refresh_cron: "0 6 * * 0"
+  license_policy: policy.yaml  # Validated via file_path format to ensure policy is present.
+apis:
+  rate_limits:
+    public:
+      requests_per_minute: 120
+      burst: 60
+    partner:
+      requests_per_minute: 300
+      burst: 120
+    admin:
+      requests_per_minute: 600
+      burst: 240
+  auth:
+    issuer: https://medical-kg/auth
+    audience: medical-kg-api
+    admin_scope: admin:config
+    jwt_secret: "${API_JWT_SECRET:demo-jwt-secret}"  # Required unless OAuth credentials satisfy the conditional branch.
+    token_ttl_seconds: 3600
+  cors:
+    allowed_origins:
+      - https://localhost:3000
+      - https://medical-kg.dev
+observability:
+  logging:
+    level: info  # Must match log_level format checker.
+  metrics:
+    push_interval_seconds: 15
+  tracing:
+    endpoint: http://localhost:4318
+    sample_rate: 0.1
+licensing:
+  policy_path: policy.yaml  # Uses file_path format to prevent missing license policy on load.
+pipelines:
+  pdf:
+    ledger_path: ./data/ledger.jsonl  # File path must exist for ingestion to succeed.
+    artifact_dir: ./data/mineru
+    require_gpu: true
+entity_linking:
+  acceptance_threshold: 0.7
+  rrf_k: 60
+  max_batch: 300

@@ -28,3 +28,11 @@ repos:
           - src/Medical_KG/utils/optional_dependencies.py
           - src/Medical_KG/cli.py
         pass_filenames: false
+  - repo: local
+    hooks:
+      - id: validate-configs
+        name: Validate configuration payloads
+        entry: python scripts/validate_all_configs.py --no-color
+        language: system
+        files: ^src/Medical_KG/config/.*\.(yaml|json)$
+        pass_filenames: false

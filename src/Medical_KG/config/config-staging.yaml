@@ -1,42 +1,25 @@
-{
-  "$schema": "./config.schema.json#v1.0.0",
-  "observability": {
-    "logging": {
-      "level": "info"
-    }
-  },
-  "sources": {
-    "pubmed": {
-      "api_key": "${NCBI_STAGING_KEY}"
-    },
-    "pmc": {
-      "api_key": "${PMC_STAGING_KEY}"
-    },
-    "clinicaltrials": {
-      "api_key": "${CTGOV_STAGING_KEY}"
-    },
-    "dailymed": {
-      "api_key": "${OPEN_FDA_STAGING_KEY}"
-    }
-  },
-  "feature_flags": {
-    "extraction_experimental_enabled": false
-  },
-  "kg": {
-    "neo4j_uri": "neo4j+s://staging.neo4j.medical-kg.internal:7687"
-  },
-  "catalog": {
-    "vocabs": {
-      "snomed": {
-        "enabled": true
-      }
-    }
-  },
-  "apis": {
-    "cors": {
-      "allowed_origins": [
-        "https://staging.medical-kg.com"
-      ]
-    }
-  }
-}
+$schema: ./config.schema.json#v1.0.0
+observability:
+  logging:
+    level: info
+sources:
+  pubmed:
+    api_key: "${NCBI_STAGING_KEY}"  # Demonstrates env-specific credential override path.
+  pmc:
+    api_key: "${PMC_STAGING_KEY}"
+  clinicaltrials:
+    api_key: "${CTGOV_STAGING_KEY}"
+  dailymed:
+    api_key: "${OPEN_FDA_STAGING_KEY}"
+feature_flags:
+  extraction_experimental_enabled: false
+kg:
+  neo4j_uri: neo4j+s://staging.neo4j.medical-kg.internal:7687
+catalog:
+  vocabs:
+    snomed:
+      enabled: true  # Ensures staging validates licensed vocabulary gating before production rollout.
+apis:
+  cors:
+    allowed_origins:
+      - https://staging.medical-kg.com

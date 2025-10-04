@@ -31,6 +31,7 @@ from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 from Medical_KG.ingestion.models import Document
+from Medical_KG.ingestion.telemetry import HttpTelemetry
 from Medical_KG.ingestion.types import (
     Icd11DocumentPayload,
     JSONMapping,
@@ -40,7 +41,6 @@ from Medical_KG.ingestion.types import (
     UmlsDocumentPayload,
     is_snomed_payload,
 )
-from Medical_KG.ingestion.telemetry import HttpTelemetry
 from Medical_KG.ingestion.utils import (
     canonical_json,
     ensure_json_mapping,

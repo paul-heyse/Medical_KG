@@ -20,9 +20,9 @@ from Medical_KG.api.models import (
     FacetGenerationRequest,
     FacetGenerationResponse,
     HealthResponse,
+    IngestionStreamRequest,
     KgWriteRequest,
     KgWriteResponse,
-    IngestionStreamRequest,
     RetrieveRequest,
     RetrieveResponse,
     RetrieveResult,
@@ -35,10 +35,10 @@ from Medical_KG.extraction.service import ClinicalExtractionService
 from Medical_KG.facets.models import AdverseEventFacet, DoseFacet, EndpointFacet, FacetModel
 from Medical_KG.facets.service import Chunk as FacetChunk
 from Medical_KG.facets.service import FacetService
-from Medical_KG.kg.service import KgWriteFailure, KgWriteService
 from Medical_KG.ingestion.events import event_to_dict
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion.pipeline import IngestionPipeline
+from Medical_KG.kg.service import KgWriteFailure, KgWriteService
 from Medical_KG.services.chunks import ChunkRepository
 from Medical_KG.services.retrieval import RetrievalResult as RetrievalResultModel
 from Medical_KG.services.retrieval import RetrievalService

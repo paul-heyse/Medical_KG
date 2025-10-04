@@ -13,8 +13,8 @@ Stream auto mode results with JSON output:
 
 from __future__ import annotations
 
-import contextlib
 import asyncio
+import contextlib
 import importlib
 import itertools
 import json
@@ -379,6 +379,7 @@ def _dry_run(
     auto: bool,
     show_timings: bool,
     summary_only: bool,
+    stream_events: bool,
     output: OutputFormat,
     schema_validator: Callable[[dict[str, Any]], None] | None,
 ) -> None:
@@ -644,6 +645,7 @@ def ingest(
             auto=auto,
             show_timings=show_timings,
             summary_only=summary_only,
+            stream_events=stream_events,
             output=output,
             schema_validator=schema_validator,
         )

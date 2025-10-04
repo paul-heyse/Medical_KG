@@ -16,11 +16,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable, cast
 
-import yaml
 from jsonschema import FormatChecker, ValidationError
 from jsonschema.validators import validator_for
 from packaging.version import InvalidVersion, Version
 
+import yaml
 from Medical_KG.compat.prometheus import Gauge, GaugeLike
 from Medical_KG.types import JSONMapping, JSONObject, JSONValue, MutableJSONMapping
 

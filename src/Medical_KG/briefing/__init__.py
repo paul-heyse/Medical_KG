@@ -1,9 +1,13 @@
 """Briefing output generation utilities."""
 
+from typing import Any
+
 from Medical_KG.utils.optional_dependencies import (
     MissingDependencyError,
     optional_import,
 )
+
+router: Any | None
 
 try:  # pragma: no cover - optional FastAPI dependency for router wiring
     _api_module = optional_import(
@@ -12,7 +16,7 @@ try:  # pragma: no cover - optional FastAPI dependency for router wiring
         package_name="fastapi",
     )
 except MissingDependencyError:  # pragma: no cover - fallback when fastapi/pydantic absent
-    router = None  # type: ignore[assignment]
+    router = None
 else:
     router = getattr(_api_module, "router", None)
 from .models import (

@@ -13,7 +13,6 @@ import importlib.util
 from dataclasses import dataclass
 from types import ModuleType
 from typing import (
-    TYPE_CHECKING,
     Any,
     AsyncContextManager,
     Callable,
@@ -267,9 +266,6 @@ def optional_import(
             install_hint=hint,
             docs_url=documentation,
         ) from exc
-
-if TYPE_CHECKING:  # pragma: no cover - import-time typing help only
-    import prometheus_client
 
 
 class TokenEncoder(Protocol):
@@ -669,7 +665,7 @@ def build_histogram(
     histogram_cls = getattr(prom_module, "Histogram", None)
     if histogram_cls is None:
         return _NoopHistogram()
-    histogram: "prometheus_client.Histogram" = PromHistogram(
+    histogram = histogram_cls(
         name,
         documentation,
         buckets=buckets,

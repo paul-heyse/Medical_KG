@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import Generic, Mapping, TypeVar
+from typing import Generic, Mapping, Sequence, TypeVar
 
 from Medical_KG.compat.httpx import HTTPError
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter

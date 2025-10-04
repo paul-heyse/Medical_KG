@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from collections.abc import AsyncIterator
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable
 
 import pytest
@@ -15,8 +16,6 @@ from Medical_KG.ingestion.cli_helpers import (
     count_ndjson_records,
     load_ndjson_batch,
 )
-from datetime import datetime, timezone
-
 from Medical_KG.ingestion.events import BatchProgress, DocumentCompleted
 from Medical_KG.ingestion.models import Document
 from Medical_KG.ingestion.pipeline import PipelineResult

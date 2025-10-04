@@ -4,10 +4,9 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import shutil
 from pathlib import Path
-
-import logging
 
 import pytest
 

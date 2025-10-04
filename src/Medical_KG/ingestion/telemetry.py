@@ -1,12 +1,12 @@
-from __future__ import annotations
-
 """Telemetry primitives for the asynchronous HTTP client."""
+
+from __future__ import annotations
 
 import importlib.util
 import logging
 from dataclasses import asdict, dataclass
 from time import time
-from typing import Any, Callable, Mapping, MutableMapping, Protocol, Sequence
+from typing import Any, Callable, Mapping, MutableMapping, Protocol, Sequence, cast
 from uuid import uuid4
 
 from Medical_KG.utils.optional_dependencies import (
@@ -351,8 +351,9 @@ class CompositeTelemetry:
             callback = getattr(telemetry, method_name, None)
             if callback is None:
                 continue
+            typed_callback = cast(Callable[[HttpEvent], None], callback)
             try:
-                callback(event)  # type: ignore[arg-type]
+                typed_callback(event)
             except Exception:  # pragma: no cover - defensive logging
                 self._logger.exception("Telemetry callback %s failed", method_name)
 

@@ -33,8 +33,8 @@ from urllib.parse import urlparse
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
 from Medical_KG.ingestion.http_client import AsyncHttpClient, RateLimit
-from Medical_KG.ingestion.telemetry import HttpTelemetry
 from Medical_KG.ingestion.models import Document
+from Medical_KG.ingestion.telemetry import HttpTelemetry
 from Medical_KG.ingestion.types import (
     JSONMapping,
     JSONValue,

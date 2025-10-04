@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Callable, NoReturn, cast
 
+from Medical_KG.utils.optional_dependencies import MissingDependencyError, optional_import
+
 from .clients import (
     ConstantEmbeddingClient,
     EmbeddingClient,
@@ -20,8 +22,6 @@ from .intent import IntentClassifier, IntentRule
 from .models import RetrievalRequest, RetrievalResponse
 from .ontology import ConceptCatalogClient, OntologyExpander, OntologyTerm
 from .service import RetrievalService, RetrieverConfig
-
-from Medical_KG.utils.optional_dependencies import MissingDependencyError, optional_import
 
 if TYPE_CHECKING:
     from .api import create_router

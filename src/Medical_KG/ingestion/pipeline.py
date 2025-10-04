@@ -8,13 +8,12 @@ import time
 import traceback
 from collections.abc import AsyncIterator, Iterable, Sequence
 from datetime import datetime, timezone
-from typing import Any, Callable, Mapping, Protocol, Sequence
+from typing import Any, Callable, Mapping, Protocol
 
 from Medical_KG.ingestion import registry as ingestion_registry
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
 from Medical_KG.ingestion.events import (
     AdapterStateChange,
-    AdapterRetry,
     BatchProgress,
     DocumentCompleted,
     DocumentFailed,
@@ -29,6 +28,7 @@ from Medical_KG.ingestion.events import (
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion.models import Document
+from Medical_KG.ingestion.telemetry import HttpTelemetry
 from Medical_KG.utils.optional_dependencies import (
     CounterProtocol,
     GaugeProtocol,
@@ -107,7 +107,7 @@ class IngestionPipeline:
         self.ledger = ledger
         self._registry = registry or ingestion_registry
         self._client_factory = client_factory or AsyncHttpClient
-        self._client_kwargs: dict[str, object] = {}
+        self._client_kwargs: dict[str, Any] = {}
         if client_telemetry is not None:
             self._client_kwargs["telemetry"] = client_telemetry
         if enable_client_metrics is not None:

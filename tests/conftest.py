@@ -14,8 +14,6 @@ from pathlib import Path
 from trace import Trace
 from typing import Any, Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence, cast
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 PACKAGE_ROOT = SRC / "Medical_KG"
@@ -229,6 +227,8 @@ if "httpx" not in sys.modules:
 
         sys.modules["httpx"] = httpx_module
 
+
+import pytest  # noqa: E402
 
 from Medical_KG.ingestion.ledger import (  # noqa: E402
     LedgerAuditRecord,

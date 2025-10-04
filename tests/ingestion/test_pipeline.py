@@ -6,7 +6,16 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
-from Medical_KG.ingestion.events import BatchProgress, DocumentCompleted, DocumentStarted
+from Medical_KG.ingestion.adapters.guidelines import NiceGuidelineAdapter
+from Medical_KG.ingestion.events import (
+    AdapterStateChange,
+    BatchProgress,
+    DocumentCompleted,
+    DocumentFailed,
+    DocumentStarted,
+    PipelineEvent,
+    errors_only,
+)
 from Medical_KG.ingestion.ledger import IngestionLedger, LedgerState
 from Medical_KG.ingestion.models import Document, IngestionResult
 from Medical_KG.ingestion.pipeline import IngestionPipeline, PipelineResult

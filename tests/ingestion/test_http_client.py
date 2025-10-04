@@ -8,6 +8,7 @@ import pytest
 
 from Medical_KG.ingestion.http_client import AsyncHttpClient, RateLimit
 from Medical_KG.ingestion.telemetry import (
+    CompositeTelemetry,
     HttpBackoffEvent,
     HttpErrorEvent,
     HttpRequestEvent,
@@ -198,6 +199,37 @@ def test_http_client_emits_error_event(monkeypatch: Any) -> None:
     assert telemetry.events[-1][0] == "error"
     error_event = cast(HttpErrorEvent, telemetry.events[-1][1])
     assert error_event.retryable is False
+
+
+def test_http_client_normalizes_composite_telemetry(httpx_mock_transport: Any) -> None:
+    class _Telemetry:
+        def __init__(self, name: str) -> None:
+            self.name = name
+            self.calls: list[str] = []
+
+        def on_request(self, event: HttpRequestEvent) -> None:
+            self.calls.append(event.host)
+
+    global_telemetry = _Telemetry("global")
+    host_telemetry = _Telemetry("host")
+    composite = CompositeTelemetry(
+        global_telemetry,
+        per_host={"example.com": [host_telemetry]},
+    )
+
+    def handler(request: HttpxRequestProtocol) -> HttpxResponseProtocol:
+        return HTTPX.Response(status_code=200, json={"ok": True}, request=request)
+
+    httpx_mock_transport(handler)
+
+    async def _run() -> None:
+        async with AsyncHttpClient(telemetry=composite, enable_metrics=False) as client:
+            await client.get_json("https://example.com/resource")
+
+    asyncio.run(_run())
+
+    assert global_telemetry.calls == ["example.com"]
+    assert host_telemetry.calls == ["example.com"]
 
 
 def test_http_client_emits_retry_event(monkeypatch: Any) -> None:

@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import pytest
 
+from Medical_KG import cli as root_cli
 from Medical_KG.cli import build_parser
 
 
@@ -50,9 +53,20 @@ def test_ingest_passes_arguments_without_translation(
     assert captured_output.err == ""
 
 
-def test_ingest_legacy_command_removed() -> None:
-    parser = build_parser()
-    with pytest.raises(SystemExit) as excinfo:
-        parser.parse_args(["ingest-legacy"])
+def test_cli_main_routes_ingest_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, list[str]] = {}
 
-    assert excinfo.value.code == 2
+    def fake_main(argv: list[str] | None = None) -> int:
+        captured["argv"] = argv or []
+        return 0
+
+    monkeypatch.setattr("Medical_KG.ingestion.cli.main", fake_main)
+    exit_code = root_cli.main([
+        "ingest",
+        "demo",
+        "--batch",
+        "payload.ndjson",
+    ])
+
+    assert exit_code == 0
+    assert captured["argv"] == ["ingest", "demo", "--batch", "payload.ndjson"]

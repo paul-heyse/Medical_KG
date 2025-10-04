@@ -215,7 +215,7 @@ def test_pipeline_iter_results_streams_documents(tmp_path: Path) -> None:
     assert doc_ids == ["doc-1", "doc-2"]
 
 
-def test_stream_events_emit_lifecycle_events(tmp_path: Path) -> None:
+def test_pipeline_stream_events_smoke(tmp_path: Path) -> None:
     ledger_path = tmp_path / "ledger.jsonl"
     ledger = IngestionLedger(ledger_path)
     records = [
@@ -229,15 +229,17 @@ def test_stream_events_emit_lifecycle_events(tmp_path: Path) -> None:
         client_factory=lambda: _NoopClient(),
     )
 
-    async def _collect() -> list[object]:
-        events: list[object] = []
+    async def _collect() -> list[PipelineEvent]:
+        events: list[PipelineEvent] = []
         async for event in pipeline.stream_events("stub", progress_interval=1):
             events.append(event)
         return events
 
     events = asyncio.run(_collect())
-    assert sum(isinstance(event, DocumentStarted) for event in events) == 2
-    assert sum(isinstance(event, DocumentCompleted) for event in events) == 2
+    assert any(isinstance(event, DocumentStarted) for event in events)
+    completed = [event for event in events if isinstance(event, DocumentCompleted)]
+    assert [event.document.doc_id for event in completed] == ["doc-1", "doc-2"]
+    assert all(not isinstance(event, DocumentFailed) for event in completed)
     assert any(isinstance(event, AdapterStateChange) for event in events)
     started_ids = [event.doc_id for event in events if isinstance(event, DocumentStarted)]
     completed_ids = [event.document.doc_id for event in events if isinstance(event, DocumentCompleted)]

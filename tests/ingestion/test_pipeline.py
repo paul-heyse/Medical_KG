@@ -573,7 +573,9 @@ def test_pipeline_records_consumption_modes(monkeypatch, tmp_path: Path) -> None
             pass
 
     asyncio.run(_drain_stream())
-    assert any(record.get("mode") == "stream" for record in counter.records)
+    assert any(
+        record.get("mode") == "stream_events" for record in counter.records
+    )
 
     counter.records.clear()
 
@@ -589,21 +591,3 @@ def test_pipeline_records_consumption_modes(monkeypatch, tmp_path: Path) -> None
 
     asyncio.run(pipeline_async.run_async("stub"))
     assert any(record.get("mode") == "run_async" for record in counter.records)
-
-    counter.records.clear()
-
-    ledger_legacy = IngestionLedger(tmp_path / "legacy-ledger.jsonl")
-    legacy_adapter = _StubAdapter(
-        AdapterContext(ledger_legacy), records=[{"id": "legacy-doc", "content": "ok"}]
-    )
-    pipeline_legacy = IngestionPipeline(
-        ledger_legacy,
-        registry=_Registry(legacy_adapter),
-        client_factory=lambda: _NoopClient(),
-    )
-
-    monkeypatch.setenv(pipeline_module._LEGACY_WARNING_ENV, "1")
-    asyncio.run(pipeline_legacy.run_async_legacy("stub"))
-    assert any(
-        record.get("mode") == "run_async_legacy" for record in counter.records
-    )

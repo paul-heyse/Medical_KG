@@ -56,8 +56,8 @@ def main() -> int:
             "or iter_results() for incremental processing."
         )
     print(
-        "\nSet MEDICAL_KG_SUPPRESS_PIPELINE_DEPRECATION=1 to silence legacy warnings during"
-        " migration if necessary."
+        "\nLegacy run_async_legacy() support has been removed; update callers to use"
+        " IngestionPipeline.stream_events() or run_async()."
     )
     return 0
 

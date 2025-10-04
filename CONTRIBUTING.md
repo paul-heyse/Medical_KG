@@ -11,11 +11,16 @@ please follow the steps below before sending a pull request.
 2. **Handle optional dependencies via compat** – use helpers such as `create_async_client`,
    `load_pipeline`, `load_encoding`, and `load_locust` so strict mypy checks work even when
    optional packages are missing locally.
-3. **Run quality gates**:
+3. **Standardise new extras** – when introducing a feature that depends on an optional
+   package, update `DEPENDENCY_REGISTRY` (and tests) in
+   [`Medical_KG.utils.optional_dependencies`](./src/Medical_KG/utils/optional_dependencies.py),
+   add the extras group in `pyproject.toml`, refresh `docs/dependencies.md`, and provide a
+   stub under `stubs/` so `mypy --strict` continues to pass.
+4. **Run quality gates**:
    - `ruff check src tests`
    - `mypy --strict src/Medical_KG`
    - `pytest -q`
-4. **Update docs** – if you add new patterns or optional integrations, document the
+5. **Update docs** – if you add new patterns or optional integrations, document the
    approach in [`docs/type_safety.md`](./docs/type_safety.md).
 
 ## Coding Standards

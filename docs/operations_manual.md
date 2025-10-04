@@ -25,6 +25,7 @@ Central index for Medical KG runbooks, contacts, and cadences.
 | Datastore failover (Neo4j/OS)     | `ops/runbooks/07-datastore-failover.md`      |
 | Briefing generation gaps          | `ops/runbooks/08-briefing-troubleshooting.md` |
 | Unified ingestion CLI operations  | `docs/ingestion_cli_reference.md`             |
+| Optional dependency diagnostics   | `docs/dependencies.md`                       |
 
 ## Escalation Matrix
 

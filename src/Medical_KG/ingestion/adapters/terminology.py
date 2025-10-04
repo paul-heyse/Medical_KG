@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import AsyncIterator, Iterable
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from Medical_KG.ingestion.adapters.base import AdapterContext
 from Medical_KG.ingestion.adapters.http import HttpAdapter
@@ -40,6 +40,7 @@ from Medical_KG.ingestion.types import (
     UmlsDocumentPayload,
     is_snomed_payload,
 )
+from Medical_KG.ingestion.telemetry import HttpTelemetry
 from Medical_KG.ingestion.utils import (
     canonical_json,
     ensure_json_mapping,
@@ -63,8 +64,14 @@ class MeSHAdapter(HttpAdapter[Any]):
         client: AsyncHttpClient,
         *,
         bootstrap_records: Iterable[dict[str, Any]] | None = None,
+        telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+        )
+        | None = None,
     ) -> None:
-        super().__init__(context, client)
+        super().__init__(context, client, telemetry=telemetry)
         self._bootstrap = list(bootstrap_records or [])
         self._cache: dict[str, JSONMapping] = {}
 
@@ -162,8 +169,14 @@ class UMLSAdapter(HttpAdapter[Any]):
         client: AsyncHttpClient,
         *,
         bootstrap_records: Iterable[dict[str, Any]] | None = None,
+        telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+        )
+        | None = None,
     ) -> None:
-        super().__init__(context, client)
+        super().__init__(context, client, telemetry=telemetry)
         self._bootstrap = list(bootstrap_records or [])
         self._cache: dict[str, JSONMapping] = {}
 
@@ -230,8 +243,14 @@ class LoincAdapter(HttpAdapter[Any]):
         client: AsyncHttpClient,
         *,
         bootstrap_records: Iterable[dict[str, Any]] | None = None,
+        telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+        )
+        | None = None,
     ) -> None:
-        super().__init__(context, client)
+        super().__init__(context, client, telemetry=telemetry)
         self._bootstrap = list(bootstrap_records or [])
         self._cache: dict[str, JSONMapping] = {}
 
@@ -292,8 +311,14 @@ class Icd11Adapter(HttpAdapter[Any]):
         client: AsyncHttpClient,
         *,
         bootstrap_records: Iterable[dict[str, Any]] | None = None,
+        telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+        )
+        | None = None,
     ) -> None:
-        super().__init__(context, client)
+        super().__init__(context, client, telemetry=telemetry)
         self._bootstrap = list(bootstrap_records or [])
         self._cache: dict[str, JSONMapping] = {}
 
@@ -368,8 +393,14 @@ class SnomedAdapter(HttpAdapter[Any]):
         client: AsyncHttpClient,
         *,
         bootstrap_records: Iterable[dict[str, Any]] | None = None,
+        telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+        )
+        | None = None,
     ) -> None:
-        super().__init__(context, client)
+        super().__init__(context, client, telemetry=telemetry)
         self._bootstrap = list(bootstrap_records or [])
         self._cache: dict[str, JSONMapping] = {}
 

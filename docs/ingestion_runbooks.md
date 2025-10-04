@@ -350,3 +350,110 @@ clean = text.strip()
 
 Re-run `./.venv/bin/python -m mypy --strict` on any adapter that adopts these examples to guarantee the migration stayed
 type-safe.
+
+## HTTP Client Telemetry
+
+`AsyncHttpClient` exposes structured telemetry so operators can observe the full request lifecycle without wrapping adapters in bespoke logging or metric code.
+
+### Event Types
+
+Each lifecycle hook receives a dataclass instance with contextual metadata:
+
+| Event | Dataclass | Key fields |
+|-------|-----------|------------|
+| Request started | `HttpRequestEvent` | `request_id`, `url`, `method`, sanitized `headers` |
+| Response received | `HttpResponseEvent` | `status_code`, `duration_seconds`, `response_size_bytes` |
+| Retry scheduled | `HttpRetryEvent` | `attempt`, `delay_seconds`, `reason`, `will_retry` |
+| Limiter backoff | `HttpBackoffEvent` | `wait_time_seconds`, `queue_depth`, `queue_saturation` |
+| Error surfaced | `HttpErrorEvent` | `error_type`, `message`, `retryable` |
+
+Events share a `request_id`, allowing downstream systems to correlate retries, backoff, and completion.
+
+### Callback Interface
+
+Callbacks can be passed directly to `AsyncHttpClient` or registered later:
+
+```python
+from Medical_KG.ingestion.http_client import AsyncHttpClient
+from Medical_KG.ingestion.telemetry import HttpRequestEvent
+
+def log_request(event: HttpRequestEvent) -> None:
+    LOG.info("HTTP %s %s", event.method, event.url, extra={"request_id": event.request_id})
+
+client = AsyncHttpClient(on_request=log_request)
+
+# Register more callbacks after construction (per-host mappings supported)
+client.add_telemetry({
+    "api.example.com": logging_telemetry,
+    "ratelimited.partner": prometheus_helper,
+})
+```
+
+### Built-in Telemetry Helpers
+
+* `LoggingTelemetry` – emits structured log records with the full event payload (sensitive headers redacted).
+* `PrometheusTelemetry` – exports counters/histograms/gauges when `prometheus_client` is installed; disabled automatically otherwise.
+* `TracingTelemetry` – creates OpenTelemetry spans (pass a tracer to opt in; no-op if OpenTelemetry is absent).
+* `CompositeTelemetry` – fan-out helper that executes multiple telemetry handlers while isolating failures.
+
+These helpers can be combined via the `telemetry` constructor argument or `client.add_telemetry`.
+
+### Prometheus Metrics
+
+`PrometheusTelemetry` records the following metrics (all with a `host` label):
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `http_requests_total{method,host,status}` | Counter | Successful + failed requests (status is HTTP code or exception type) |
+| `http_request_duration_seconds{method,host}` | Histogram | Request latency distribution |
+| `http_response_size_bytes{method,host}` | Histogram | Response payload sizes |
+| `http_retries_total{host,reason}` | Counter | Retry attempts grouped by reason |
+| `http_backoff_duration_seconds{host}` | Histogram | Limiter-enforced wait times |
+| `http_limiter_queue_depth{host}` | Gauge | Current limiter queue depth |
+| `http_limiter_queue_saturation{host}` | Gauge | Queue depth as % of capacity |
+
+A ready-to-import Grafana dashboard (`ops/monitoring/grafana/http-client-telemetry.json`) visualises request volume, latency percentiles, retries, and limiter saturation.
+
+### Per-Host Telemetry Patterns
+
+Adapters that talk to multiple APIs can scope telemetry by host:
+
+```python
+from Medical_KG.ingestion.telemetry import LoggingTelemetry, PrometheusTelemetry
+
+telemetry_by_host = {
+    "api.hipaa.local": LoggingTelemetry(level=logging.WARNING),
+    "partner-rate-limited.com": [PrometheusTelemetry()],
+}
+
+adapter = PubMedAdapter(context, client, telemetry=telemetry_by_host)
+```
+
+The base `HttpAdapter` automatically forwards telemetry definitions to the shared client, so adapter constructors only need to expose a `telemetry` keyword when they want custom defaults.
+
+### Operational Examples
+
+- **Structured request logging** (task 13.1):
+
+  ```python
+  logging_telemetry = LoggingTelemetry(logger=logging.getLogger("ingest.http"))
+  client = AsyncHttpClient(telemetry=[logging_telemetry])
+  ```
+
+- **Rate-limit budget tracking** (task 13.2): use `http_limiter_queue_depth` + `http_limiter_queue_saturation` in Grafana to watch headroom per host. The new dashboard includes saturation gauges with alert thresholds.
+
+- **Retry alerting** (task 13.3): alert on `sum(rate(http_retries_total[5m])) by (reason)` exceeding expected baselines to catch upstream instability before failures cascade.
+
+- **Adapter-specific telemetry** (task 13.4): pass telemetry into the adapter constructor (`PubMedAdapter(..., telemetry=LoggingTelemetry())`) to scope handlers to that integration while sharing the client across sources.
+
+- **OpenTelemetry tracing** (task 13.5): instantiate `TracingTelemetry(tracer=trace.get_tracer("ingest.http"))` and pass it to the client to produce spans with retry/backoff events annotated.
+
+### Performance Considerations
+
+Telemetry callbacks execute synchronously after each lifecycle event. Keep handlers lightweight (logging, metric increments, span annotations) to maintain the observed <5% overhead during synthetic load tests. Expensive work should be deferred to background tasks.
+
+### Troubleshooting
+
+- Missing metrics usually indicate `prometheus_client` is not installed; set `enable_metrics=False` to silence the warning and rely on logging/trace callbacks.
+- Spikes in `http_limiter_queue_saturation` above 0.8 trigger a warning log and indicate the limiter is the bottleneck—either lower concurrency or request higher upstream quotas.
+- If callbacks raise exceptions they are logged at `WARNING` level and suppressed; check application logs for `"Telemetry callback"` messages when instrumentation appears inactive.

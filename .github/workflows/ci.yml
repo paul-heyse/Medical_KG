@@ -32,3 +32,157 @@ jobs:
         run: |
           python -V
           pytest -q
+
+  optional-dependencies:
+    name: Optional dependency diagnostics
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate dependency registry
+        env:
+          PYTHONPATH: src
+        run: |
+          python - <<'PY'
+          import types
+          import sys
+          from pathlib import Path
+
+          pkg = types.ModuleType('Medical_KG')
+          pkg.__path__ = [str(Path('src/Medical_KG'))]
+          sys.modules.setdefault('Medical_KG', pkg)
+
+          from Medical_KG.utils.optional_dependencies import (
+              DEPENDENCY_REGISTRY,
+              iter_dependency_statuses,
+          )
+
+          statuses = list(iter_dependency_statuses())
+          expected = set(DEPENDENCY_REGISTRY.keys())
+          observed = {status.feature_name for status in statuses}
+
+          missing = expected - observed
+          unexpected = observed - expected
+
+          if missing:
+              raise SystemExit(f"Missing features in dependency status output: {sorted(missing)}")
+          if unexpected:
+              raise SystemExit(f"Unexpected features in dependency status output: {sorted(unexpected)}")
+
+          for status in statuses:
+              if not status.install_hint:
+                  raise SystemExit(f"Install hint missing for feature: {status.feature_name}")
+              if status.docs_url is not None and not status.docs_url:
+                  raise SystemExit(f"Docs URL should be None or non-empty for {status.feature_name}")
+
+          print(f"Validated {len(statuses)} optional dependency groups")
+          PY
+
+      - name: Check dependency diagnostics formatting
+        env:
+          PYTHONPATH: src
+        run: |
+          python - <<'PY'
+          import json
+          import sys
+          import types
+          from pathlib import Path
+
+          pkg = types.ModuleType('Medical_KG')
+          pkg.__path__ = [str(Path('src/Medical_KG'))]
+          sys.modules.setdefault('Medical_KG', pkg)
+
+          from Medical_KG.utils.optional_dependencies import DEPENDENCY_REGISTRY
+          from Medical_KG.utils.optional_dependencies import iter_dependency_statuses
+
+          statuses = list(iter_dependency_statuses())
+          payload = [
+              {
+                  'feature': status.feature_name,
+                  'extras_group': status.extras_group,
+                  'packages': list(status.packages),
+                  'installed': status.installed,
+                  'missing_packages': list(status.missing_packages),
+                  'install_hint': status.install_hint,
+                  'docs_url': status.docs_url,
+              }
+              for status in statuses
+          ]
+
+          Path('deps.json').write_text(json.dumps(payload))
+
+          payload = json.loads(Path('deps.json').read_text())
+          expected = set(DEPENDENCY_REGISTRY.keys())
+          observed = {entry['feature'] for entry in payload}
+
+          missing = expected - observed
+          if missing:
+              raise SystemExit(f"CLI output missing features: {sorted(missing)}")
+
+          for entry in payload:
+              hint = entry.get('install_hint', '')
+              if not hint.startswith('pip install'):
+                  raise SystemExit(f"Unexpected install hint for {entry['feature']}: {hint}")
+
+          for entry in payload:
+              line = f"{entry['feature']}"
+              if entry['extras_group']:
+                  line += f" [{entry['extras_group']}]"
+              line += f": {'installed' if entry['installed'] else 'missing'}"
+              print(line)
+
+          print(f"Dependency diagnostics enumerated groups: {sorted(observed)}")
+          PY
+
+      - name: Ensure MissingDependencyError guidance
+        env:
+          PYTHONPATH: src
+        run: |
+          python - <<'PY'
+          import types
+          import sys
+          from pathlib import Path
+
+          pkg = types.ModuleType('Medical_KG')
+          pkg.__path__ = [str(Path('src/Medical_KG'))]
+          sys.modules.setdefault('Medical_KG', pkg)
+
+          import importlib.util
+
+          from Medical_KG.utils.optional_dependencies import MissingDependencyError, optional_import
+
+          if importlib.util.find_spec('prometheus_client') is None:
+              try:
+                  optional_import(
+                      'prometheus_client',
+                      feature_name='observability',
+                      package_name='prometheus-client',
+                  )
+              except MissingDependencyError as exc:
+                  message = str(exc)
+                  assert "Feature 'observability'" in message
+                  assert 'pip install medical-kg[observability]' in message
+              else:
+                  raise SystemExit('Expected MissingDependencyError for observability dependency')
+          else:
+              try:
+                  optional_import(
+                      'standardize_optional_dependencies_ci_marker',
+                      feature_name='ci-marker',
+                      package_name='standardize-optional-dependencies-ci-marker',
+                      extras_group='ci-marker',
+                  )
+              except MissingDependencyError as exc:
+                  message = str(exc)
+                  assert "Feature 'ci-marker'" in message
+                  assert 'pip install medical-kg[ci-marker]' in message
+              else:
+                  raise SystemExit('Expected MissingDependencyError for synthetic dependency test')
+
+          print('MissingDependencyError exposes actionable guidance')
+          PY

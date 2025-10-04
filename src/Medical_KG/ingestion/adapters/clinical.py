@@ -42,6 +42,7 @@ from Medical_KG.ingestion.types import (
     RxNormDocumentPayload,
     is_clinical_document_payload,
 )
+from Medical_KG.ingestion.telemetry import HttpTelemetry
 from Medical_KG.ingestion.utils import (
     canonical_json,
     ensure_json_mapping,
@@ -92,8 +93,14 @@ class ClinicalTrialsGovAdapter(HttpAdapter[ClinicalTrialsStudyPayload]):
         *,
         api_base: str = "https://clinicaltrials.gov/api/v2",
         bootstrap_records: Iterable[ClinicalTrialsStudyPayload] | None = None,
+        telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+        )
+        | None = None,
     ) -> None:
-        super().__init__(context, client)
+        super().__init__(context, client, telemetry=telemetry)
         self.api_base = api_base.rstrip("/")
         self._bootstrap: list[ClinicalTrialsStudyPayload] = list(bootstrap_records or [])
 
@@ -281,8 +288,14 @@ class OpenFdaAdapter(HttpAdapter[JSONMapping]):
         *,
         api_key: str | None = None,
         bootstrap_records: Iterable[JSONMapping] | None = None,
+        telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+        )
+        | None = None,
     ) -> None:
-        super().__init__(context, client)
+        super().__init__(context, client, telemetry=telemetry)
         self.api_key = api_key
         self._bootstrap: list[JSONMapping] = list(bootstrap_records or [])
 
@@ -367,8 +380,14 @@ class DailyMedAdapter(HttpAdapter[str]):
         client: AsyncHttpClient,
         *,
         bootstrap_records: Iterable[str] | None = None,
+        telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+        )
+        | None = None,
     ) -> None:
-        super().__init__(context, client)
+        super().__init__(context, client, telemetry=telemetry)
         self._bootstrap = list(bootstrap_records or [])
 
     async def fetch(self, setid: str) -> AsyncIterator[str]:
@@ -431,8 +450,14 @@ class RxNormAdapter(HttpAdapter[JSONMapping]):
         client: AsyncHttpClient,
         *,
         bootstrap_records: Iterable[JSONMapping] | None = None,
+        telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+        )
+        | None = None,
     ) -> None:
-        super().__init__(context, client)
+        super().__init__(context, client, telemetry=telemetry)
         self._bootstrap: list[JSONMapping] = list(bootstrap_records or [])
 
     async def fetch(self, rxcui: str) -> AsyncIterator[JSONMapping]:
@@ -511,8 +536,14 @@ class AccessGudidAdapter(HttpAdapter[JSONMapping]):
         client: AsyncHttpClient,
         *,
         bootstrap_records: Iterable[JSONMapping] | None = None,
+        telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+        )
+        | None = None,
     ) -> None:
-        super().__init__(context, client)
+        super().__init__(context, client, telemetry=telemetry)
         self._bootstrap: list[JSONMapping] = list(bootstrap_records or [])
 
     async def fetch(self, udi_di: str) -> AsyncIterator[JSONMapping]:

@@ -7,6 +7,7 @@ from Medical_KG.compat.httpx import HTTPError
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
 from Medical_KG.ingestion.events import AdapterRetry
 from Medical_KG.ingestion.http_client import AsyncHttpClient
+from Medical_KG.ingestion.telemetry import HttpTelemetry
 from Medical_KG.ingestion.types import JSONValue
 
 RawPayloadT = TypeVar("RawPayloadT")
@@ -15,7 +16,18 @@ RawPayloadT = TypeVar("RawPayloadT")
 class HttpAdapter(BaseAdapter[RawPayloadT], Generic[RawPayloadT]):
     """Base class for HTTP-backed ingestion adapters."""
 
-    def __init__(self, context: AdapterContext, client: AsyncHttpClient) -> None:
+    def __init__(
+        self,
+        context: AdapterContext,
+        client: AsyncHttpClient,
+        *,
+        telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+        )
+        | None = None,
+    ) -> None:
         super().__init__(context)
         self.client = client
         self.client.bind_retry_callback(self._handle_retry)

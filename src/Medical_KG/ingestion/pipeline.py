@@ -8,7 +8,7 @@ import time
 import traceback
 from collections.abc import AsyncIterator, Iterable, Sequence
 from datetime import datetime, timezone
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from Medical_KG.ingestion import registry as ingestion_registry
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
@@ -96,10 +96,22 @@ class IngestionPipeline:
         *,
         registry: AdapterRegistry | None = None,
         client_factory: type[AsyncHttpClient] | None = None,
+        client_telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+        )
+        | None = None,
+        enable_client_metrics: bool | None = None,
     ) -> None:
         self.ledger = ledger
         self._registry = registry or ingestion_registry
         self._client_factory = client_factory or AsyncHttpClient
+        self._client_kwargs: dict[str, object] = {}
+        if client_telemetry is not None:
+            self._client_kwargs["telemetry"] = client_telemetry
+        if enable_client_metrics is not None:
+            self._client_kwargs["enable_metrics"] = enable_client_metrics
 
     def run(
         self,
@@ -411,7 +423,7 @@ class IngestionPipeline:
             )
             state = "initialising"
             try:
-                async with self._client_factory() as client:
+                async with self._client_factory(**self._client_kwargs) as client:
                     adapter = self._resolve_adapter(source, client)
                     loop = asyncio.get_running_loop()
 

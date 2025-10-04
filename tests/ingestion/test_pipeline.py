@@ -84,6 +84,41 @@ class _NoopClient:
         return None
 
 
+class _SpyClient(_NoopClient):
+    instances: list["_SpyClient"] = []
+
+    def __init__(
+        self,
+        *,
+        telemetry: object | None = None,
+        enable_metrics: bool | None = None,
+    ) -> None:
+        super().__init__()
+        self.telemetry = telemetry
+        self.enable_metrics = enable_metrics
+        _SpyClient.instances.append(self)
+
+
+def test_pipeline_passes_client_telemetry(tmp_path: Path) -> None:
+    ledger = IngestionLedger(tmp_path / "ledger.jsonl")
+    adapter = _StubAdapter(AdapterContext(ledger), records=[])
+    marker = object()
+    _SpyClient.instances.clear()
+    pipeline = IngestionPipeline(
+        ledger,
+        registry=_Registry(adapter),
+        client_factory=_SpyClient,
+        client_telemetry=marker,
+        enable_client_metrics=False,
+    )
+
+    pipeline.run("stub")
+    assert _SpyClient.instances
+    client = _SpyClient.instances[-1]
+    assert client.telemetry is marker
+    assert client.enable_metrics is False
+
+
 def test_pipeline_resume_skips_completed(tmp_path: Path) -> None:
     ledger_path = tmp_path / "ledger.jsonl"
     ledger = IngestionLedger(ledger_path)

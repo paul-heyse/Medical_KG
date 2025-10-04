@@ -1,422 +1,297 @@
-"""Shared ingestion CLI helpers.
-
-This module centralises the ingestion command-line primitives so both the
-legacy ``med ingest`` entry point and the Typer-based ingestion CLI can share
-consistent behaviour.  Each helper is intentionally synchronous-friendly and
-provides rich typing so callers can compose bespoke orchestration logic
-without re-implementing JSON parsing, adapter lifecycle management, or
-result formatting.
-
-Example
--------
-
-```python
-from pathlib import Path
-
-from Medical_KG.ingestion.cli_helpers import (
-    DEFAULT_LEDGER_PATH,
-    format_results,
-    invoke_adapter_sync,
-    load_ndjson_batch,
-)
-
-batch = Path("params.ndjson")
-records = load_ndjson_batch(batch)
-results = invoke_adapter_sync("pubmed", ledger=DEFAULT_LEDGER_PATH, params=records)
-for line in format_results(results, output_format="jsonl"):
-    print(line)
-```
-"""
-
 from __future__ import annotations
 
-import asyncio
+import importlib
 import json
 import sys
-import traceback
+import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import (
-    Any,
-    Callable,
-    Collection,
-    Iterable,
-    Iterator,
-    Mapping,
-    Sequence,
-    TextIO,
-    cast,
-    overload,
-)
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping, Sequence, cast
 
-from Medical_KG.ingestion import registry as ingestion_registry
-from Medical_KG.ingestion.adapters.base import AdapterContext
-from Medical_KG.ingestion.http_client import AsyncHttpClient
-from Medical_KG.ingestion.ledger import IngestionLedger
-from Medical_KG.ingestion.pipeline import AdapterRegistry, PipelineResult
+from Medical_KG.ingestion.pipeline import PipelineResult
 
-BatchRecord = dict[str, Any]
-BatchSource = Path | TextIO
-ProgressCallback = Callable[[int, int | None], None]
-ErrorFactory = Callable[[str], Exception]
+if TYPE_CHECKING:  # pragma: no cover - typing aids
+    from rich.console import Console as RichConsole
+    from rich.progress import Progress as RichProgress
+    from rich.table import Table as RichTable
+else:  # pragma: no cover - fallback types when rich is missing
+    RichConsole = Any
+    RichProgress = Any
+    RichTable = Any
 
-EXIT_SUCCESS = 0
-EXIT_DATA_ERROR = 64
-EXIT_RUNTIME_ERROR = 70
-DEFAULT_LEDGER_PATH = Path(".ingest-ledger.jsonl")
-SUPPORTED_RESULT_FORMATS = frozenset({"text", "json", "table", "jsonl"})
-
-_CompletedStates = frozenset({"auto_done", "manual_done"})
-
-
-class BatchLoadError(ValueError):
-    """Raised when NDJSON parsing fails."""
+try:  # pragma: no cover - optional rich dependency
+    _console_mod = importlib.import_module("rich.console")
+    Console = getattr(_console_mod, "Console")
+    _progress_mod = importlib.import_module("rich.progress")
+    BarColumn = getattr(_progress_mod, "BarColumn")
+    Progress = getattr(_progress_mod, "Progress")
+    TextColumn = getattr(_progress_mod, "TextColumn")
+    TimeElapsedColumn = getattr(_progress_mod, "TimeElapsedColumn")
+    TimeRemainingColumn = getattr(_progress_mod, "TimeRemainingColumn")
+    Table = getattr(importlib.import_module("rich.table"), "Table")
+except Exception:  # pragma: no cover - fallback when rich is missing
+    Console = None
+    Progress = None
+    BarColumn = None
+    TextColumn = None
+    TimeElapsedColumn = None
+    TimeRemainingColumn = None
+    Table = None
 
 
-class AdapterInvocationError(RuntimeError):
-    """Raised when adapter execution fails."""
+class BatchValidationError(ValueError):
+    """Raised when a batch file contains invalid content."""
 
-
-class LedgerResumeError(RuntimeError):
-    """Raised when ledger state prevents computing a resume plan."""
+    def __init__(self, message: str, *, hint: str | None = None) -> None:
+        super().__init__(message)
+        self.hint = hint
 
 
 @dataclass(slots=True)
-class LedgerResumeStats:
-    """Aggregate details returned from :func:`handle_ledger_resume`."""
+class CLIResultSummary:
+    """Aggregated details about a CLI ingestion run."""
 
-    total: int
-    skipped: int
-    remaining: int
+    adapter: str
+    resume: bool
+    auto: bool
+    batch_file: Path | None
+    total_parameters: int | None
+    processed_documents: int
+    started_at: datetime
+    completed_at: datetime
+    results: list[PipelineResult]
+    warnings: list[str]
+    errors: list[str]
+
+    @property
+    def duration_seconds(self) -> float:
+        return max((self.completed_at - self.started_at).total_seconds(), 0.0)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "adapter": self.adapter,
+            "resume": self.resume,
+            "auto": self.auto,
+            "batch_file": str(self.batch_file) if self.batch_file else None,
+            "total_parameters": self.total_parameters,
+            "processed_documents": self.processed_documents,
+            "started_at": self.started_at.isoformat(),
+            "completed_at": self.completed_at.isoformat(),
+            "duration_seconds": self.duration_seconds,
+            "results": [
+                {"source": result.source, "doc_ids": list(result.doc_ids)}
+                for result in self.results
+            ],
+            "warnings": list(self.warnings),
+            "errors": list(self.errors),
+        }
 
 
-@dataclass(slots=True)
-class LedgerResumePlan:
-    """Filtered resume payload produced by :func:`handle_ledger_resume`."""
+def load_ndjson_batch(path: Path, *, strict: bool = True) -> Iterator[dict[str, Any]]:
+    """Yield JSON objects from an NDJSON file, optionally enforcing strict validation."""
 
-    resume_ids: list[str]
-    skipped_ids: list[str]
-    stats: LedgerResumeStats
-    dry_run: bool
-
-
-def _make_error(message: str, error_factory: ErrorFactory | None) -> Exception:
-    return error_factory(message) if error_factory else BatchLoadError(message)
-
-
-def load_ndjson_batch(
-    source: BatchSource,
-    *,
-    error_factory: ErrorFactory | None = None,
-    progress: ProgressCallback | None = None,
-    total: int | None = None,
-) -> Iterator[BatchRecord]:
-    """Yield JSON objects from an NDJSON stream.
-
-    Parameters
-    ----------
-    source:
-        Path to an NDJSON file or an open text handle.
-    error_factory:
-        Optional callable that converts validation messages into CLI-specific
-        exceptions (e.g. :class:`typer.BadParameter`).
-    progress:
-        Optional callback invoked with ``(records_read, total_records)`` every
-        time a record is emitted.  Useful for driving progress renderers.
-    total:
-        Total number of records expected; forwarded to the ``progress``
-        callback when provided.
-    """
-
-    handle: TextIO
-    if isinstance(source, Path):
-        handle = cast(TextIO, source.open("r", encoding="utf-8"))
-        close_handle = True
-        origin = str(source)
-    else:
-        handle = source
-        close_handle = False
-        origin = getattr(source, "name", "<stream>")
-
-    records_emitted = 0
-    try:
+    with path.open("r", encoding="utf-8") as handle:
         for index, line in enumerate(handle, start=1):
-            stripped = line.strip()
-            if not stripped:
+            if not line.strip():
                 continue
             try:
-                payload = json.loads(stripped)
-            except json.JSONDecodeError as exc:  # pragma: no cover - defensive
-                message = f"Invalid JSON on line {index} of {origin}: {exc.msg}"
-                raise _make_error(message, error_factory) from exc
-            if not isinstance(payload, dict):
-                message = (
-                    "Batch entries must be JSON objects; "
-                    f"found {type(payload).__name__} on line {index} of {origin}"
+                payload = json.loads(line)
+            except json.JSONDecodeError as exc:  # pragma: no cover - validated via tests
+                raise BatchValidationError(
+                    f"Invalid JSON on line {index} of {path}: {exc.msg}",
+                    hint="Ensure each line is a complete JSON object.",
+                ) from exc
+            if not isinstance(payload, Mapping):
+                raise BatchValidationError(
+                    "Batch entries must be JSON objects",
+                    hint=f"Entry on line {index} is {type(payload).__name__}",
                 )
-                raise _make_error(message, error_factory)
-            records_emitted += 1
-            if progress:
-                progress(records_emitted, total)
-            yield dict(payload)
-    finally:
-        if close_handle:
-            handle.close()
+            record = dict(payload)
+            if strict:
+                _validate_mapping(record, path, index)
+            yield record
 
 
-AdapterParams = Iterable[Mapping[str, Any]] | None
+def count_ndjson_records(path: Path) -> int:
+    """Count non-empty lines in an NDJSON file."""
+
+    with path.open("r", encoding="utf-8") as handle:
+        return sum(1 for line in handle if line.strip())
 
 
-def _resolve_registry(registry: AdapterRegistry | None) -> AdapterRegistry:
-    return registry or cast(AdapterRegistry, ingestion_registry)
+def chunk_parameters(
+    params: Iterable[dict[str, Any]],
+    chunk_size: int,
+) -> Iterator[list[dict[str, Any]]]:
+    """Split parameters into chunks to bound memory usage."""
+
+    chunk: list[dict[str, Any]] = []
+    for entry in params:
+        chunk.append(dict(entry))
+        if len(chunk) >= chunk_size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
 
 
-async def invoke_adapter(
-    source: str,
+def should_display_progress(force: bool | None, quiet: bool) -> bool:
+    if quiet:
+        return False
+    if force is True:
+        return Progress is not None
+    if force is False:
+        return False
+    return Progress is not None and sys.stderr.isatty()
+
+
+def create_progress(description: str, total: int | None) -> tuple[Any, int] | None:
+    if Progress is None:
+        return None
+    columns = [
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(),
+        TextColumn("{task.completed}/{task.total or '?'}"),
+        TimeElapsedColumn(),
+    ]
+    if total:
+        columns.append(TimeRemainingColumn())
+    progress = Progress(*columns, transient=False)
+    task_id = progress.add_task(description, total=total)
+    return progress, task_id
+
+
+def format_cli_error(message: str, *, hint: str | None = None) -> str:
+    if hint:
+        return f"Error: {message}\nHint: {hint}"
+    return f"Error: {message}"
+
+
+def summarise_results(
     *,
-    ledger: IngestionLedger | Path,
-    registry: AdapterRegistry | None = None,
-    client_factory: Callable[[], AsyncHttpClient] | type[AsyncHttpClient] = AsyncHttpClient,
-    params: AdapterParams = None,
-    resume: bool = False,
-) -> list[PipelineResult]:
-    """Execute an adapter and return summarised pipeline results."""
-
-    ledger_obj = ledger if isinstance(ledger, IngestionLedger) else IngestionLedger(Path(ledger))
-    registry_obj = _resolve_registry(registry)
-
-    try:
-        client = client_factory()
-    except Exception as exc:  # pragma: no cover - dependency guards
-        raise AdapterInvocationError(f"Failed to construct HTTP client: {exc}") from exc
-
-    outputs: list[PipelineResult] = []
-    async with client:
-        try:
-            adapter = registry_obj.get_adapter(source, AdapterContext(ledger=ledger_obj), client)
-        except Exception as exc:  # pragma: no cover - adapter resolution failures
-            raise AdapterInvocationError(f"Unable to resolve adapter '{source}': {exc}") from exc
-
-        try:
-            if params is None:
-                doc_ids = [
-                    result.document.doc_id
-                    async for result in adapter.iter_results(resume=resume)
-                ]
-                outputs.append(PipelineResult(source=source, doc_ids=doc_ids))
-            else:
-                for entry in params:
-                    invocation_params = dict(entry)
-                    doc_ids = [
-                        result.document.doc_id
-                        async for result in adapter.iter_results(
-                            **invocation_params, resume=resume
-                        )
-                    ]
-                    outputs.append(PipelineResult(source=source, doc_ids=doc_ids))
-        except Exception as exc:
-            raise AdapterInvocationError(f"Adapter '{source}' failed: {exc}") from exc
-    return outputs
-
-
-def invoke_adapter_sync(
-    source: str,
-    *,
-    ledger: IngestionLedger | Path,
-    registry: AdapterRegistry | None = None,
-    client_factory: Callable[[], AsyncHttpClient] | type[AsyncHttpClient] = AsyncHttpClient,
-    params: AdapterParams = None,
-    resume: bool = False,
-) -> list[PipelineResult]:
-    """Synchronously execute :func:`invoke_adapter`."""
-
-    return asyncio.run(
-        invoke_adapter(
-            source,
-            ledger=ledger,
-            registry=registry,
-            client_factory=client_factory,
-            params=params,
-            resume=resume,
-        )
+    adapter: str,
+    resume: bool,
+    auto: bool,
+    batch_file: Path | None,
+    total_parameters: int | None,
+    results: Sequence[PipelineResult],
+    started_at: datetime,
+    completed_at: datetime,
+    warnings: Sequence[str],
+    errors: Sequence[str],
+) -> CLIResultSummary:
+    processed = sum(len(result.doc_ids) for result in results)
+    return CLIResultSummary(
+        adapter=adapter,
+        resume=resume,
+        auto=auto,
+        batch_file=batch_file,
+        total_parameters=total_parameters,
+        processed_documents=processed,
+        started_at=started_at,
+        completed_at=completed_at,
+        results=list(results),
+        warnings=list(warnings),
+        errors=list(errors),
     )
 
 
-def format_cli_error(
-    error: BaseException,
+def render_text_summary(
+    summary: CLIResultSummary,
     *,
-    prefix: str = "Error",
-    remediation: str | None = None,
-    include_stack: bool = False,
-    use_color: bool | None = None,
+    show_timings: bool,
+    summary_only: bool,
 ) -> str:
-    """Render a CLI-friendly error message."""
-
-    message = str(error).strip() or error.__class__.__name__
-    header = f"{prefix}: {message}" if prefix else message
-    lines = [header]
-    if remediation:
-        lines.append(f"Hint: {remediation}")
-    if include_stack:
-        lines.append(traceback.format_exc().rstrip())
-
-    if use_color is None:
-        use_color = sys.stderr.isatty()
-    if use_color:
-        red = "\x1b[31m"
-        cyan = "\x1b[36m"
-        reset = "\x1b[0m"
-        lines[0] = f"{red}{lines[0]}{reset}"
-        if remediation:
-            lines[1] = f"{cyan}{lines[1]}{reset}"
+    lines = [
+        f"Adapter: {summary.adapter}",
+        f"Processed documents: {summary.processed_documents}",
+    ]
+    if summary.total_parameters is not None:
+        lines.append(f"Batch records: {summary.total_parameters}")
+    if summary.resume:
+        lines.append("Mode: resume")
+    if summary.auto:
+        lines.append("Mode: auto")
+    if summary.batch_file:
+        lines.append(f"Batch file: {summary.batch_file}")
+    if show_timings:
+        lines.append(f"Duration: {summary.duration_seconds:.2f}s")
+    if summary.warnings:
+        lines.extend([f"Warning: {warning}" for warning in summary.warnings])
+    if summary.errors:
+        lines.extend([f"Error: {error}" for error in summary.errors])
+    if not summary_only:
+        for result in summary.results:
+            lines.append(f"{result.source}: {', '.join(result.doc_ids) or '0 documents'}")
     return "\n".join(lines)
 
 
-@overload
-def handle_ledger_resume(
-    ledger: IngestionLedger | Path,
+def render_table_summary(
+    summary: CLIResultSummary,
     *,
-    candidate_doc_ids: Iterable[str],
-    dry_run: bool = False,
-    completed_states: Collection[str] | None = None,
-) -> LedgerResumePlan:
-    ...
+    show_timings: bool,
+    console: Any | None,
+) -> str:
+    if Table is None or console is None:
+        return render_text_summary(summary, show_timings=show_timings, summary_only=False)
+    table = Table(title="Ingestion Summary")
+    table.add_column("Field")
+    table.add_column("Value")
+    table.add_row("Adapter", summary.adapter)
+    table.add_row("Processed", str(summary.processed_documents))
+    table.add_row("Resume", "yes" if summary.resume else "no")
+    table.add_row("Auto", "yes" if summary.auto else "no")
+    if summary.batch_file:
+        table.add_row("Batch file", str(summary.batch_file))
+    if summary.total_parameters is not None:
+        table.add_row("Batch records", str(summary.total_parameters))
+    if show_timings:
+        table.add_row("Duration", f"{summary.duration_seconds:.2f}s")
+    console.begin_capture()
+    console.print(table)
+    return cast(str, console.end_capture())
 
 
-@overload
-def handle_ledger_resume(
-    ledger: IngestionLedger | Path,
-    *,
-    candidate_doc_ids: None = None,
-    dry_run: bool = False,
-    completed_states: Collection[str] | None = None,
-) -> LedgerResumePlan:
-    ...
+def render_json_summary(summary: CLIResultSummary) -> str:
+    return json.dumps(summary.to_dict(), indent=2)
 
 
-def handle_ledger_resume(
-    ledger: IngestionLedger | Path,
-    *,
-    candidate_doc_ids: Iterable[str] | None = None,
-    dry_run: bool = False,
-    completed_states: Collection[str] | None = None,
-) -> LedgerResumePlan:
-    """Compute resume metadata for a ledger."""
-
-    completed_set = frozenset(completed_states or _CompletedStates)
-
-    try:
-        ledger_obj = ledger if isinstance(ledger, IngestionLedger) else IngestionLedger(Path(ledger))
-    except Exception as exc:  # pragma: no cover - corrupted ledger
-        raise LedgerResumeError(f"Unable to load ledger: {exc}") from exc
-
-    entries = list(ledger_obj.entries())
-    completed_ids = {entry.doc_id for entry in entries if entry.state in completed_set}
-    pending_ids = {entry.doc_id for entry in entries if entry.state not in completed_set}
-
-    resume_ids: list[str]
-    skipped_ids: list[str]
-    if candidate_doc_ids is None:
-        resume_ids = sorted(pending_ids)
-        skipped_ids = sorted(completed_ids)
-        total = len(entries)
-    else:
-        resume_ids = []
-        skipped_ids = []
-        total = 0
-        for doc_id in candidate_doc_ids:
-            total += 1
-            if doc_id in completed_ids:
-                skipped_ids.append(doc_id)
-            else:
-                resume_ids.append(doc_id)
-
-    stats = LedgerResumeStats(total=total, skipped=len(skipped_ids), remaining=len(resume_ids))
-    return LedgerResumePlan(resume_ids=resume_ids, skipped_ids=skipped_ids, stats=stats, dry_run=dry_run)
+def throttle(rate_limit_per_second: float | None, *, last_run: float | None) -> float:
+    if not rate_limit_per_second or rate_limit_per_second <= 0:
+        return time.monotonic()
+    interval = 1.0 / rate_limit_per_second
+    now = time.monotonic()
+    if last_run is None:
+        return now
+    elapsed = now - last_run
+    if elapsed < interval:
+        time.sleep(interval - elapsed)
+        return time.monotonic()
+    return now
 
 
-def _format_table(results: Sequence[PipelineResult]) -> list[str]:
-    headers = ("Source", "Documents")
-    rows = [(result.source, ", ".join(result.doc_ids) or "-") for result in results]
-    widths = [len(header) for header in headers]
-    for source, docs in rows:
-        widths[0] = max(widths[0], len(source))
-        widths[1] = max(widths[1], len(docs))
-
-    separator = f"+-{'-' * widths[0]}-+-{'-' * widths[1]}-+"
-    header_row = f"| {headers[0].ljust(widths[0])} | {headers[1].ljust(widths[1])} |"
-    lines = [separator, header_row, separator]
-    for source, docs in rows:
-        lines.append(f"| {source.ljust(widths[0])} | {docs.ljust(widths[1])} |")
-    lines.append(separator)
-    return lines
-
-
-def format_results(
-    results: Iterable[PipelineResult],
-    *,
-    output_format: str = "text",
-    verbose: bool = False,
-    timings: Mapping[str, float] | None = None,
-) -> list[str]:
-    """Format ingestion results for CLI display."""
-
-    collected = list(results)
-    fmt = output_format.lower()
-    if fmt not in SUPPORTED_RESULT_FORMATS:
-        raise ValueError(f"Unsupported output format '{output_format}'")
-
-    total_batches = len(collected)
-    total_documents = sum(len(result.doc_ids) for result in collected)
-
-    if fmt == "jsonl":
-        return [json.dumps(result.doc_ids) for result in collected]
-
-    payload = {
-        "batches": total_batches,
-        "documents": total_documents,
-        "results": [
-            {"source": result.source, "doc_ids": list(result.doc_ids)} for result in collected
-        ],
-    }
-    if timings:
-        payload["timings"] = {key: float(value) for key, value in timings.items()}
-
-    if fmt == "json":
-        return [json.dumps(payload, sort_keys=True)]
-
-    if fmt == "table":
-        return _format_table(collected)
-
-    lines = [
-        f"Batches processed: {total_batches}",
-        f"Documents ingested: {total_documents}",
-    ]
-    if timings:
-        for key, value in timings.items():
-            lines.append(f"{key}: {value:.2f}s")
-    if verbose:
-        for result in collected:
-            doc_list = ", ".join(result.doc_ids) or "(none)"
-            lines.append(f"- {result.source}: {doc_list}")
-    return lines
+def _validate_mapping(record: Mapping[str, Any], path: Path, index: int) -> None:
+    for key in record.keys():
+        if not isinstance(key, str):
+            raise BatchValidationError(
+                "Batch entries must use string keys",
+                hint=f"Entry on line {index} of {path} contains non-string keys",
+            )
 
 
 __all__ = [
-    "AdapterInvocationError",
-    "BatchLoadError",
-    "DEFAULT_LEDGER_PATH",
-    "EXIT_DATA_ERROR",
-    "EXIT_RUNTIME_ERROR",
-    "EXIT_SUCCESS",
-    "LedgerResumeError",
-    "LedgerResumePlan",
-    "LedgerResumeStats",
-    "SUPPORTED_RESULT_FORMATS",
+    "BatchValidationError",
+    "CLIResultSummary",
+    "chunk_parameters",
+    "count_ndjson_records",
+    "create_progress",
     "format_cli_error",
-    "format_results",
-    "handle_ledger_resume",
-    "invoke_adapter",
-    "invoke_adapter_sync",
     "load_ndjson_batch",
+    "render_json_summary",
+    "render_table_summary",
+    "render_text_summary",
+    "should_display_progress",
+    "summarise_results",
+    "throttle",
 ]

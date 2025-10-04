@@ -1,102 +1,94 @@
+"""Unified ingestion command-line interface.
+
+Examples
+--------
+Run a batch ingestion job:
+
+    med ingest pubmed --batch articles.ndjson --resume
+
+Stream auto mode results with JSON output:
+
+    med ingest clinicaltrials --auto --output json --limit 100
+"""
+
 from __future__ import annotations
 
+import contextlib
+import importlib
+import itertools
 import json
+import logging
 import sys
+from datetime import datetime, timezone
+from enum import Enum, IntEnum
+from importlib import metadata
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, cast
+from typing import Any, Iterator, Sequence
 
 import typer
 
-if TYPE_CHECKING:  # pragma: no cover - typing support only
-    from rich.progress import (  # type: ignore[import-not-found]
-        BarColumn,
-        Progress,
-        TextColumn,
-        TimeRemainingColumn,
-    )
-    RICH_AVAILABLE = True
-else:  # pragma: no cover - optional progress dependency
-    try:
-        from rich.progress import (  # type: ignore[import-not-found]
-            BarColumn,
-            Progress,
-            TextColumn,
-            TimeRemainingColumn,
-        )
-    except ImportError:
-        Progress = cast(Any, None)
-        BarColumn = cast(Any, None)
-        TextColumn = cast(Any, None)
-        TimeRemainingColumn = cast(Any, None)
-        RICH_AVAILABLE = False
-    else:
-        RICH_AVAILABLE = True
-
 from Medical_KG.ingestion.cli_helpers import (
-    EXIT_DATA_ERROR,
-    EXIT_RUNTIME_ERROR,
-    AdapterInvocationError,
-    LedgerResumeError,
+    BatchValidationError,
+    CLIResultSummary,
+    chunk_parameters,
+    count_ndjson_records,
+    create_progress,
     format_cli_error,
-    format_results,
-    handle_ledger_resume,
-    invoke_adapter_sync,
     load_ndjson_batch,
+    render_json_summary,
+    render_table_summary,
+    render_text_summary,
+    should_display_progress,
+    summarise_results,
+    throttle,
 )
 from Medical_KG.ingestion.ledger import IngestionLedger
-from Medical_KG.ingestion.pipeline import AdapterRegistry, IngestionPipeline, PipelineResult
+from Medical_KG.ingestion.pipeline import IngestionPipeline, PipelineResult
 
-app = typer.Typer(help="Medical KG ingestion CLI")
+try:  # pragma: no cover - optional rich dependency
+    Console = getattr(importlib.import_module("rich.console"), "Console")
+except Exception:  # pragma: no cover - fallback when rich is absent
+    Console = None
+
+app = typer.Typer(
+    help="Medical KG unified ingestion CLI",
+    no_args_is_help=True,
+    rich_markup_mode="markdown",
+)
 
 
-def _resolve_registry() -> AdapterRegistry:  # pragma: no cover - simple import indirection
+class OutputFormat(str, Enum):
+    TEXT = "text"
+    JSON = "json"
+    TABLE = "table"
+
+
+class ExitCode(IntEnum):
+    SUCCESS = 0
+    FAILURE = 1
+    INVALID_USAGE = 2
+
+
+def _resolve_registry() -> Any:  # pragma: no cover - import indirection
     from Medical_KG.ingestion import registry
 
     return registry
 
 
 def _available_sources() -> list[str]:
-    return _resolve_registry().available_sources()
-
-
-def _load_batch(path: Path) -> Iterator[dict[str, Any]]:
     try:
-        return load_ndjson_batch(path, error_factory=lambda msg: typer.BadParameter(msg))
-    except OSError as exc:  # pragma: no cover - filesystem failure
-        raise typer.BadParameter(f"Unable to read batch file {path}: {exc}") from exc
-
-
-def _count_batch_records(path: Path) -> int:
-    return sum(1 for _ in load_ndjson_batch(path, error_factory=lambda msg: typer.BadParameter(msg)))
-
-
-def _chunk_parameters(
-    params: Iterable[dict[str, Any]], chunk_size: int
-) -> Iterator[list[dict[str, Any]]]:
-    chunk: list[dict[str, Any]] = []
-    for entry in params:
-        chunk.append(dict(entry))
-        if len(chunk) >= chunk_size:
-            yield chunk
-            chunk = []
-    if chunk:
-        yield chunk
-
-
-def _should_display_progress(quiet: bool) -> bool:
-    return RICH_AVAILABLE and not quiet and sys.stderr.isatty()
-
-
-def _create_progress() -> Progress | None:
-    if not RICH_AVAILABLE:
-        return None
-    return Progress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("{task.completed}/{task.total or '?'} records"),
-        TimeRemainingColumn(),
-        transient=False,
-    )
+        return sorted(_resolve_registry().available_sources())
+    except Exception:  # pragma: no cover - defensive import failure handling
+        return []
+def _complete_adapter(
+    ctx: typer.Context,
+    incomplete: str,
+) -> list[str]:
+    """Provide adapter name completions for Typer."""
+    # Signature parameters are required so Typer's callback validation passes even
+    # though we do not currently use them. Mark them as used to satisfy linters.
+    _ = (ctx, incomplete)
+    return _available_sources()
 
 
 def _build_pipeline(ledger_path: Path) -> IngestionPipeline:
@@ -104,177 +96,387 @@ def _build_pipeline(ledger_path: Path) -> IngestionPipeline:
     return IngestionPipeline(ledger)
 
 
-def _process_parameters(
-    source: str,
-    ledger: IngestionLedger,
-    registry: AdapterRegistry,
+def _version_callback(value: bool) -> None:
+    if not value:
+        return
+    try:
+        package_version = metadata.version("Medical_KG")
+    except metadata.PackageNotFoundError:  # pragma: no cover - local development
+        package_version = "0.0.0"
+    typer.echo(package_version)
+    raise typer.Exit(code=ExitCode.SUCCESS.value)
+
+
+def _configure_logging(log_level: str, log_file: Path | None, verbose: bool) -> None:
+    level = logging.DEBUG if verbose else logging.getLevelName(log_level.upper())
+    handlers: list[logging.Handler] = []
+    formatter = logging.Formatter("%(levelname)s %(name)s: %(message)s")
+    if log_file:
+        handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
+    else:
+        handlers.append(logging.StreamHandler(sys.stderr))
+    for handler in handlers:
+        handler.setFormatter(formatter)
+    logging.basicConfig(level=level, handlers=handlers, force=True)
+
+
+def _merge_options(base: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    if not base:
+        return dict(payload)
+    merged = dict(base)
+    merged.update(payload)
+    return merged
+
+
+def _emit_doc_ids(results: Sequence[PipelineResult]) -> None:
+    for result in results:
+        if result.doc_ids:
+            typer.echo(json.dumps(result.doc_ids))
+
+
+def _emit_summary(
+    summary: CLIResultSummary,
     *,
-    params: Iterable[dict[str, Any]] | None,
+    output: OutputFormat,
+    show_timings: bool,
+    summary_only: bool,
+) -> None:
+    if output is OutputFormat.JSON:
+        payload = render_json_summary(summary)
+    elif output is OutputFormat.TABLE:
+        console = Console(record=True) if Console else None
+        payload = render_table_summary(summary, show_timings=show_timings, console=console)
+    else:
+        payload = render_text_summary(
+            summary,
+            show_timings=show_timings,
+            summary_only=summary_only,
+        )
+    typer.echo(payload)
+
+
+def _log_error(error_log: Path | None, *, payload: dict[str, Any]) -> None:
+    if not error_log:
+        return
+    error_log.parent.mkdir(parents=True, exist_ok=True)
+    with error_log.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload) + "\n")
+
+
+def _validate_dates(start_date: datetime | None, end_date: datetime | None) -> None:
+    if start_date and end_date and start_date > end_date:
+        raise typer.BadParameter("--start-date must be before --end-date")
+
+
+def _dry_run(
+    *,
+    adapter: str,
+    batch: Path | None,
+    ids: list[str] | None,
+    limit: int | None,
+    strict_validation: bool,
+    skip_validation: bool,
     resume: bool,
     auto: bool,
-    chunk_size: int,
-    quiet: bool,
-    total: int | None,
+    show_timings: bool,
+    summary_only: bool,
+    output: OutputFormat,
 ) -> None:
-    def _invoke(chunk: Iterable[dict[str, Any]] | None) -> list[PipelineResult]:
-        try:
-            return invoke_adapter_sync(
-                source,
-                ledger=ledger,
-                registry=registry,
-                params=chunk,
-                resume=resume,
-            )
-        except AdapterInvocationError as exc:
-            typer.echo(
-                format_cli_error(
-                    exc,
-                    prefix="Ingestion failed",
-                    remediation="Inspect the ledger for failing documents or retry with --resume.",
-                ),
-                err=True,
-            )
-            raise typer.Exit(code=EXIT_RUNTIME_ERROR) from exc
+    warnings: list[str] = []
+    if skip_validation:
+        warnings.append("Validation skipped by user request (--skip-validation)")
+    total_records: int | None = None
+    if ids:
+        total_records = len(ids) if limit is None else min(len(ids), limit)
+    elif batch:
+        total_records = count_ndjson_records(batch)
+        if strict_validation and total_records == 0:
+            raise typer.BadParameter("Batch file is empty")
+        iterator = load_ndjson_batch(batch, strict=not skip_validation)
+        processed = 0
+        for _ in iterator:
+            processed += 1
+            if limit is not None and processed >= limit:
+                break
+        total_records = processed
+    elif limit is not None:
+        total_records = limit
+    else:
+        total_records = None
+    now = datetime.now(timezone.utc)
+    summary = summarise_results(
+        adapter=adapter,
+        resume=resume,
+        auto=auto,
+        batch_file=batch,
+        total_parameters=total_records,
+        results=[],
+        started_at=now,
+        completed_at=now,
+        warnings=warnings,
+        errors=[],
+    )
+    _emit_summary(summary, output=output, show_timings=show_timings, summary_only=summary_only)
 
-    def _emit(outputs: list[PipelineResult]) -> None:
-        if not auto:
-            return
-        for line in format_results(outputs, output_format="jsonl"):
-            typer.echo(line)
 
-    if params is None:
-        outputs = _invoke(None)
-        _emit(outputs)
-        return
+def _parameter_stream(
+    *,
+    batch: Path | None,
+    ids: list[str] | None,
+    skip_validation: bool,
+) -> tuple[Iterator[dict[str, Any]] | None, int | None]:
+    if ids:
+        params = [{"ids": ids}]
+        return iter(params), len(ids)
+    if batch:
+        total = count_ndjson_records(batch)
+        iterator = load_ndjson_batch(batch, strict=not skip_validation)
+        return iterator, total
+    return None, None
 
-    display_progress = _should_display_progress(quiet)
-    chunks = _chunk_parameters(params, chunk_size)
-    progress = _create_progress() if display_progress else None
 
-    if progress is None:
-        for chunk in chunks:
-            outputs = _invoke(chunk)
-            _emit(outputs)
-        return
+def _apply_limit(
+    iterator: Iterator[dict[str, Any]] | None,
+    *,
+    limit: int | None,
+) -> Iterator[dict[str, Any]] | None:
+    if iterator is None or limit is None:
+        return iterator
+    return iter(itertools.islice(iterator, limit))
 
-    with progress:
-        task_id = progress.add_task("Processing batch", total=total)
-        for chunk in chunks:
-            outputs = _invoke(chunk)
-            processed = sum(len(result.doc_ids) for result in outputs) or len(chunk)
-            progress.advance(task_id, processed)
-            _emit(outputs)
+
+def _adapter_help() -> str:
+    sources = _available_sources()
+    if not sources:
+        return "Adapter to execute (no adapters available)"
+    listed = ", ".join(sources)
+    return f"Adapter to execute. Available adapters: {listed}"
 
 
 def ingest(
-    source: str = typer.Argument(..., help="Source identifier", autocompletion=lambda: _available_sources()),
-    batch: Path | None = typer.Option(None, help="Path to NDJSON with parameters"),
-    auto: bool = typer.Option(False, help="Enable auto pipeline"),
-    ledger_path: Path = typer.Option(Path(".ingest-ledger.jsonl"), help="Ledger storage"),
-    ids: str | None = typer.Option(None, help="Comma separated document identifiers"),
-    chunk_size: int = typer.Option(1000, min=1, help="Number of batch entries to process per chunk"),
-    quiet: bool = typer.Option(False, help="Disable progress reporting"),
+    adapter: str = typer.Argument(
+        ...,
+        help=_adapter_help(),
+        autocompletion=_complete_adapter,
+        metavar="ADAPTER",
+    ),
+    batch: Path | None = typer.Option(
+        None,
+        "--batch",
+        "-b",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="Path to NDJSON batch parameters",
+    ),
+    resume: bool = typer.Option(False, "--resume", "-r", help="Resume from ledger state"),
+    auto: bool = typer.Option(False, "--auto", help="Emit document IDs as records complete"),
+    output: OutputFormat = typer.Option(
+        OutputFormat.TEXT,
+        "--output",
+        "-o",
+        case_sensitive=False,
+        help="Output format: text, json, or table",
+    ),
+    ledger_path: Path = typer.Option(
+        Path(".ingest-ledger.jsonl"),
+        "--ledger",
+        help="Path to ingestion ledger JSONL",
+    ),
+    limit: int | None = typer.Option(None, "--limit", "-n", min=1, help="Maximum records to process"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Validate inputs without executing adapters"),
+    chunk_size: int = typer.Option(
+        1000,
+        "--chunk-size",
+        min=1,
+        help="Number of batch entries to send per adapter invocation",
+    ),
+    ids: list[str] = typer.Option(
+        [],
+        "--id",
+        help="Process a specific document identifier (repeatable)",
+    ),
+    start_date: datetime | None = typer.Option(
+        None,
+        "--start-date",
+        help="Filter auto mode to documents updated after this ISO timestamp",
+    ),
+    end_date: datetime | None = typer.Option(
+        None,
+        "--end-date",
+        help="Filter auto mode to documents updated before this ISO timestamp",
+    ),
+    page_size: int | None = typer.Option(None, "--page-size", min=1, help="Override adapter pagination size"),
+    rate_limit: float | None = typer.Option(
+        None,
+        "--rate-limit",
+        help="Maximum adapter invocations per second",
+    ),
+    progress: bool | None = typer.Option(
+        None,
+        "--progress/--no-progress",
+        help="Force enable or disable the progress bar",
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Reduce non-essential output"),
+    log_file: Path | None = typer.Option(None, "--log-file", help="Write logs to the given file"),
+    log_level: str = typer.Option("INFO", "--log-level", help="Logging level (DEBUG, INFO, WARNING, ERROR)"),
+    strict_validation: bool = typer.Option(False, "--strict-validation", help="Enable strict batch validation"),
+    skip_validation: bool = typer.Option(False, "--skip-validation", help="Skip optional validation checks"),
+    fail_fast: bool = typer.Option(False, "--fail-fast", help="Abort on first adapter error"),
+    error_log: Path | None = typer.Option(None, "--error-log", help="Write detailed errors to a JSONL file"),
+    show_timings: bool = typer.Option(False, "--show-timings", help="Include duration in summary output"),
+    summary_only: bool = typer.Option(False, "--summary-only", help="Suppress per-result output"),
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show CLI version and exit",
+    ),
 ) -> None:
-    """Run ingestion for the specified source."""
-
-    known = _available_sources()
-    if source not in known:
-        raise typer.BadParameter(f"Unknown source '{source}'. Known sources: {', '.join(known)}")
-
-    if ids and batch:
-        raise typer.BadParameter("--ids cannot be combined with --batch")
-
-    registry = _resolve_registry()
-    ledger = IngestionLedger(ledger_path)
-    params: Iterable[dict[str, Any]] | None = None
-    total: int | None = None
-    if ids:
-        parsed = [identifier.strip() for identifier in ids.split(",") if identifier.strip()]
-        params = [{"ids": parsed}]
-    elif batch:
-        total = _count_batch_records(batch)
-        params = _load_batch(batch)
-
-    _process_parameters(
-        source,
-        ledger,
-        registry,
-        params=params,
-        resume=False,
-        auto=auto,
-        chunk_size=chunk_size,
-        quiet=quiet,
-        total=total,
-    )
-
-
-def resume(
-    source: str = typer.Argument(..., help="Source identifier", autocompletion=lambda: _available_sources()),
-    ledger_path: Path = typer.Option(Path(".ingest-ledger.jsonl"), help="Ledger storage"),
-    auto: bool = typer.Option(False, help="Emit resumed doc IDs as JSON"),
-    quiet: bool = typer.Option(False, help="Disable progress reporting"),
-) -> None:
-    """Retry ingestion while skipping documents already completed."""
-
-    known = _available_sources()
-    if source not in known:
-        raise typer.BadParameter(f"Unknown source '{source}'. Known sources: {', '.join(known)}")
-
-    ledger = IngestionLedger(ledger_path)
-    registry = _resolve_registry()
-    try:
-        plan = handle_ledger_resume(ledger, dry_run=True)
-    except LedgerResumeError as exc:
-        typer.echo(
-            format_cli_error(
-                exc,
-                prefix="Resume unavailable",
-                remediation="Verify the ledger file is intact before retrying.",
-            ),
-            err=True,
+    del version  # handled by callback
+    adapter_name = adapter
+    identifier_list = ids or None
+    _validate_dates(start_date, end_date)
+    known_sources = _available_sources()
+    if adapter_name not in known_sources:
+        raise typer.BadParameter(
+            f"Unknown source '{adapter_name}'. Known sources: {', '.join(known_sources)}"
         )
-        raise typer.Exit(code=EXIT_DATA_ERROR) from exc
 
-    if not quiet and plan.stats.total:
-        typer.echo(
-            f"Skipping {plan.stats.skipped} completed documents; resuming {plan.stats.remaining} pending."
+    if identifier_list and batch:
+        raise typer.BadParameter("--id cannot be combined with --batch")
+    if strict_validation and skip_validation:
+        raise typer.BadParameter("--strict-validation cannot be combined with --skip-validation")
+    _configure_logging(log_level, log_file, verbose)
+    if dry_run:
+        _dry_run(
+            adapter=adapter_name,
+            batch=batch,
+            ids=identifier_list,
+            limit=limit,
+            strict_validation=strict_validation,
+            skip_validation=skip_validation,
+            resume=resume,
+            auto=auto,
+            show_timings=show_timings,
+            summary_only=summary_only,
+            output=output,
         )
-
-    _process_parameters(
-        source,
-        ledger,
-        registry,
-        params=None,
-        resume=True,
-        auto=auto,
-        chunk_size=1,
-        quiet=quiet,
-        total=plan.stats.remaining or None,
+        return
+    params_iter, total_records = _parameter_stream(
+        batch=batch,
+        ids=identifier_list,
+        skip_validation=skip_validation,
     )
-
-
-def status(
-    ledger_path: Path = typer.Option(Path(".ingest-ledger.jsonl"), help="Ledger storage"),
-    fmt: str = typer.Option("text", "--format", help="Output format: text or json"),
-) -> None:
-    """Display ledger status for ingestion runs."""
-
+    if batch and strict_validation and (total_records or 0) == 0:
+        raise typer.BadParameter("Batch file is empty")
+    if limit is not None and total_records is not None:
+        total_records = min(total_records, limit)
+    params_iter = _apply_limit(params_iter, limit=limit)
     pipeline = _build_pipeline(ledger_path)
-    summary = pipeline.status()
-    if fmt.lower() == "json":
-        typer.echo(json.dumps(summary, default=str))
-        return
-    if not summary:
-        typer.echo("No ledger entries recorded")
-        return
-    for state, entries in summary.items():
-        typer.echo(f"{state}: {len(entries)}")
+    base_options: dict[str, Any] = {}
+    if auto:
+        base_options["auto"] = True
+    if start_date:
+        base_options["start_date"] = start_date.isoformat()
+    if end_date:
+        base_options["end_date"] = end_date.isoformat()
+    if page_size is not None:
+        base_options["page_size"] = page_size
+    if limit is not None and params_iter is None:
+        base_options.setdefault("limit", limit)
+    warnings: list[str] = []
+    if skip_validation:
+        warnings.append("Validation skipped by user request (--skip-validation)")
+    display_progress = should_display_progress(progress, quiet)
+    progress_bar: Any | None = None
+    progress_task: int | None = None
+    if display_progress:
+        progress_pair = create_progress("Ingesting", total_records)
+        if progress_pair is not None:
+            progress_bar, progress_task = progress_pair
+    errors: list[str] = []
+    results: list[PipelineResult] = []
+    started_at = datetime.now(timezone.utc)
+    last_tick: float | None = None
+    progress_context = progress_bar if progress_bar is not None else contextlib.nullcontext()
+    try:
+        with progress_context:
+            if params_iter is None:
+                invocation_params = [base_options] if base_options else None
+                outputs = pipeline.run(adapter_name, params=invocation_params, resume=resume)
+                results.extend(outputs)
+                if auto and not summary_only:
+                    _emit_doc_ids(outputs)
+            else:
+                processed = 0
+                for chunk in chunk_parameters(params_iter, chunk_size):
+                    chunk_with_options = [_merge_options(base_options, entry) for entry in chunk]
+                    if not chunk_with_options:
+                        continue
+                    outputs = pipeline.run(adapter_name, params=chunk_with_options, resume=resume)
+                    results.extend(outputs)
+                    processed += len(chunk_with_options)
+                    processed_docs = sum(len(item.doc_ids) for item in outputs) or len(chunk_with_options)
+                    if progress_bar is not None and progress_task is not None:
+                        progress_bar.advance(progress_task, processed_docs)
+                    if auto and not summary_only:
+                        _emit_doc_ids(outputs)
+                    if fail_fast and any(len(item.doc_ids) == 0 for item in outputs):
+                        raise RuntimeError("Adapter returned no documents for at least one invocation")
+                    if limit is not None and processed >= limit:
+                        break
+                    last_tick = throttle(rate_limit, last_run=last_tick)
+    except BatchValidationError as exc:
+        message = format_cli_error(str(exc), hint=exc.hint)
+        _log_error(error_log, payload={"adapter": adapter_name, "error": message})
+        raise typer.Exit(code=ExitCode.INVALID_USAGE.value) from exc
+    except typer.BadParameter:
+        raise
+    except Exception as exc:  # pragma: no cover - defensive error handling
+        message = format_cli_error(str(exc))
+        _log_error(
+            error_log,
+            payload={"adapter": adapter_name, "error": message, "exception": exc.__class__.__name__},
+        )
+        errors.append(str(exc))
+    completed_at = datetime.now(timezone.utc)
+    summary = summarise_results(
+        adapter=adapter_name,
+        resume=resume,
+        auto=auto,
+        batch_file=batch,
+        total_parameters=total_records,
+        results=results,
+        started_at=started_at,
+        completed_at=completed_at,
+        warnings=warnings,
+        errors=errors,
+    )
+    _emit_summary(summary, output=output, show_timings=show_timings, summary_only=summary_only)
+    if errors:
+        raise typer.Exit(code=ExitCode.FAILURE.value)
 
 
-app.command("ingest")(ingest)
-app.command("resume")(resume)
-app.command("status")(status)
+app.command()(ingest)
 
 
-if __name__ == "__main__":  # pragma: no cover
-    app()
+def main(argv: list[str] | None = None) -> int:
+    command = typer.main.get_command(app)
+    args = list(argv or [])
+    prog_name = "med"
+    if args and args[0] == "ingest":
+        args = args[1:]
+        prog_name = "med ingest"
+    try:
+        command.main(args=args, prog_name=prog_name, standalone_mode=False)
+    except SystemExit as exc:  # pragma: no cover - delegated to entry point
+        return int(exc.code or 0)
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover - manual invocation
+    raise SystemExit(main())

@@ -21,31 +21,31 @@
 
 ## 3. Update Document Model
 
-- [ ] 3.1 Make `Document.raw` a required field (remove Optional)
-- [ ] 3.2 Update `Document` type hints to use `DocumentRaw` union
-- [ ] 3.3 Remove default `None` value for `raw` field
-- [ ] 3.4 Update `Document.__init__()` to require `raw` parameter
-- [ ] 3.5 Add runtime validation for raw payload presence
+- [x] 3.1 Make `Document.raw` a required field (remove Optional)
+- [x] 3.2 Update `Document` type hints to use `DocumentRaw` union
+- [x] 3.3 Remove default `None` value for `raw` field
+- [x] 3.4 Update `Document.__init__()` to require `raw` parameter
+- [x] 3.5 Add runtime validation for raw payload presence
 - [ ] 3.6 Run mypy strict on document model
-- [ ] 3.7 Test document construction without raw fails appropriately
+- [x] 3.7 Test document construction without raw fails appropriately
 
 ## 4. Remove Fallback Coercion
 
 - [ ] 4.1 Delete `_synthesize_placeholder_raw()` function
 - [ ] 4.2 Delete `_coerce_missing_raw()` helper
-- [ ] 4.3 Remove `if document.raw is None` branches
+- [x] 4.3 Remove `if document.raw is None` branches
 - [ ] 4.4 Remove defensive empty dict fallbacks
 - [ ] 4.5 Delete `_legacy_raw_mapping` constants
-- [ ] 4.6 Clean up related docstrings
+- [x] 4.6 Clean up related docstrings
 - [ ] 4.7 Verify no fallback paths remain
 
 ## 5. Update IR Builder API
 
-- [ ] 5.1 Update `DocumentIRBuilder` to expect typed `raw`
+- [x] 5.1 Update `DocumentIRBuilder` to expect typed `raw`
 - [ ] 5.2 Remove Optional types from `raw` parameters
-- [ ] 5.3 Add type assertions for `DocumentRaw` union
-- [ ] 5.4 Update builder docstrings to document type requirements
-- [ ] 5.5 Add clear error messages for missing/invalid raw
+- [x] 5.3 Add type assertions for `DocumentRaw` union
+- [x] 5.4 Update builder docstrings to document type requirements
+- [x] 5.5 Add clear error messages for missing/invalid raw
 - [ ] 5.6 Run mypy --strict on `ir/builder.py`
 - [ ] 5.7 Test error handling for malformed payloads
 
@@ -81,22 +81,22 @@
 
 ## 9. Update Test Fixtures
 
-- [ ] 9.1 Rewrite IR builder tests to use typed payloads
-- [ ] 9.2 Update fixture documents with typed raw fields
+- [x] 9.1 Rewrite IR builder tests to use typed payloads
+- [x] 9.2 Update fixture documents with typed raw fields
 - [ ] 9.3 Remove legacy fallback test cases
 - [ ] 9.4 Add tests for typed payload validation
-- [ ] 9.5 Add tests for missing/invalid raw errors
-- [ ] 9.6 Update test helpers to construct typed documents
+- [x] 9.5 Add tests for missing/invalid raw errors
+- [x] 9.6 Update test helpers to construct typed documents
 - [ ] 9.7 Run full IR test suite - all tests pass
 
 ## 10. Update Documentation
 
-- [ ] 10.1 Remove "optional raw" documentation from IR guide
-- [ ] 10.2 Update IR pipeline documentation
-- [ ] 10.3 Document typed payload requirements
+- [x] 10.1 Remove "optional raw" documentation from IR guide
+- [x] 10.2 Update IR pipeline documentation
+- [x] 10.3 Document typed payload requirements
 - [ ] 10.4 Add examples of typed Document construction
 - [ ] 10.5 Update API reference with type signatures
-- [ ] 10.6 Remove "legacy behaviour" sections
+- [x] 10.6 Remove "legacy behaviour" sections
 - [ ] 10.7 Add removal notice to CHANGELOG.md
 
 ## 11. Add Type Safety Enforcement

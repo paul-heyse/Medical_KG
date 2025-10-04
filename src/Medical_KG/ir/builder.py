@@ -1,8 +1,8 @@
 """IR builders for ingestion sources with typed payload extraction support.
 
-The module exposes :class:`IrBuilder` as the common entry point.  Callers can
-continue supplying plain text and metadata, or provide the typed ingestion
-payload via ``raw=`` to enable automatic block/provenance extraction::
+``IrBuilder`` now enforces the typed raw payload contract.  Callers must supply
+the adapter payload union via the ``raw`` argument; omitting it raises a
+``ValueError`` so legacy coercion paths cannot silently resurface::
 
     builder = IrBuilder()
     document = builder.build(
@@ -11,15 +11,6 @@ payload via ``raw=`` to enable automatic block/provenance extraction::
         uri="https://pubmed.ncbi.nlm.nih.gov/123/",
         text="",
         raw=pubmed_payload,
-    )
-
-Legacy usage without payloads remains unchanged::
-
-    document = builder.build(
-        doc_id="doc:1",
-        source="generic",
-        uri="https://example",  # plain metadata only
-        text="Plain content",
     )
 """
 
@@ -88,20 +79,45 @@ class IrBuilder:
         metadata: Mapping[str, Any] | None = None,
         raw: AdapterDocumentPayload | None = None,
     ) -> DocumentIR:
-        metadata = metadata or {}
-        payload_blocks: list[tuple[str, str, str | None, dict[str, Any]]] = []
-        payload_tables: list[tuple[str, list[str], list[list[str]], dict[str, Any]]] = []
-        payload_provenance: dict[str, Any] = {}
-        text_input = text
-        if raw is not None:
-            (
-                text_input,
-                payload_blocks,
-                payload_tables,
-                payload_provenance,
-            ) = self._prepare_payload(text, raw)
+        if raw is None:
+            raise ValueError(
+                "IrBuilder.build() requires a typed raw payload; ensure the adapter emitted DocumentRaw data."
+            )
+        if not isinstance(raw, Mapping):
+            raise TypeError(
+                "IrBuilder.build() received an unexpected raw payload type; expected a mapping produced by adapters."
+            )
+        (
+            text_input,
+            payload_blocks,
+            payload_tables,
+            payload_provenance,
+        ) = self._prepare_payload(text, raw)
+        return self._create_document_ir(
+            doc_id=doc_id,
+            source=source,
+            uri=uri,
+            text=text_input,
+            metadata=metadata,
+            blocks=payload_blocks,
+            tables=payload_tables,
+            payload_provenance=payload_provenance,
+        )
 
-        normalized = self.normalizer.normalize(text_input)
+    def _create_document_ir(
+        self,
+        *,
+        doc_id: str,
+        source: str,
+        uri: str,
+        text: str,
+        metadata: Mapping[str, Any] | None,
+        blocks: Sequence[tuple[str, str, str | None, dict[str, Any]]],
+        tables: Sequence[tuple[str, list[str], list[list[str]], dict[str, Any]]],
+        payload_provenance: Mapping[str, Any] | None,
+    ) -> DocumentIR:
+        metadata_mapping: Mapping[str, Any] = metadata if metadata is not None else {}
+        normalized = self.normalizer.normalize(text)
         document = DocumentIR(
             doc_id=doc_id,
             source=source,
@@ -111,7 +127,7 @@ class IrBuilder:
             raw_text=normalized.raw_text,
         )
         document.span_map = SpanMap()
-        span_entries = metadata.get("span_map")
+        span_entries = metadata_mapping.get("span_map")
         if span_entries:
             document.span_map.extend_from_offset_map(span_entries)
         else:
@@ -125,14 +141,14 @@ class IrBuilder:
                     page=entry.get("page"),
                     bbox=entry.get("bbox"),
                 )
-        if provenance := metadata.get("provenance"):
+        if provenance := metadata_mapping.get("provenance"):
             self._merge_provenance(document.provenance, provenance)
         if payload_provenance:
             self._merge_provenance(document.provenance, payload_provenance)
-        if payload_blocks:
-            self._add_blocks(document, payload_blocks)
-        if payload_tables:
-            self._add_tables(document, payload_tables)
+        if blocks:
+            self._add_blocks(document, blocks)
+        if tables:
+            self._add_tables(document, tables)
         return document
 
     def _add_blocks(
@@ -424,14 +440,16 @@ class ClinicalTrialsBuilder(IrBuilder):
             )
 
         combined_text = "\n\n".join(section[1] for section in sections) if sections else ""
-        document = super().build(
+        document = self._create_document_ir(
             doc_id=doc_id,
             source="clinicaltrials",
             uri=uri,
             text=combined_text,
             metadata={"provenance": study.get("provenance", {})},
+            blocks=sections,
+            tables=(),
+            payload_provenance=None,
         )
-        self._add_blocks(document, sections)
 
         outcomes = study.get("outcomes") or []
         if isinstance(outcomes, Sequence) and outcomes:
@@ -468,9 +486,6 @@ class PmcBuilder(IrBuilder):
             "provenance": article.get("provenance", {}),
             "span_map": article.get("span_map", []),
         }
-        document = super().build(
-            doc_id=doc_id, source="pmc", uri=uri, text=combined_text, metadata=metadata
-        )
         sections: list[tuple[str, str, str | None, dict[str, Any]]] = []
         if abstract:
             sections.append(("paragraph", abstract, "abstract", {"heading": "Abstract"}))
@@ -481,18 +496,23 @@ class PmcBuilder(IrBuilder):
             sections.append(
                 ("heading" if heading else "paragraph", block_text, section, {"heading": heading})
             )
-        self._add_blocks(document, sections, separator="\n\n")
-
+        table_entries: list[tuple[str, list[str], list[list[str]], dict[str, Any]]] = []
         for table_payload in article.get("tables", []):
             caption = str(table_payload.get("caption", ""))
             headers = [str(header) for header in table_payload.get("headers", [])]
             rows = [[str(cell) for cell in row] for row in table_payload.get("rows", [])]
-            start = len(document.text)
-            end = start + len(caption)
-            document.add_table(
-                Table(caption=caption, headers=headers, rows=rows, start=start, end=end, meta={})
-            )
-        return document
+            table_entries.append((caption, headers, rows, {}))
+
+        return self._create_document_ir(
+            doc_id=doc_id,
+            source="pmc",
+            uri=uri,
+            text=combined_text,
+            metadata=metadata,
+            blocks=sections,
+            tables=table_entries,
+            payload_provenance=None,
+        )
 
 
 class DailyMedBuilder(IrBuilder):
@@ -501,31 +521,28 @@ class DailyMedBuilder(IrBuilder):
     def build_from_spl(self, *, doc_id: str, uri: str, spl: Mapping[str, Any]) -> DocumentIR:
         sections = spl.get("sections", [])
         combined_text = "\n\n".join(section.get("text", "") for section in sections)
-        document = super().build(
-            doc_id=doc_id,
-            source="dailymed",
-            uri=uri,
-            text=combined_text,
-            metadata={"provenance": spl.get("provenance", {})},
-        )
-
         block_payloads: list[tuple[str, str, str | None, dict[str, Any]]] = []
         for section in sections:
             loinc = section.get("loinc")
             text = section.get("text", "")
             block_payloads.append(("paragraph", text, "loinc_section", {"loinc": loinc}))
-        self._add_blocks(document, block_payloads)
 
+        table_entries: list[tuple[str, list[str], list[list[str]], dict[str, Any]]] = []
         if ingredients := spl.get("ingredients"):
             headers = ["name", "strength", "basis"]
             rows = [[str(item.get(header, "")) for header in headers] for item in ingredients]
-            caption = "Ingredients"
-            start = len(document.text)
-            end = start + len(caption)
-            document.add_table(
-                Table(caption=caption, headers=headers, rows=rows, start=start, end=end, meta={})
-            )
-        return document
+            table_entries.append(("Ingredients", headers, rows, {}))
+
+        return self._create_document_ir(
+            doc_id=doc_id,
+            source="dailymed",
+            uri=uri,
+            text=combined_text,
+            metadata={"provenance": spl.get("provenance", {})},
+            blocks=block_payloads,
+            tables=table_entries,
+            payload_provenance=None,
+        )
 
 
 class MinerUBuilder(IrBuilder):
@@ -535,7 +552,7 @@ class MinerUBuilder(IrBuilder):
         self, *, doc_id: str, uri: str, artifacts: Mapping[str, Any]
     ) -> DocumentIR:
         markdown = artifacts.get("markdown", "")
-        document = super().build(
+        document = self._create_document_ir(
             doc_id=doc_id,
             source="mineru",
             uri=uri,
@@ -544,6 +561,9 @@ class MinerUBuilder(IrBuilder):
                 "provenance": artifacts.get("provenance", {}),
                 "span_map": artifacts.get("offset_map", []),
             },
+            blocks=(),
+            tables=(),
+            payload_provenance=None,
         )
 
         canonical_text = document.text
@@ -745,22 +765,20 @@ class GuidelineBuilder(IrBuilder):
     def build_from_html(self, *, doc_id: str, uri: str, html: str) -> DocumentIR:
         blocks, tables = self._parse_html(html)
         combined_text = "\n\n".join(block[1] for block in blocks)
-        document = super().build(
+        table_entries: list[tuple[str, list[str], list[list[str]], dict[str, Any]]] = []
+        for table_payload in tables:
+            caption = str(table_payload.get("caption", "Guideline Table"))
+            headers = [str(value) for value in table_payload.get("headers", [])]
+            rows = [[str(cell) for cell in row] for row in table_payload.get("rows", [])]
+            table_entries.append((caption, headers, rows, {}))
+
+        return self._create_document_ir(
             doc_id=doc_id,
             source="guideline",
             uri=uri,
             text=combined_text,
             metadata={},
+            blocks=blocks,
+            tables=table_entries,
+            payload_provenance=None,
         )
-        self._add_blocks(document, blocks)
-
-        for table_payload in tables:
-            caption = str(table_payload.get("caption", "Guideline Table"))
-            headers = [str(value) for value in table_payload.get("headers", [])]
-            rows = [[str(cell) for cell in row] for row in table_payload.get("rows", [])]
-            start = len(document.text)
-            end = start + len(caption)
-            document.add_table(
-                Table(caption=caption, headers=headers, rows=rows, start=start, end=end, meta={})
-            )
-        return document

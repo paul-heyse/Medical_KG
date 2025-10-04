@@ -16,7 +16,17 @@ class Document:
     source: str
     content: str
     metadata: MutableJSONMapping = field(default_factory=dict)
-    raw: DocumentRaw | None = None
+    raw: DocumentRaw
+
+    def __post_init__(self) -> None:
+        if self.raw is None:
+            raise ValueError(
+                "Document.raw is required; ensure adapters emit typed payloads before constructing Document instances."
+            )
+        if not isinstance(self.raw, Mapping):
+            raise TypeError(
+                "Document.raw must be a mapping produced by a typed adapter payload."
+            )
 
     def as_record(self) -> Mapping[str, object]:
         record: dict[str, object] = {
@@ -25,10 +35,7 @@ class Document:
             "content": self.content,
             "metadata": dict(self.metadata),
         }
-        if self.raw is not None:
-            record["raw"] = self.raw
-        else:
-            record["raw"] = None
+        record["raw"] = self.raw
         return record
 
 

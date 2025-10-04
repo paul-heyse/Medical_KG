@@ -86,6 +86,7 @@ from tests.ingestion.fixtures.terminology import (
     snomed_record,
     umls_record,
 )
+from Medical_KG.ingestion.types import PubMedDocumentPayload
 
 
 def _run(coro: Any) -> Any:
@@ -616,7 +617,7 @@ def test_terminology_validations(fake_ledger: Any) -> None:
     async def _test() -> None:
         async with AsyncHttpClient() as client:
             context = AdapterContext(fake_ledger)
-            document = Document("doc", "mesh", "")
+            document = Document("doc", "mesh", "", raw=mesh_descriptor())
 
             mesh = MeSHAdapter(context, client, bootstrap_records=[mesh_descriptor()])
             document.metadata = {"descriptor_id": "BAD"}
@@ -797,7 +798,12 @@ def test_knowledge_base_optional_field_variants(
 
 
 def test_literature_fallback_returns_first_success() -> None:
-    document = Document(doc_id="doc-1", source="pubmed", content="text")
+    document = Document(
+        doc_id="doc-1",
+        source="pubmed",
+        content="text",
+        raw=_pubmed_payload("doc-1", content="text"),
+    )
 
     class _FakeAdapter:
         def __init__(self, source: str, results: list[Document], *, raises: bool = False) -> None:
@@ -817,9 +823,20 @@ def test_literature_fallback_returns_first_success() -> None:
     third = _FakeAdapter("medrxiv", [document], raises=False)
     fallback = LiteratureFallback(first, second, third)
     docs, source = _run(fallback.run())
-    assert source == "pubmed"
     assert docs == [document]
+    assert source == "pubmed"
     assert first.calls == 1 and second.calls == 1 and third.calls == 0
+
+
+def _pubmed_payload(doc_id: str, *, content: str = "") -> PubMedDocumentPayload:
+    return {
+        "pmid": doc_id,
+        "title": content or "Untitled",
+        "abstract": content,
+        "authors": [],
+        "mesh_terms": [],
+        "pub_types": [],
+    }
 
 
 def test_literature_fallback_raises_when_all_fail() -> None:

@@ -2,90 +2,90 @@
 
 ## 1. Audit Current Telemetry Implementation
 
-- [ ] 1.1 Document all uses of `_NoopMetric` in http_client.py
-- [ ] 1.2 Identify Prometheus auto-detection logic
-- [ ] 1.3 Review `_TelemetryRegistry` implementation
-- [ ] 1.4 Check adapter telemetry registration patterns
-- [ ] 1.5 Grep for orphaned metric registration code
-- [ ] 1.6 Document current metrics configuration approach
+- [x] 1.1 Document all uses of `_NoopMetric` in http_client.py *(removed placeholders; see updated docstrings and tests)*
+- [x] 1.2 Identify Prometheus auto-detection logic *(replaced with explicit opt-in flag)*
+- [x] 1.3 Review `_TelemetryRegistry` implementation *(extended with public registration helper)*
+- [x] 1.4 Check adapter telemetry registration patterns *(base adapter now forwards telemetry to the shared client)*
+- [x] 1.5 Grep for orphaned metric registration code *(cleaned direct metric mutations in `_execute`)*
+- [x] 1.6 Document current metrics configuration approach *(runbook now covers explicit enablement)*
 
 ## 2. Remove _NoopMetric Placeholders
 
-- [ ] 2.1 Delete `_NoopMetric` class definition
-- [ ] 2.2 Delete `HTTP_REQUESTS = _NoopMetric()` global
-- [ ] 2.3 Delete `HTTP_LATENCY = _NoopMetric()` global
-- [ ] 2.4 Remove any other `_NoopMetric` instances
-- [ ] 2.5 Clean up related imports
-- [ ] 2.6 Verify no code depends on noop metrics
-- [ ] 2.7 Run mypy strict on http_client.py
+- [x] 2.1 Delete `_NoopMetric` class definition
+- [x] 2.2 Delete `HTTP_REQUESTS = _NoopMetric()` global
+- [x] 2.3 Delete `HTTP_LATENCY = _NoopMetric()` global
+- [x] 2.4 Remove any other `_NoopMetric` instances
+- [x] 2.5 Clean up related imports
+- [x] 2.6 Verify no code depends on noop metrics *(tests cover telemetry fan-out)*
+- [x] 2.7 Run mypy strict on http_client.py *(command executed; baseline API typing errors remain unrelated to this change)*
 
 ## 3. Centralize Telemetry Registration
 
-- [ ] 3.1 Move all telemetry logic to `_TelemetryRegistry`
-- [ ] 3.2 Ensure registry handles all event types
-- [ ] 3.3 Remove duplicate registration code paths
-- [ ] 3.4 Consolidate per-host callback handling
-- [ ] 3.5 Test registry with multiple telemetry handlers
-- [ ] 3.6 Document registry API
-- [ ] 3.7 Add registry usage examples
+- [x] 3.1 Move all telemetry logic to `_TelemetryRegistry`
+- [x] 3.2 Ensure registry handles all event types *(registry now backs public add_telemetry API)*
+- [x] 3.3 Remove duplicate registration code paths
+- [x] 3.4 Consolidate per-host callback handling *(new host override path)*
+- [x] 3.5 Test registry with multiple telemetry handlers *(expanded unit coverage)*
+- [x] 3.6 Document registry API *(new docstrings and runbook guidance)*
+- [x] 3.7 Add registry usage examples *(runbook snippet shows add_telemetry)*
 
 ## 4. Make Metrics Configuration Explicit
 
-- [ ] 4.1 Change `enable_metrics` default to `False` (explicit opt-in)
-- [ ] 4.2 Remove implicit Prometheus detection logic
-- [ ] 4.3 Document how to enable Prometheus metrics
-- [ ] 4.4 Add configuration examples to docstrings
-- [ ] 4.5 Update default client initialization patterns
-- [ ] 4.6 Test metrics enabled vs disabled paths
-- [ ] 4.7 Document configuration best practices
+- [x] 4.1 Change `enable_metrics` default to `False` (explicit opt-in)
+- [x] 4.2 Remove implicit Prometheus detection logic
+- [x] 4.3 Document how to enable Prometheus metrics *(runbook + __init__ docstring)*
+- [x] 4.4 Add configuration examples to docstrings
+- [x] 4.5 Update default client initialization patterns *(tests + documentation use explicit opt-in)*
+- [x] 4.6 Test metrics enabled vs disabled paths *(new Prometheus opt-in test exercises enabled; existing suite covers disabled default)*
+- [x] 4.7 Document configuration best practices *(troubleshooting section updated)
 
 ## 5. Clean HTTP Client Constructor
 
-- [ ] 5.1 Simplify telemetry parameter handling
-- [ ] 5.2 Remove conditional Prometheus registration logic
-- [ ] 5.3 Clean up callback initialization code
-- [ ] 5.4 Update constructor docstring
-- [ ] 5.5 Test constructor with various telemetry configs
-- [ ] 5.6 Verify backwards compatibility where possible
-- [ ] 5.7 Document breaking changes clearly
+- [x] 5.1 Simplify telemetry parameter handling *(single add_telemetry entry point)*
+- [x] 5.2 Remove conditional Prometheus registration logic
+- [x] 5.3 Clean up callback initialization code *(callbacks flow through registry)*
+- [x] 5.4 Update constructor docstring
+- [x] 5.5 Test constructor with various telemetry configs *(coverage for lists, mappings, and host overrides)*
+- [x] 5.6 Verify backwards compatibility where possible *(adapter + pipeline tests ensure behaviour parity)*
+- [x] 5.7 Document breaking changes clearly *(runbook highlights new opt-in default)
 
 ## 6. Update Adapter Instrumentation
 
-- [ ] 6.1 Review adapter telemetry patterns in adapters/http.py
-- [ ] 6.2 Ensure adapters use shared registry patterns
-- [ ] 6.3 Remove any adapter-specific telemetry workarounds
-- [ ] 6.4 Test adapter telemetry with normalized client
-- [ ] 6.5 Update adapter documentation
+- [x] 6.1 Review adapter telemetry patterns in adapters/http.py
+- [x] 6.2 Ensure adapters use shared registry patterns *(base adapter forwards telemetry to client)*
+- [x] 6.3 Remove any adapter-specific telemetry workarounds
+- [x] 6.4 Test adapter telemetry with normalized client *(adapter test captures forwarded telemetry)*
+- [x] 6.5 Update adapter documentation *(runbook notes HttpAdapter forwarding)*
 - [ ] 6.6 Verify adapter telemetry overhead
-- [ ] 6.7 Document adapter instrumentation patterns
+- [x] 6.7 Document adapter instrumentation patterns
 
 ## 7. Update Telemetry Helpers
 
-- [ ] 7.1 Ensure `PrometheusTelemetry` integrates cleanly
+- [x] 7.1 Ensure `PrometheusTelemetry` integrates cleanly *(opt-in test validates event flow)*
 - [ ] 7.2 Update `LoggingTelemetry` if needed
 - [ ] 7.3 Test `CompositeTelemetry` with registry
-- [ ] 7.4 Document helper usage patterns
-- [ ] 7.5 Add examples for common scenarios
+- [x] 7.4 Document helper usage patterns *(runbook now explains add_telemetry and Prometheus opt-in)*
+- [x] 7.5 Add examples for common scenarios *(documentation includes explicit enablement + per-host snippets)*
 - [ ] 7.6 Test all helpers with normalized client
 - [ ] 7.7 Update telemetry module documentation
 
 ## 8. Update Tests
 
-- [ ] 8.1 Rewrite tests that depended on `_NoopMetric`
-- [ ] 8.2 Update telemetry registration tests
-- [ ] 8.3 Test explicit metrics configuration
-- [ ] 8.4 Test telemetry enabled vs disabled
-- [ ] 8.5 Add tests for normalized callback registration
-- [ ] 8.6 Run full HTTP client test suite
+- [x] 8.1 Rewrite tests that depended on `_NoopMetric`
+- [x] 8.2 Update telemetry registration tests
+- [x] 8.3 Test explicit metrics configuration
+- [x] 8.4 Test telemetry enabled vs disabled *(default path exercised by suite; opt-in covered explicitly)*
+- [x] 8.5 Add tests for normalized callback registration
+- [x] 8.6 Run full HTTP client test suite
 - [ ] 8.7 Verify test coverage maintained
 
 ## 9. Update Configuration Documentation
 
-- [ ] 9.1 Document explicit metrics enablement
-- [ ] 9.2 Add configuration examples to runbook
-- [ ] 9.3 Update adapter telemetry guide
-- [ ] 9.4 Document Prometheus integration setup
-- [ ] 9.5 Add troubleshooting for telemetry
+- [x] 9.1 Document explicit metrics enablement *(Prometheus section now calls out opt-in flow)*
+- [x] 9.2 Add configuration examples to runbook *(added code snippets for enabling metrics)*
+- [x] 9.3 Update adapter telemetry guide *(clarified HttpAdapter forwarding semantics)*
+- [x] 9.4 Document Prometheus integration setup *(runbook explains dependency + opt-in requirements)*
+- [x] 9.5 Add troubleshooting for telemetry *(updated guidance for missing metrics scenarios)*
 - [ ] 9.6 Update API reference
 - [ ] 9.7 Add migration guide for implicit→explicit config
 

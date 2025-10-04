@@ -31,6 +31,8 @@ class HttpAdapter(BaseAdapter[RawPayloadT], Generic[RawPayloadT]):
         super().__init__(context)
         self.client = client
         self.client.bind_retry_callback(self._handle_retry)
+        if telemetry is not None:
+            self.client.add_telemetry(telemetry)
 
     def _handle_retry(
         self, method: str, url: str, attempt: int, error: Exception

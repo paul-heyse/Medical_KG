@@ -439,6 +439,19 @@ These helpers can be combined via the `telemetry` constructor argument or `clien
 
 ### Prometheus Metrics
 
+Prometheus instrumentation is disabled by default. Install
+`prometheus_client` and opt in by constructing the shared client with
+``AsyncHttpClient(enable_metrics=True)`` (or by setting
+``enable_client_metrics=True`` when building an :class:`IngestionPipeline`).
+When the dependency is missing the client logs a warning and continues without
+registering Prometheus callbacks.
+
+```python
+from Medical_KG.ingestion.http_client import AsyncHttpClient
+
+client = AsyncHttpClient(enable_metrics=True)
+```
+
 `PrometheusTelemetry` records the following metrics (all with a `host` label):
 
 | Metric | Type | Description |
@@ -455,7 +468,10 @@ A ready-to-import Grafana dashboard (`ops/monitoring/grafana/http-client-telemet
 
 ### Per-Host Telemetry Patterns
 
-Adapters that talk to multiple APIs can scope telemetry by host:
+Adapters that talk to multiple APIs can scope telemetry by host. Pass telemetry
+definitions into adapter constructors—the base :class:`HttpAdapter` forwards
+them to the shared client using ``AsyncHttpClient.add_telemetry`` so callbacks
+are registered once per upstream:
 
 ```python
 from Medical_KG.ingestion.telemetry import LoggingTelemetry, PrometheusTelemetry
@@ -493,6 +509,6 @@ Telemetry callbacks execute synchronously after each lifecycle event. Keep handl
 
 ### Troubleshooting
 
-- Missing metrics usually indicate `prometheus_client` is not installed; set `enable_metrics=False` to silence the warning and rely on logging/trace callbacks.
+- Missing metrics usually indicate `prometheus_client` is not installed; install the dependency before enabling metrics or leave `enable_metrics=False`.
 - Spikes in `http_limiter_queue_saturation` above 0.8 trigger a warning log and indicate the limiter is the bottleneck—either lower concurrency or request higher upstream quotas.
 - If callbacks raise exceptions they are logged at `WARNING` level and suppressed; check application logs for `"Telemetry callback"` messages when instrumentation appears inactive.

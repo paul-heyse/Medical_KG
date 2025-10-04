@@ -50,21 +50,6 @@ _EventKey = Literal["request", "response", "retry", "backoff", "error"]
 _EVENT_KEYS: tuple[_EventKey, ...] = ("request", "response", "retry", "backoff", "error")
 
 
-class _NoopMetric:
-    def labels(self, *args: object, **kwargs: object) -> "_NoopMetric":  # noqa: D401 - tiny helper
-        return self
-
-    def inc(self, *args: object, **kwargs: object) -> None:  # pragma: no cover - no-op metric
-        return None
-
-    def observe(self, *args: object, **kwargs: object) -> None:  # pragma: no cover - no-op metric
-        return None
-
-
-HTTP_REQUESTS = _NoopMetric()
-HTTP_LATENCY = _NoopMetric()
-
-
 @dataclass(slots=True)
 class RateLimit:
     rate: int
@@ -205,7 +190,7 @@ class AsyncHttpClient:
             | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
         )
         | None = None,
-        enable_metrics: bool | None = None,
+        enable_metrics: bool = False,
     ) -> None:
         """Construct the asynchronous HTTP client.
 
@@ -220,9 +205,16 @@ class AsyncHttpClient:
             on_retry: Callback accepting :class:`HttpRetryEvent` before a retry delay.
             on_backoff: Callback accepting :class:`HttpBackoffEvent` after limiter wait.
             on_error: Callback accepting :class:`HttpErrorEvent` when exceptions occur.
-            telemetry: Telemetry helper(s) to register globally or per host.
-            enable_metrics: When ``True`` (default if Prometheus available) registers
-                :class:`PrometheusTelemetry` automatically.
+            telemetry: Telemetry helper(s) to register globally or per host. Use
+                :meth:`add_telemetry` to attach handlers after initialisation.
+            enable_metrics: When ``True`` registers :class:`PrometheusTelemetry`
+                automatically if the ``prometheus_client`` dependency is
+                available.
+
+        Example:
+            Configure Prometheus metrics explicitly::
+
+                client = AsyncHttpClient(enable_metrics=True)
         """
         http2_enabled = importlib.util.find_spec("h2") is not None
         self._client: AsyncClientProtocol = create_async_client(
@@ -242,12 +234,18 @@ class AsyncHttpClient:
         self._register_callback("backoff", on_backoff)
         self._register_callback("error", on_error)
 
-        metrics_enabled = enable_client_metrics
-        if metrics_enabled is None:
-            metrics_enabled = PrometheusTelemetry.is_available()
-        if metrics_enabled:
-            self._register_telemetry(PrometheusTelemetry())
-        self._register_telemetry(telemetry)
+        metrics_enabled = False
+        if enable_metrics:
+            if not PrometheusTelemetry.is_available():
+                LOGGER.warning(
+                    "Prometheus metrics requested but prometheus_client is not installed; "
+                    "skipping registration.",
+                )
+            else:
+                self._register_telemetry_for_host(PrometheusTelemetry())
+                metrics_enabled = True
+        self.enable_metrics = metrics_enabled
+        self.add_telemetry(telemetry)
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -274,6 +272,37 @@ class AsyncHttpClient:
         if close_error is not None and exc_type is None:
             raise close_error
         return False
+
+    def add_telemetry(
+        self,
+        telemetry: (
+            HttpTelemetry
+            | Sequence[HttpTelemetry]
+            | Mapping[str, HttpTelemetry | Sequence[HttpTelemetry]]
+            | None
+        ),
+        *,
+        host: str | None = None,
+    ) -> None:
+        """Register additional telemetry handlers after initialisation.
+
+        Args:
+            telemetry: Telemetry helper(s) to register. Accepts a single handler,
+                a sequence of handlers, or a mapping of hostnames to handler
+                collections.
+            host: Optional host override when registering a single handler or
+                sequence for a specific upstream. ``telemetry`` must not be a
+                mapping when ``host`` is provided.
+        """
+
+        if telemetry is None:
+            return
+        if host is not None:
+            if isinstance(telemetry, Mapping):
+                raise TypeError("telemetry mappings cannot be combined with host override")
+            self._register_telemetry_for_host(telemetry, host=host)
+            return
+        self._register_telemetry(telemetry)
 
     def _get_limiter(self, host: str) -> _SimpleLimiter:
         if host not in self._limiters:
@@ -492,10 +521,6 @@ class AsyncHttpClient:
                 try:
                     start = time()
                     response = await self._client.request(method, url, **kwargs)
-                    HTTP_REQUESTS.labels(
-                        method=method, host=parsed.netloc, status=str(response.status_code)
-                    ).inc()
-                    HTTP_LATENCY.observe(time() - start)
                     response.raise_for_status()
                     self._emit_response_event(
                         request_id=request_id,
@@ -509,6 +534,7 @@ class AsyncHttpClient:
                 except HTTPError as exc:  # pragma: no cover - exercised via tests
                     status = getattr(getattr(exc, "response", None), "status_code", None)
                     retryable = status in {429, 502, 503, 504}
+                    reason = f"status_{status}" if status is not None else type(exc).__name__
                     self._emit_error_event(
                         request_id=request_id,
                         method=method,
@@ -533,7 +559,7 @@ class AsyncHttpClient:
                         attempt=attempt,
                         delay_seconds=delay,
                         will_retry=will_retry,
-                        reason=type(exc).__name__,
+                        reason=reason,
                     )
                     if not will_retry:
                         break

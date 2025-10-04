@@ -594,6 +594,17 @@ class IngestionPipeline:
     def _record_consumption(mode: str, adapter: str) -> None:
         PIPELINE_CONSUMPTION_COUNTER.labels(mode=mode, adapter=adapter).inc()
 
+    def __getattr__(self, attribute: str) -> Any:
+        """Provide a clearer error for removed legacy helpers."""
+
+        if attribute == "run_async_legacy":
+            raise AttributeError(
+                "IngestionPipeline.run_async_legacy() was removed; "
+                "use stream_events() or run_async() instead."
+            )
+        message = f"{self.__class__.__name__!s} object has no attribute {attribute!r}"
+        raise AttributeError(message)
+
 
 __all__ = [
     "IngestionPipeline",

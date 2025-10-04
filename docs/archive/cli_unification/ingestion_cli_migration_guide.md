@@ -4,6 +4,8 @@ _Archived 2025-10-04 – Migration completed and tooling retired._
 
 The legacy ingestion entry points (`med ingest --source ...` and `med-ingest ...`) now delegate to the unified Typer-based CLI. Use this guide to update scripts, CI jobs, and operator runbooks.
 
+> **Update (2025-10-12)**: The companion `IngestionPipeline.run_async_legacy()` wrapper has been permanently removed. Any remaining automation must call `stream_events()` or the eager `run_async()` helper instead.
+
 ## Migration Checklist
 
 1. **Inventory usage** – run `scripts/cli_migration/check_ci_commands.py --json` to identify legacy commands in workflows, scripts, and automation.

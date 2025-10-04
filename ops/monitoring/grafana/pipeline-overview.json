@@ -88,6 +88,30 @@
           "refId": "B"
         }
       ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PROMETHEUS_DS"
+      },
+      "description": "Legacy run_async_legacy labels were removed; this panel tracks supported consumption modes.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 17},
+      "id": 4,
+      "title": "Streaming vs Eager Consumption",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (mode)(rate(ingest_pipeline_consumption_total[5m]))",
+          "legendFormat": "{{mode}}",
+          "refId": "A"
+        }
+      ]
     }
   ],
   "time": {

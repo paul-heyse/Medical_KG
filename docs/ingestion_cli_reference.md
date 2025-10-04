@@ -40,6 +40,8 @@ med ingest ADAPTER [OPTIONS]
 | `--quiet` | `-q` | Suppress non-essential output (progress bars off). |
 | `--version` | – | Print CLI version and exit. |
 
+> **Note**: The historical `run_async_legacy()` wrapper has been removed. `--no-stream` now delegates to the synchronous `run()` helper, which internally uses the same streaming implementation before materialising results.
+
 ## Output Formats
 
 - **Text** – Default human-readable summary. Warnings/errors are prefixed and timing info is optional via `--show-timings`.

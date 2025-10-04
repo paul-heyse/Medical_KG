@@ -1,4 +1,5 @@
 {
+  "$schema": "./config.schema.json#v1.0.0",
   "feature_flags": {
     "extraction_experimental_enabled": true
   },

@@ -111,6 +111,77 @@ def test_feature_flag_adjusts_fusion_weights(
     assert pytest.approx(weights["bm25"] + weights["dense"]) == 1.0
 
 
+def test_scheduled_pipeline_formats_validate(
+    config_dir: Path, base_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CONFIG_ENV", "dev")
+    override = config_dir / "config-override.yaml"
+    override.write_text(
+        json.dumps(
+            {
+                "pipelines": {
+                    "scheduled": [
+                        {
+                            "adapter": "pubmed",
+                            "interval": "15m",
+                            "enabled": True,
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
+    )
+    manager = ConfigManager(base_path=config_dir, env="dev")
+    scheduled = manager.config.data()["pipelines"]["scheduled"]
+    assert scheduled[0]["adapter"] == "pubmed"
+    assert scheduled[0]["interval"] == "15m"
+
+
+def test_invalid_schedule_reports_pointer_and_hint(
+    config_dir: Path, base_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CONFIG_ENV", "dev")
+    override = config_dir / "config-override.yaml"
+    override.write_text(
+        json.dumps(
+            {
+                "pipelines": {
+                    "scheduled": [
+                        {
+                            "adapter": "unknown",
+                            "interval": "5minutes",
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
+    )
+    with pytest.raises(ConfigError) as exc:
+        ConfigManager(base_path=config_dir, env="dev")
+    message = str(exc.value)
+    assert "/pipelines/scheduled/0/adapter" in message
+    assert "format 'adapter_name'" in message
+    assert 'Value: "unknown"' in message
+    assert "Hint:" in message
+
+
+def test_schema_version_mismatch_raises(
+    config_dir: Path, base_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CONFIG_ENV", "dev")
+    override = config_dir / "config-override.yaml"
+    override.write_text(
+        json.dumps({"$schema": "./config.schema.json#v0.9.0"}, indent=2)
+    )
+    with pytest.raises(ConfigError) as exc:
+        ConfigManager(base_path=config_dir, env="dev")
+    message = str(exc.value)
+    assert "declares schema version 0.9.0" in message
+    assert "docs/configuration.md" in message
+
+
 def test_validate_jwt_scope(config_dir: Path, base_env: None) -> None:
     manager = ConfigManager(base_path=config_dir, env="dev")
     secret = "jwt-secret"

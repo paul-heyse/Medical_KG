@@ -16,7 +16,6 @@ from Medical_KG.ingestion.ledger import (
     InvalidStateTransition,
     LedgerAuditRecord,
     LedgerState,
-    coerce_state,
     validate_transition,
 )
 from Medical_KG.ingestion.types import JSONValue, MutableJSONMapping
@@ -27,6 +26,20 @@ LOGGER = logging.getLogger(__name__)
 
 class _JsonLinesWriter(Protocol):
     def write(self, obj: object) -> None: ...
+
+
+_STATE_ALIASES: Mapping[str, LedgerState] = {
+    "auto_done": LedgerState.COMPLETED,
+    "auto_failed": LedgerState.FAILED,
+    "auto_inflight": LedgerState.FETCHING,
+    "mineru_failed": LedgerState.FAILED,
+    "mineru_inflight": LedgerState.IR_BUILDING,
+    "pdf_downloaded": LedgerState.FETCHED,
+    "pdf_ir_ready": LedgerState.IR_READY,
+    "ir_exists": LedgerState.IR_READY,
+    "ir_written": LedgerState.IR_READY,
+    "postpdf_started": LedgerState.EMBEDDING,
+}
 
 
 def _parse_timestamp(value: object) -> float:
@@ -42,6 +55,19 @@ def _parse_timestamp(value: object) -> float:
                 dt = dt.replace(tzinfo=timezone.utc)
             return dt.astimezone(timezone.utc).timestamp()
     return datetime.now(timezone.utc).timestamp()
+
+
+def _coerce_state(value: str) -> LedgerState:
+    token = value.strip()
+    if not token:
+        raise ValueError("state value cannot be empty")
+    alias = _STATE_ALIASES.get(token.lower())
+    if alias is not None:
+        return alias
+    try:
+        return LedgerState[token.upper()]
+    except KeyError:
+        return LedgerState(token.lower())
 
 
 def migrate_ledger(
@@ -67,8 +93,12 @@ def migrate_ledger(
             doc_id = str(mapping.get("doc_id", ""))
             if not doc_id:
                 continue
-            new_state = coerce_state(str(mapping.get("state", "legacy")))
-            old_state = state_index.get(doc_id, LedgerState.LEGACY)
+            try:
+                new_state = _coerce_state(str(mapping.get("state", "")))
+            except ValueError:
+                LOGGER.warning("Skipping entry with missing state", extra={"doc_id": doc_id})
+                continue
+            old_state = state_index.get(doc_id, new_state)
             try:
                 validate_transition(old_state, new_state)
             except InvalidStateTransition as exc:
@@ -76,11 +106,13 @@ def migrate_ledger(
                 LOGGER.warning(message)
                 warnings.append(message)
             timestamp = _parse_timestamp(mapping.get("timestamp"))
-        metadata_value = ensure_json_value(mapping.get("metadata", {}), context="migration metadata")
-        if isinstance(metadata_value, Mapping):
-            metadata = cast(MutableJSONMapping, metadata_value)
-        else:
-            metadata = cast(MutableJSONMapping, {})
+            metadata_value = ensure_json_value(
+                mapping.get("metadata", {}), context="migration metadata"
+            )
+            if isinstance(metadata_value, Mapping):
+                metadata = cast(MutableJSONMapping, metadata_value)
+            else:
+                metadata = cast(MutableJSONMapping, {})
             audit = LedgerAuditRecord(
                 doc_id=doc_id,
                 old_state=old_state,

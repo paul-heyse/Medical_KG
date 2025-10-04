@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from Medical_KG.ingestion.ledger import LedgerState
 from Medical_KG.ingestion.models import Document, IngestionResult
 
 
@@ -21,7 +22,7 @@ def test_document_as_record_round_trip() -> None:
 def test_ingestion_result_container() -> None:
     document = Document("doc-2", "demo", "content")
     result = IngestionResult(
-        document=document, state="auto_done", timestamp=datetime.now(timezone.utc)
+        document=document, state=LedgerState.COMPLETED, timestamp=datetime.now(timezone.utc)
     )
     assert result.document.doc_id == "doc-2"
-    assert result.state == "auto_done"
+    assert result.state is LedgerState.COMPLETED

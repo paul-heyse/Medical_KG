@@ -18,7 +18,7 @@ from typing import (
     cast,
 )
 
-from Medical_KG.ingestion.ledger import IngestionLedger
+from Medical_KG.ingestion.ledger import IngestionLedger, LedgerState
 from Medical_KG.ingestion.pipeline import IngestionPipeline, PipelineResult
 
 if TYPE_CHECKING:  # pragma: no cover - typing aids
@@ -418,8 +418,8 @@ def handle_ledger_resume(
     entries = {entry.doc_id: entry.state for entry in ledger_instance.entries()}
     candidate_sequence = list(candidate_doc_ids) if candidate_doc_ids is not None else None
 
-    failure_states = {"auto_failed", "auto_inflight"}
-    success_states = {"auto_done"}
+    failure_states = {LedgerState.FAILED, LedgerState.FETCHING}
+    success_states = {LedgerState.COMPLETED}
 
     resume_ids: list[str] = []
     skipped_ids: list[str] = []

@@ -3,10 +3,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Callable, Generic, TypeVar
 
 from Medical_KG.ingestion.events import PipelineEvent
-from Medical_KG.ingestion.ledger import IngestionLedger
+from Medical_KG.ingestion.ledger import IngestionLedger, LedgerState
 from Medical_KG.ingestion.models import Document, IngestionResult
 from Medical_KG.ingestion.utils import generate_doc_id
 
@@ -40,12 +41,13 @@ class BaseAdapter(Generic[RawPayloadT], ABC):
                 document = self.parse(raw_record)
                 if resume:
                     existing = self.context.ledger.get(document.doc_id)
-                    if existing is not None and existing.state == "auto_done":
+                    if existing is not None and existing.state is LedgerState.COMPLETED:
                         continue
-                self.context.ledger.record(
+                self.context.ledger.update_state(
                     doc_id=document.doc_id,
-                    state="auto_inflight",
+                    new_state=LedgerState.FETCHING,
                     metadata={"source": document.source},
+                    adapter=self.source,
                 )
                 self.validate(document)
                 result = await self.write(document)
@@ -54,10 +56,12 @@ class BaseAdapter(Generic[RawPayloadT], ABC):
                 setattr(exc, "doc_id", doc_id)
                 setattr(exc, "retry_count", getattr(exc, "retry_count", 0))
                 setattr(exc, "is_retryable", getattr(exc, "is_retryable", False))
-                self.context.ledger.record(
+                self.context.ledger.update_state(
                     doc_id=doc_id,
-                    state="auto_failed",
+                    new_state=LedgerState.FAILED,
                     metadata={"error": str(exc)},
+                    adapter=self.source,
+                    error=exc,
                 )
                 raise
             yield result
@@ -77,12 +81,18 @@ class BaseAdapter(Generic[RawPayloadT], ABC):
         """Perform source-specific validations (override as needed)."""
 
     async def write(self, document: Document) -> IngestionResult:
-        entry = self.context.ledger.record(
+        audit = self.context.ledger.update_state(
             doc_id=document.doc_id,
-            state="auto_done",
+            new_state=LedgerState.COMPLETED,
             metadata={"source": document.source},
+            adapter=self.source,
         )
-        return IngestionResult(document=document, state=entry.state, timestamp=entry.timestamp)
+        return IngestionResult(
+            document=document,
+            state=audit.new_state,
+            timestamp=datetime.fromtimestamp(audit.timestamp, tz=timezone.utc),
+            metadata=audit.metadata,
+        )
 
     def build_doc_id(self, *, identifier: str, version: str, content: bytes) -> str:
         return generate_doc_id(self.source, identifier, version, content)

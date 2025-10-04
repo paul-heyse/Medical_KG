@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from types import TracebackType
 from typing import Protocol, cast
@@ -16,7 +17,7 @@ from Medical_KG.config.manager import (
     mask_secrets,
 )
 from Medical_KG.config.models import PdfPipelineSettings
-from Medical_KG.ingestion.ledger import IngestionLedger
+from Medical_KG.ingestion.ledger import IngestionLedger, LedgerState
 from Medical_KG.pdf import (
     GpuNotAvailableError,
     MinerUConfig,
@@ -198,10 +199,11 @@ def _command_ingest_pdf(args: argparse.Namespace) -> int:
         return 1
     destination.write_bytes(response.content)
     ledger = IngestionLedger(pipeline_config.ledger_path.expanduser())
-    ledger.record(
+    ledger.update_state(
         args.doc_key,
-        "pdf_downloaded",
-        {"uri": args.uri, "local_path": str(destination)},
+        LedgerState.FETCHED,
+        metadata={"uri": args.uri, "local_path": str(destination)},
+        adapter="pdf-ingest",
     )
     print(f"Stored {args.doc_key} at {destination}")
     return 0
@@ -216,7 +218,7 @@ def _command_mineru_run(args: argparse.Namespace) -> int:
     pipeline = _build_pipeline(manager)
     pdf_config = manager.config.pdf_pipeline()
     ledger = IngestionLedger(pdf_config.ledger_path.expanduser())
-    entries = ledger.entries(state="pdf_downloaded")
+    entries = ledger.entries(state=LedgerState.FETCHED)
     if args.doc_key:
         entries = [entry for entry in entries if entry.doc_id == args.doc_key]
     if not entries:
@@ -243,7 +245,12 @@ def _command_mineru_run(args: argparse.Namespace) -> int:
                 return 99
             break
         except RuntimeError as exc:
-            ledger.record(entry.doc_id, "mineru_failed", {"error": str(exc)})
+            ledger.update_state(
+                entry.doc_id,
+                LedgerState.FAILED,
+                metadata={"error": str(exc)},
+                adapter="mineru",
+            )
             print(f"MinerU failed for {entry.doc_id}: {exc}", file=sys.stderr)
     return exit_code
 
@@ -262,10 +269,86 @@ def _command_postpdf(args: argparse.Namespace) -> int:
         print(str(exc), file=sys.stderr)
         return 99
     ledger = IngestionLedger(pdf_config.ledger_path.expanduser())
-    entries = list(ledger.entries(state="pdf_ir_ready"))
+    entries = list(ledger.entries(state=LedgerState.IR_READY))
     for entry in entries:
-        ledger.record(entry.doc_id, "postpdf_started", {"steps": args.steps})
+        ledger.update_state(
+            entry.doc_id,
+            LedgerState.EMBEDDING,
+            metadata={"steps": args.steps},
+            adapter="postpdf",
+        )
     print(f"Triggered downstream processing for {len(entries)} document(s)")
+    return 0
+
+
+def _load_ledger_for_cli(args: argparse.Namespace) -> IngestionLedger:
+    snapshot_dir = getattr(args, "snapshot_dir", None)
+    return IngestionLedger(args.ledger_path.expanduser(), snapshot_dir=snapshot_dir)
+
+
+def _command_ledger_compact(args: argparse.Namespace) -> int:
+    ledger = _load_ledger_for_cli(args)
+    snapshot = ledger.create_snapshot(args.output)
+    print(f"Snapshot created at {snapshot}")
+    return 0
+
+
+def _command_ledger_validate(args: argparse.Namespace) -> int:
+    ledger = _load_ledger_for_cli(args)
+    totals = {
+        state.value: len(ledger.get_documents_by_state(state)) for state in LedgerState
+    }
+    print(json.dumps({"documents_by_state": totals}, indent=2))
+    return 0
+
+
+def _command_ledger_stats(args: argparse.Namespace) -> int:
+    ledger = _load_ledger_for_cli(args)
+    totals = {
+        state.value: len(ledger.get_documents_by_state(state)) for state in LedgerState
+    }
+    for state, count in sorted(totals.items()):
+        print(f"{state}: {count}")
+    return 0
+
+
+def _command_ledger_stuck(args: argparse.Namespace) -> int:
+    ledger = _load_ledger_for_cli(args)
+    stuck = ledger.get_stuck_documents(args.hours)
+    if not stuck:
+        print("No stuck documents detected")
+        return 0
+    for document in stuck:
+        duration_hours = document.duration() / 3600
+        print(f"{document.doc_id}: {document.state.value} ({duration_hours:.2f}h)")
+    return 0
+
+
+def _command_ledger_history(args: argparse.Namespace) -> int:
+    ledger = _load_ledger_for_cli(args)
+    history = ledger.get_state_history(args.doc_id)
+    if not history:
+        print(f"No history for {args.doc_id}")
+        return 0
+    for record in history:
+        timestamp = datetime.fromtimestamp(record.timestamp, tz=timezone.utc)
+        print(
+            f"{timestamp.isoformat()} {record.old_state.value} -> {record.new_state.value}"
+        )
+    return 0
+
+
+def _command_ledger_migrate(args: argparse.Namespace) -> int:
+    from scripts.migrate_ledger_to_state_machine import migrate_ledger
+
+    migrate_ledger(
+        args.ledger_path,
+        output_path=args.output,
+        dry_run=args.dry_run,
+        create_backup=not args.no_backup,
+        progress_interval=args.progress,
+    )
+    print("Ledger migration complete")
     return 0
 
 
@@ -322,6 +405,43 @@ def build_parser() -> argparse.ArgumentParser:
         help="Pipeline steps to launch",
     )
     postpdf.set_defaults(func=_command_postpdf)
+
+    ledger_parser = subparsers.add_parser("ledger", help="Ledger maintenance commands")
+    ledger_parser.add_argument("--ledger-path", type=Path, required=True, help="Ledger JSONL path")
+    ledger_parser.add_argument(
+        "--snapshot-dir",
+        type=Path,
+        default=None,
+        help="Optional snapshot directory override",
+    )
+    ledger_sub = ledger_parser.add_subparsers(dest="ledger_command", required=True)
+
+    ledger_compact = ledger_sub.add_parser("compact", help="Create ledger snapshot")
+    ledger_compact.add_argument("--output", type=Path, default=None, help="Snapshot output path")
+    ledger_compact.set_defaults(func=_command_ledger_compact)
+
+    ledger_validate = ledger_sub.add_parser("validate", help="Validate ledger integrity")
+    ledger_validate.set_defaults(func=_command_ledger_validate)
+
+    ledger_stats = ledger_sub.add_parser("stats", help="Display ledger state distribution")
+    ledger_stats.set_defaults(func=_command_ledger_stats)
+
+    ledger_stuck = ledger_sub.add_parser("stuck", help="List documents stuck in non-terminal states")
+    ledger_stuck.add_argument("--hours", type=int, default=24, help="Threshold in hours")
+    ledger_stuck.set_defaults(func=_command_ledger_stuck)
+
+    ledger_history = ledger_sub.add_parser("history", help="Show document state history")
+    ledger_history.add_argument("doc_id", help="Document identifier")
+    ledger_history.set_defaults(func=_command_ledger_history)
+
+    ledger_migrate = ledger_sub.add_parser("migrate", help="Migrate ledger to enum states")
+    ledger_migrate.add_argument("--output", type=Path, default=None, help="Output ledger path")
+    ledger_migrate.add_argument("--dry-run", action="store_true", help="Validate without writing")
+    ledger_migrate.add_argument("--no-backup", action="store_true", help="Skip creating backup")
+    ledger_migrate.add_argument(
+        "--progress", type=int, default=None, help="Emit progress updates every N entries"
+    )
+    ledger_migrate.set_defaults(func=_command_ledger_migrate)
 
     # Data ingestion commands
     ingest = subparsers.add_parser(

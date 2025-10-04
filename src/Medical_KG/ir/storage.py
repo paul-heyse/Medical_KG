@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
+from Medical_KG.ingestion.ledger import LedgerState
 from Medical_KG.ir.models import DocumentIR
 
 
@@ -23,11 +24,21 @@ class IrStorage:
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.exists() and path.read_bytes() == encoded:
             if ledger is not None:
-                ledger.record(document.doc_id, "ir_exists", {"uri": str(path)})
+                ledger.update_state(
+                    document.doc_id,
+                    LedgerState.IR_READY,
+                    metadata={"uri": str(path)},
+                    adapter="ir-storage",
+                )
             return path
         path.write_bytes(encoded)
         if ledger is not None:
-            ledger.record(document.doc_id, "ir_written", {"uri": str(path)})
+            ledger.update_state(
+                document.doc_id,
+                LedgerState.IR_READY,
+                metadata={"uri": str(path)},
+                adapter="ir-storage",
+            )
         return path
 
     def iter_documents(self, source: str) -> Iterable[dict[str, Any]]:

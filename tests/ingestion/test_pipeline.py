@@ -1,21 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
 from Medical_KG.ingestion.adapters.base import AdapterContext, BaseAdapter
-from Medical_KG.ingestion.adapters.guidelines import NiceGuidelineAdapter
-from Medical_KG.ingestion.events import (
-    AdapterStateChange,
-    BatchProgress,
-    DocumentCompleted,
-    DocumentFailed,
-    DocumentStarted,
-    PipelineEvent,
-    errors_only,
-)
-from Medical_KG.ingestion.ledger import IngestionLedger
+from Medical_KG.ingestion.events import BatchProgress, DocumentCompleted, DocumentStarted
+from Medical_KG.ingestion.ledger import IngestionLedger, LedgerState
 from Medical_KG.ingestion.models import Document, IngestionResult
 from Medical_KG.ingestion.pipeline import IngestionPipeline, PipelineResult
 
@@ -52,12 +44,17 @@ class _StubAdapter(BaseAdapter):
             raise RuntimeError("transient failure")
 
     async def write(self, document: Document) -> IngestionResult:
-        entry = self.context.ledger.record(
+        audit = self.context.ledger.update_state(
             doc_id=document.doc_id,
-            state="auto_done",
+            new_state=LedgerState.COMPLETED,
             metadata={"source": document.source},
+            adapter=self.source,
         )
-        return IngestionResult(document=document, state=entry.state, timestamp=entry.timestamp)
+        return IngestionResult(
+            document=document,
+            state=audit.new_state,
+            timestamp=datetime.fromtimestamp(audit.timestamp, tz=timezone.utc),
+        )
 
 
 class _Registry:
@@ -135,9 +132,9 @@ def test_pipeline_resume_skips_completed(tmp_path: Path) -> None:
     assert initial_results[0].doc_ids == ["doc-1"]
     assert initial_results[0].failure_count == 1
     entry = ledger.get("doc-1")
-    assert entry and entry.state == "auto_done"
+    assert entry and entry.state is LedgerState.COMPLETED
     failed_entry = ledger.get("doc-2")
-    assert failed_entry and failed_entry.state == "auto_failed"
+    assert failed_entry and failed_entry.state is LedgerState.FAILED
 
     # Resume should process only the previously failed record.
     results = pipeline.run("stub", resume=True)
@@ -149,13 +146,14 @@ def test_pipeline_resume_skips_completed(tmp_path: Path) -> None:
 def test_pipeline_status_reports_entries(tmp_path: Path) -> None:
     ledger_path = tmp_path / "ledger.jsonl"
     ledger = IngestionLedger(ledger_path)
-    ledger.record("doc-a", "auto_done", {"source": "stub"})
-    ledger.record("doc-b", "auto_failed", {"error": "boom"})
+    ledger.update_state("doc-a", LedgerState.COMPLETED, metadata={"source": "stub"})
+    ledger.update_state("doc-b", LedgerState.FAILED, metadata={"error": "boom"})
 
     pipeline = IngestionPipeline(ledger, client_factory=lambda: _NoopClient())
     summary = pipeline.status()
-    assert "auto_done" in summary and summary["auto_done"][0]["doc_id"] == "doc-a"
-    assert "auto_failed" in summary
+    assert LedgerState.COMPLETED.value in summary
+    assert summary[LedgerState.COMPLETED.value][0]["doc_id"] == "doc-a"
+    assert LedgerState.FAILED.value in summary
 
 
 def test_pipeline_run_async_supports_event_loops(tmp_path: Path) -> None:

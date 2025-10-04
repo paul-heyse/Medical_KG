@@ -26,6 +26,10 @@ please follow the steps below before sending a pull request.
    `IngestionPipeline.stream_events()` (or the eager `run_async()` helper); the deprecated
    `run_async_legacy()` wrapper was removed in October 2025. Historical migration material lives
    under [`docs/archive/cli_unification/`](./docs/archive/cli_unification/).
+6. **Follow current testing guidance** – align with the streaming-first testing
+   expectations described in [`docs/testing_strategy.md`](./docs/testing_strategy.md)
+   and the legacy cleanup summary in [`docs/test_suite_cleanup.md`](./docs/test_suite_cleanup.md)
+   before authoring or updating tests.
 
 ## Coding Standards
 

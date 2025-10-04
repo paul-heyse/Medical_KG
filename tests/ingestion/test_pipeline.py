@@ -596,19 +596,3 @@ def test_pipeline_records_consumption_modes(monkeypatch, tmp_path: Path) -> None
     asyncio.run(pipeline_async.run_async("stub"))
     modes = {record.get("mode") for record in counter.records}
     assert modes == {"stream_events", "run_async"}
-
-
-def test_pipeline_raises_for_removed_legacy_helper(tmp_path: Path) -> None:
-    ledger = IngestionLedger(tmp_path / "ledger.jsonl")
-    pipeline = IngestionPipeline(
-        ledger,
-        registry=_Registry(_StubAdapter(AdapterContext(ledger), records=[])),
-        client_factory=lambda: _NoopClient(),
-    )
-
-    with pytest.raises(AttributeError) as excinfo:
-        getattr(pipeline, "run_async_legacy")
-
-    message = str(excinfo.value)
-    assert "stream_events()" in message
-    assert "run_async()" in message

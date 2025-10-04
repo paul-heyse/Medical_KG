@@ -58,6 +58,43 @@ new secret, document the fake fallback here and update the env templates.
 3. Record notable testing patterns or fixtures in this document to aid future
    contributors.
 
+## Streaming-First Smoke Tests
+
+Core ingestion behaviours are guarded by lightweight smoke tests that exercise
+the streaming pipeline, enum-only ledger transitions, strict jsonschema
+validation, typed IR builder flows, normalized telemetry, and the unified CLI.
+Keep these tests fast and deterministic—they validate wiring rather than edge
+cases.
+
+## Fixture Generation Guide
+
+- Build fixtures under `tests/fixtures/` using modern enum and TypedDict
+  structures. Legacy JSONL and YAML inputs were removed and should not be
+  reintroduced.
+- Prefer factories that synthesise streaming-era payloads (e.g.,
+  `IngestionLedger` audit records) instead of copying historical legacy blobs.
+- Document new fixture families here so contributors avoid reviving deprecated
+  formats.
+
+## Test Suite Architecture Overview
+
+- **Ingestion pipeline** – Validates streaming runs, eager fallbacks, ledger
+  integration, and telemetry counters.
+- **Ledger state machine** – Enforces enum transitions and corruption detection
+  without referencing removed legacy markers.
+- **IR builder** – Exercises typed payload construction and rejects untyped or
+  placeholder inputs.
+- **HTTP client** – Covers telemetry registry integration and metric emission
+  without `_NoopMetric` placeholders.
+- **CLI** – Targets the unified Typer command surface; delegate comparisons to
+  legacy CLIs have been retired.
+
+## CI Integration
+
+GitHub Actions runs `mypy --strict`, configuration validators, and the full
+pytest suite. No legacy-specific jobs or matrices remain—any future additions
+should follow the streaming-first assumptions described above.
+
 ## Extraction & Entity Linking Patterns
 
 - Reuse `tests/extraction/conftest.py` fixtures for canonical clinical snippets,

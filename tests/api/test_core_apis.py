@@ -26,6 +26,17 @@ HTTPX: HttpxModule = get_httpx_module()
 ASGITransport = HTTPX.ASGITransport
 
 
+def _stream_raw_payload(doc_id: str) -> PubMedDocumentPayload:
+    return {
+        "pmid": doc_id,
+        "title": "Untitled",
+        "abstract": "",
+        "authors": [],
+        "mesh_terms": [],
+        "pub_types": [],
+    }
+
+
 @pytest.fixture
 def app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     monkeypatch.setenv("NCBI_API_KEY", "test-key")
@@ -240,17 +251,6 @@ def test_ingestion_stream_endpoint(app: FastAPI) -> None:
                 duration=0.1,
                 adapter_metadata={},
             )
-
-
-def _stream_raw_payload(doc_id: str) -> PubMedDocumentPayload:
-    return {
-        "pmid": doc_id,
-        "title": "Untitled",
-        "abstract": "",
-        "authors": [],
-        "mesh_terms": [],
-        "pub_types": [],
-    }
             yield BatchProgress(
                 timestamp=0.2,
                 pipeline_id="test",

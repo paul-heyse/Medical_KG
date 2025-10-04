@@ -1,6 +1,7 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Medical KG Configuration",
+  "version": "1.0.0",
   "type": "object",
   "required": [
     "config_version",
@@ -19,6 +20,11 @@
     "entity_linking"
   ],
   "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri-reference",
+      "description": "JSON Schema reference with embedded version information"
+    },
     "config_version": {
       "type": "string",
       "description": "Semantic identifier for the configuration payload"
@@ -618,9 +624,35 @@
           },
           "required": ["ledger_path", "artifact_dir", "require_gpu"],
           "additionalProperties": false
+        },
+        "scheduled": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/pipelineSchedule" },
+          "description": "Optional ingestion jobs with adapter and cadence"
         }
       },
       "required": ["pdf"],
+      "additionalProperties": false
+    },
+    "pipelineSchedule": {
+      "type": "object",
+      "properties": {
+        "adapter": {
+          "type": "string",
+          "format": "adapter_name",
+          "description": "Registered ingestion adapter name"
+        },
+        "interval": {
+          "type": "string",
+          "format": "duration",
+          "description": "Execution cadence (e.g., '15m', '1h')"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the scheduled run is active"
+        }
+      },
+      "required": ["adapter", "interval"],
       "additionalProperties": false
     },
     "entityLinkingConfig": {

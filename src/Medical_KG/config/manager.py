@@ -6,15 +6,20 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Iterable, cast
 
 import yaml
+from jsonschema import FormatChecker, ValidationError
+from jsonschema.validators import validator_for
+
 from Medical_KG.compat.prometheus import Gauge, GaugeLike
 from Medical_KG.types import JSONMapping, JSONObject, JSONValue, MutableJSONMapping
 
@@ -30,6 +35,12 @@ ENV_SIMPLE_PATHS: Mapping[str, str] = {
 }
 
 PLACEHOLDER_PATTERN = re.compile(r"\${([A-Z0-9_]+)(?::([^}]+))?}")
+SCHEMA_REF_VERSION_PATTERN = re.compile(r"v(?P<version>\d+\.\d+\.\d+)")
+REQUIRED_MESSAGE_PATTERN = re.compile(r"'(?P<field>[^']+)' is a required property")
+SIMPLE_DURATION_PATTERN = re.compile(r"^(?P<value>\d+)(?P<unit>[smhd])$")
+
+LOGGER = logging.getLogger(__name__)
+CURRENT_SCHEMA_VERSION = "1.0.0"
 
 
 class ConfigError(RuntimeError):
@@ -63,103 +74,181 @@ class SecretResolver:
         raise ConfigError(f"Missing required secret: {key}")
 
 
-class ConfigValidator:
-    """Minimal JSON Schema validator supporting the subset used by config.schema.json."""
+@lru_cache(maxsize=1)
+def _adapter_names() -> frozenset[str]:
+    from Medical_KG.ingestion.registry import available_sources
 
-    def __init__(self, schema_path: Path):
+    return frozenset(available_sources())
+
+
+def _build_format_checker() -> FormatChecker:
+    checker = FormatChecker()
+
+    @checker.checks("duration")
+    def _validate_duration(value: Any) -> bool:  # pragma: no cover - jsonschema handles errors
+        return isinstance(value, str) and bool(SIMPLE_DURATION_PATTERN.fullmatch(value))
+
+    @checker.checks("adapter_name")
+    def _validate_adapter_name(value: Any) -> bool:  # pragma: no cover - jsonschema handles errors
+        return isinstance(value, str) and value in _adapter_names()
+
+    return checker
+
+
+def _pointer_from_path(path: Iterable[Any]) -> str:
+    parts = [str(part) for part in path]
+    if not parts:
+        return "<root>"
+    return "/" + "/".join(parts)
+
+
+def _stringify_instance(value: JSONValue) -> str:
+    try:
+        return json.dumps(value, sort_keys=True)
+    except (TypeError, ValueError):
+        return repr(value)
+
+
+def _expected_description(error: ValidationError) -> str | None:
+    validator = error.validator
+    data = error.validator_value
+    if validator == "type":
+        if isinstance(data, list):
+            return " or ".join(str(item) for item in data)
+        return str(data)
+    if validator == "enum" and isinstance(data, Iterable):
+        return "one of " + ", ".join(str(item) for item in data)
+    if validator in {"minimum", "exclusiveMinimum"}:
+        comparator = ">=" if validator == "minimum" else ">"
+        return f"{comparator} {data}"
+    if validator in {"maximum", "exclusiveMaximum"}:
+        comparator = "<=" if validator == "maximum" else "<"
+        return f"{comparator} {data}"
+    if validator in {"minItems", "maxItems"}:
+        comparator = ">=" if validator == "minItems" else "<="
+        return f"array length {comparator} {data}"
+    if validator == "required":
+        match = REQUIRED_MESSAGE_PATTERN.search(error.message)
+        if match:
+            return f"required property '{match.group('field')}'"
+    if validator == "additionalProperties":
+        return "only declared properties"
+    if validator == "format" and isinstance(error.schema, Mapping):
+        fmt = error.schema.get("format")
+        if isinstance(fmt, str):
+            return f"format '{fmt}'"
+    return None
+
+
+def _remediation_hint(error: ValidationError) -> str | None:
+    validator = error.validator
+    if validator == "enum" and isinstance(error.validator_value, Iterable):
+        options = ", ".join(str(item) for item in error.validator_value)
+        return f"Choose one of: {options}."
+    if validator == "type":
+        expected = error.validator_value
+        if isinstance(expected, list):
+            expected = ", ".join(str(item) for item in expected)
+        return f"Provide a value of type {expected}."
+    if validator in {"minimum", "exclusiveMinimum"}:
+        return f"Increase the value to at least {error.validator_value}."
+    if validator in {"maximum", "exclusiveMaximum"}:
+        return f"Reduce the value to at most {error.validator_value}."
+    if validator == "required":
+        match = REQUIRED_MESSAGE_PATTERN.search(error.message)
+        if match:
+            return f"Add the missing '{match.group('field')}' property."
+    if validator == "additionalProperties":
+        return "Remove unexpected properties or update the schema."
+    if validator == "format" and isinstance(error.schema, Mapping):
+        fmt = error.schema.get("format")
+        if fmt == "duration":
+            return "Use durations like '5m', '15m', or '1h'."
+        if fmt == "adapter_name":
+            known = ", ".join(sorted(_adapter_names()))
+            return f"Select a registered adapter ({known})."
+    return None
+
+
+def _extract_declared_version(payload: Mapping[str, JSONValue]) -> str | None:
+    version_field = payload.get("$schema_version")
+    if isinstance(version_field, str):
+        return version_field
+    schema_ref = payload.get("$schema")
+    if isinstance(schema_ref, str):
+        match = SCHEMA_REF_VERSION_PATTERN.search(schema_ref)
+        if match:
+            return match.group("version")
+    return None
+
+
+class ConfigSchemaValidator:
+    """Wrap jsonschema validation with custom formats and error reporting."""
+
+    def __init__(self, schema_path: Path, *, format_checker: FormatChecker | None = None):
+        self._schema_path = schema_path
         with schema_path.open("r", encoding="utf-8") as handle:
-            self._schema = json.load(handle)
-        self._definitions = self._schema.get("definitions", {})
+            raw_schema = json.load(handle)
+        if not isinstance(raw_schema, MutableMapping):
+            raise ConfigError("config.schema.json must contain an object at the root")
+        schema = cast(JSONMapping, raw_schema)
+        version = schema.get("version")
+        if not isinstance(version, str):
+            raise ConfigError("config.schema.json must declare a string 'version'")
+        self.version = version
+        if self.version != CURRENT_SCHEMA_VERSION:
+            LOGGER.warning(
+                "Schema version %s does not match expected %s",
+                self.version,
+                CURRENT_SCHEMA_VERSION,
+            )
+        self._schema = schema
+        self._format_checker = format_checker or _build_format_checker()
+        validator_cls = validator_for(schema)
+        validator_cls.check_schema(schema)
+        self._validator = validator_cls(schema, format_checker=self._format_checker)
 
-    def validate(self, payload: JSONMapping) -> None:
-        errors: list[str] = []
-        self._validate_schema(dict(payload), self._schema, [], errors)
-        if errors:
-            raise ConfigError("; ".join(errors))
+    def validate(self, payload: JSONMapping, *, source: str = "configuration") -> None:
+        declared_version = _extract_declared_version(payload)
+        if declared_version and declared_version != self.version:
+            raise ConfigError(
+                f"{source} declares schema version {declared_version} but loader supports {self.version}. "
+                "Review docs/configuration.md for migration steps."
+            )
+        if declared_version is None:
+            LOGGER.warning(
+                "%s does not declare a $schema version. Add \"$schema\": \"https://medical-kg.dev/schemas/config/v%s.json\".",
+                source,
+                self.version,
+            )
 
-    def _resolve(self, schema: Mapping[str, Any]) -> Mapping[str, Any]:
-        if "$ref" in schema:
-            ref = schema["$ref"]
-            if not ref.startswith("#/definitions/"):
-                raise ConfigError(f"Unsupported $ref: {ref}")
-            key = ref.split("/")[-1]
-            return cast(Mapping[str, Any], self._definitions[key])
-        return schema
+        errors = sorted(
+            self._validator.iter_errors(payload), key=lambda err: tuple(str(p) for p in err.absolute_path)
+        )
+        if not errors:
+            return
 
-    def _validate_schema(
-        self,
-        value: JSONValue,
-        schema: Mapping[str, Any],
-        path: list[str],
-        errors: list[str],
-    ) -> None:
-        schema = self._resolve(schema)
-        schema_type = schema.get("type")
-        if isinstance(schema_type, list):
-            if value is None and "null" in schema_type:
-                return
-            schema_type = [t for t in schema_type if t != "null"]
-            schema_type = schema_type[0] if schema_type else None
-        if schema_type == "object":
-            if not isinstance(value, MutableMapping):
-                errors.append(self._format_path(path, "expected object"))
-                return
-            properties = schema.get("properties", {})
-            required = schema.get("required", [])
-            for key in required:
-                if key not in value:
-                    errors.append(self._format_path(path + [key], "missing required property"))
-            for key, val in value.items():
-                subschema = properties.get(key)
-                if subschema is not None:
-                    self._validate_schema(val, subschema, path + [key], errors)
-                elif not schema.get("additionalProperties", True):
-                    errors.append(self._format_path(path + [key], "unexpected property"))
-        elif schema_type == "array":
-            if not isinstance(value, list):
-                errors.append(self._format_path(path, "expected array"))
-                return
-            item_schema = schema.get("items")
-            for index, item in enumerate(value):
-                if item_schema is not None:
-                    self._validate_schema(item, item_schema, path + [str(index)], errors)
-        elif schema_type == "string":
-            if not isinstance(value, str):
-                errors.append(self._format_path(path, "expected string"))
-                return
-            enum = schema.get("enum")
-            if enum and value not in enum:
-                errors.append(self._format_path(path, f"must be one of {enum}"))
-        elif schema_type == "integer":
-            if not isinstance(value, int):
-                errors.append(self._format_path(path, "expected integer"))
-                return
-            self._validate_numeric_bounds(value, schema, path, errors)
-        elif schema_type == "number":
-            if not isinstance(value, (int, float)):
-                errors.append(self._format_path(path, "expected number"))
-                return
-            self._validate_numeric_bounds(float(value), schema, path, errors)
-        elif schema_type == "boolean":
-            if not isinstance(value, bool):
-                errors.append(self._format_path(path, "expected boolean"))
-        else:
-            if isinstance(value, MutableMapping) and "properties" in schema:
-                self._validate_schema(value, {"type": "object", **schema}, path, errors)
+        messages = [
+            self._format_error(error, source)
+            for error in errors
+        ]
+        raise ConfigError("Configuration validation failed:\n" + "\n\n".join(messages))
 
-    def _validate_numeric_bounds(
-        self, value: float, schema: Mapping[str, Any], path: list[str], errors: list[str]
-    ) -> None:
-        minimum = schema.get("minimum")
-        if minimum is not None and value < minimum:
-            errors.append(self._format_path(path, f"must be >= {minimum}"))
-        maximum = schema.get("maximum")
-        if maximum is not None and value > maximum:
-            errors.append(self._format_path(path, f"must be <= {maximum}"))
-
-    def _format_path(self, path: list[str], message: str) -> str:
-        location = "/".join(path) if path else "<root>"
-        return f"{location}: {message}"
+    def _format_error(self, error: ValidationError, source: str) -> str:
+        pointer = _pointer_from_path(error.absolute_path)
+        value_repr = _stringify_instance(cast(JSONValue, error.instance))
+        expected = _expected_description(error)
+        hint = _remediation_hint(error)
+        lines = [
+            f"{source} -> {pointer}",
+            f"  Problem: {error.message}",
+            f"  Value: {value_repr}",
+        ]
+        if expected:
+            lines.append(f"  Expected: {expected}")
+        if hint:
+            lines.append(f"  Hint: {hint}")
+        return "\n".join(lines)
 
 
 class ConfigManager:
@@ -175,7 +264,7 @@ class ConfigManager:
         env_value = env if env is not None else os.getenv("CONFIG_ENV", "dev")
         self.env = env_value.lower()
         self.secret_resolver = secret_resolver or SecretResolver()
-        self.validator = ConfigValidator(self.base_path / "config.schema.json")
+        self.validator = ConfigSchemaValidator(self.base_path / "config.schema.json")
         self.policy = self._load_policy()
         self._config: Config
         self._version: ConfigVersion
@@ -204,7 +293,7 @@ class ConfigManager:
     def reload(self) -> None:
         payload = self._load_configuration_payload()
         resolved = self._resolve_placeholders(payload)
-        self.validator.validate(resolved)
+        self.validator.validate(resolved, source="configuration")
         try:
             validate_constraints(resolved)
         except ValueError as exc:
@@ -405,7 +494,13 @@ def mask_secrets(data: JSONMapping) -> JSONObject:
     return {key: _mask(val, key) for key, val in data.items()}
 
 
-__all__ = ["ConfigManager", "ConfigError", "mask_secrets", "ConfigValidator", "SecretResolver"]
+__all__ = [
+    "ConfigManager",
+    "ConfigError",
+    "ConfigSchemaValidator",
+    "mask_secrets",
+    "SecretResolver",
+]
 
 
 def _b64url_decode(data: str) -> bytes:

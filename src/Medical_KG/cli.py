@@ -10,7 +10,12 @@ from pathlib import Path
 from types import TracebackType
 from typing import Protocol, cast
 
-from Medical_KG.config.manager import ConfigError, ConfigManager, ConfigValidator, mask_secrets
+from Medical_KG.config.manager import (
+    ConfigError,
+    ConfigManager,
+    ConfigSchemaValidator,
+    mask_secrets,
+)
 from Medical_KG.config.models import PdfPipelineSettings
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.pdf import (
@@ -79,7 +84,9 @@ def _command_validate(args: argparse.Namespace) -> int:
     try:
         manager = _load_manager(args.config_dir)
         payload = manager.raw_payload()
-        ConfigValidator(manager.base_path / "config.schema.json").validate(payload)
+        ConfigSchemaValidator(manager.base_path / "config.schema.json").validate(
+            payload, source="CLI payload"
+        )
         _ = manager.config
     except ConfigError as exc:
         print(f"Configuration invalid: {exc}")

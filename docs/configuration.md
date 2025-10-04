@@ -15,6 +15,21 @@ This document describes the structure of `config.yaml` and the companion files t
 
 At runtime the loader merges the files in the order above and applies environment variables (highest precedence).
 
+## Schema Validation
+
+All configuration files declare a `$schema` pointer (for example `./config.schema.json#v1.0.0`). The loader resolves `config.schema.json`, verifies it targets JSON Schema Draft 7, and enforces the declared schema version. If a configuration references a different schema version the reload fails with guidance to migrate to the supported release. Update the `$schema` pointer and adjust any renamed fields when the schema version advances.
+
+### Custom Formats
+
+`config.schema.json` registers project-specific formats in addition to the JSON Schema defaults:
+
+| Format | Purpose | Examples |
+| --- | --- | --- |
+| `duration` | Human-friendly durations used by schedulers. | `"5m"`, `"15m"`, `"1h"` |
+| `adapter_name` | Validates ingestion adapters against the registry. | `"pubmed"`, `"pmc"`, `"loinc"` |
+
+Invalid values surface in validation errors with JSON Pointer locations and remediation hints, making it easier to spot typos or unsupported adapters.
+
 ## Section Reference
 
 ### `feature_flags`
@@ -33,6 +48,10 @@ Defines upstream connectors. Every source entry contains:
 ### `chunking`
 
 Profiles with token and coherence controls for document segmentation. `target_tokens` must be greater than 0 and `overlap` must be less than `target_tokens`.
+
+### `pipelines`
+
+Defines runtime orchestration for ingestion and document processing. The `pdf` block configures artifact paths and GPU requirements for the PDF pipeline. The optional `pipelines.scheduled` array registers recurring ingestion jobs; each entry declares an `adapter` (validated against the adapter registry), an execution `interval` using the `duration` format, and an optional `enabled` flag to stage schedules without activating them.
 
 ### `embeddings`
 

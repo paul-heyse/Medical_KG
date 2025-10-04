@@ -10,7 +10,7 @@ import os
 import sys
 from pathlib import Path
 from types import TracebackType
-from typing import Protocol, cast
+from typing import Any, Iterable, Protocol, cast
 
 from Medical_KG.config.manager import ConfigError, ConfigManager, ConfigValidator, mask_secrets
 from Medical_KG.config.models import PdfPipelineSettings

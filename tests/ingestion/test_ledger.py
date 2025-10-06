@@ -21,6 +21,13 @@ def test_ledger_persists_entries(tmp_path: Path) -> None:
 def test_ledger_entries_returns_latest(tmp_path: Path) -> None:
     ledger = IngestionLedger(tmp_path / "ledger.jsonl")
     ledger.update_state("doc1", LedgerState.FETCHING)
+    ledger.update_state("doc1", LedgerState.FETCHED)
+    ledger.update_state("doc1", LedgerState.PARSING)
+    ledger.update_state("doc1", LedgerState.PARSED)
+    ledger.update_state("doc1", LedgerState.VALIDATING)
+    ledger.update_state("doc1", LedgerState.VALIDATED)
+    ledger.update_state("doc1", LedgerState.IR_BUILDING)
+    ledger.update_state("doc1", LedgerState.IR_READY)
     ledger.update_state("doc1", LedgerState.COMPLETED)
     entries = {entry.doc_id: entry.state for entry in ledger.entries()}
     assert entries == {"doc1": LedgerState.COMPLETED}

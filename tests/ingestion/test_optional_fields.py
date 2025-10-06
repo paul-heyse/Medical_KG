@@ -114,6 +114,9 @@ class _StubHttpClient:
     def set_rate_limit(self, *_args: object, **_kwargs: object) -> None:
         return None
 
+    def bind_retry_callback(self, callback: object) -> None:
+        return None
+
 
 def _parse_documents(
     adapter: BaseAdapter[Any],

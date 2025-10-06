@@ -64,6 +64,7 @@ PIPELINE_DURATION_SECONDS: HistogramProtocol = build_histogram(
     "ingest_pipeline_duration_seconds",
     "Duration of ingestion pipeline executions",
     (0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0),
+    labelnames=None,
 )
 PIPELINE_QUEUE_DEPTH: GaugeProtocol = build_gauge(
     "ingest_pipeline_queue_depth",
@@ -74,6 +75,7 @@ PIPELINE_CHECKPOINT_LATENCY: HistogramProtocol = build_histogram(
     "ingest_pipeline_checkpoint_latency_seconds",
     "Latency between checkpoint progress events",
     (0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0),
+    labelnames=None,
 )
 
 PIPELINE_CONSUMPTION_COUNTER: CounterProtocol = build_counter(
@@ -294,6 +296,8 @@ class IngestionPipeline:
         """
 
         mode = _consumption_mode or "stream_events"
+        if _consumption_mode:
+            self._record_consumption("stream_events", source)
         self._record_consumption(mode, source)
         pipeline_id = build_pipeline_id(source)
         queue: asyncio.Queue[PipelineEvent | object] = asyncio.Queue(maxsize=max(buffer_size, 1))
@@ -419,6 +423,8 @@ class IngestionPipeline:
                             keyword_args = dict(invocation_params)
                             if resume:
                                 keyword_args.setdefault("resume", resume)
+                            if completed_ids:
+                                keyword_args["completed_ids"] = completed_ids
                             try:
                                 async for result in adapter.iter_results(**keyword_args):
                                     document = result.document

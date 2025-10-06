@@ -342,7 +342,7 @@ class AsyncHttpClient:
             for handler in telemetry:
                 self._register_telemetry_for_host(handler)
             return
-        self._register_telemetry_for_host(cast(HttpTelemetry, telemetry))
+        self._register_telemetry_for_host(telemetry)
 
     def _register_telemetry_for_host(
         self,
@@ -356,7 +356,7 @@ class AsyncHttpClient:
             for handler in telemetry:
                 self._register_telemetry_for_host(handler, host=host)
             return
-        handler = cast(HttpTelemetry, telemetry)
+        handler = telemetry
         self._register_callback("request", getattr(handler, "on_request", None), host=host)
         self._register_callback("response", getattr(handler, "on_response", None), host=host)
         self._register_callback("retry", getattr(handler, "on_retry", None), host=host)
@@ -500,7 +500,7 @@ class AsyncHttpClient:
         self._emit("error", event)
 
     def bind_retry_callback(
-        self, callback: Callable[[str, str, int, HTTPError], None] | None
+        self, callback: Callable[[str, str, int, Exception], None] | None
     ) -> None:
         """Register a callback invoked prior to retrying a request."""
 
@@ -565,6 +565,16 @@ class AsyncHttpClient:
                         break
                     await asyncio.sleep(delay)
                     backoff = min(backoff * 2, 5.0)
+                except Exception as exc:  # pragma: no cover - exercised via tests
+                    self._emit_error_event(
+                        request_id=request_id,
+                        method=method,
+                        url=url,
+                        host=host,
+                        exc=exc,
+                        retryable=False,
+                    )
+                    raise
             if last_error:
                 raise last_error
             raise RuntimeError("Retry loop exhausted")

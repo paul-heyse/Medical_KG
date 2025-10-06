@@ -10,7 +10,7 @@ from enum import Enum
 from pathlib import Path
 from threading import Lock
 from time import perf_counter
-from typing import Iterable, Mapping, MutableMapping, Protocol, Sequence, cast
+from typing import Iterable, Mapping, MutableMapping, Protocol, Sequence, TextIO, cast
 
 import jsonlines
 from Medical_KG.compat.prometheus import Counter, Gauge, Histogram
@@ -429,6 +429,9 @@ class IngestionLedger:
         self._documents: dict[str, LedgerDocumentState] = {}
         self._history: dict[str, list[LedgerAuditRecord]] = {}
         self._last_snapshot_at: datetime | None = None
+        self._log_handle: TextIO | None = None
+        self._pending_writes: list[str] = []
+        self._state_counts: dict[LedgerState, int] = {state: 0 for state in LedgerState}
         self._load()
 
     # ------------------------------------------------------------------ loading
@@ -474,8 +477,9 @@ class IngestionLedger:
             raise LedgerCorruption("Ledger JSONL file is malformed") from exc
         self._documents = records
         self._history = history
+        self._rebuild_state_counts()
         INITIALIZATION_DURATION.observe(perf_counter() - start)
-        self._refresh_state_metrics()
+        self._update_state_metrics()
 
     def load_snapshot(
         self, snapshot_path: Path
@@ -633,6 +637,7 @@ class IngestionLedger:
                 from_state=audit.old_state.value, to_state=audit.new_state.value
             ).inc()
             try:
+                previous_state: LedgerState | None = None
                 if document is None:
                     document = LedgerDocumentState(
                         doc_id=doc_id,
@@ -645,6 +650,7 @@ class IngestionLedger:
                     )
                     self._documents[doc_id] = document
                 else:
+                    previous_state = document.state
                     if duration_seconds is None:
                         duration_seconds = document.duration(as_of=now)
                     document.state = new_state
@@ -659,6 +665,10 @@ class IngestionLedger:
                 if duration_seconds is not None:
                     STATE_DURATION.observe(duration_seconds)
                 self._write_audit(audit)
+                if previous_state is None:
+                    self._increment_state_count(new_state)
+                else:
+                    self._transition_state_count(previous_state, new_state)
             except Exception:
                 ERROR_COUNTER.labels(type="update_state").inc()
                 LOGGER.exception(
@@ -680,7 +690,7 @@ class IngestionLedger:
                     "adapter": adapter,
                 },
             )
-            self._refresh_state_metrics()
+            self._update_state_metrics()
             self._maybe_snapshot(now)
             return audit
 
@@ -796,7 +806,7 @@ class IngestionLedger:
         self._documents = states
         self._history = history
         self._last_snapshot_at = created_at
-        self._refresh_state_metrics()
+        self._update_state_metrics()
 
     def load_with_snapshot(self, snapshot_path: Path, delta_path: Path) -> None:
         states = self.load_with_compaction(snapshot_path, delta_path)
@@ -804,14 +814,26 @@ class IngestionLedger:
         self._history.clear()
         for document in states.values():
             self._history[document.doc_id] = list(document.history)
-        self._refresh_state_metrics()
+        self._update_state_metrics()
 
     def load_snapshot_if_present(self) -> None:
         snapshot = self._latest_snapshot()
         if snapshot:
             self.load_snapshot_file(snapshot)
 
+    def close(self) -> None:
+        """Release any open resources."""
+
+        self._close_log_handle()
+
+    def __del__(self) -> None:  # pragma: no cover - best-effort cleanup
+        try:
+            self.close()
+        except Exception:
+            LOGGER.debug("Failed to close ledger log handle during GC", exc_info=True)
+
     def _truncate_ledger(self) -> None:
+        self._close_log_handle()
         if not self._path.exists():
             return
         self._path.write_text("", encoding="utf-8")
@@ -844,14 +866,52 @@ class IngestionLedger:
         document.history.append(audit)
 
     def _write_audit(self, audit: LedgerAuditRecord) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        with jsonlines.open(self._path, mode="a") as fp:
-            cast(_JsonLinesWriter, fp).write(audit.to_dict())
+        line = json.dumps(audit.to_dict()) + "\n"
+        self._pending_writes.append(line)
+        self._flush_pending_writes(force=True)
 
-    def _refresh_state_metrics(self) -> None:
+    def _ensure_log_handle(self) -> TextIO:
+        if self._log_handle is None or self._log_handle.closed:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            self._log_handle = self._path.open("a", encoding="utf-8")
+        return self._log_handle
+
+    def _close_log_handle(self) -> None:
+        self._flush_pending_writes(force=True)
+        if self._log_handle is not None and not self._log_handle.closed:
+            try:
+                self._log_handle.close()
+            finally:
+                self._log_handle = None
+
+    def _flush_pending_writes(self, *, force: bool) -> None:
+        if not self._pending_writes and not force:
+            return
+        handle = self._ensure_log_handle()
+        if self._pending_writes:
+            handle.writelines(self._pending_writes)
+            self._pending_writes.clear()
+        if force:
+            handle.flush()
+
+    def _rebuild_state_counts(self) -> None:
+        self._state_counts = {state: 0 for state in LedgerState}
+        for document in self._documents.values():
+            self._state_counts[document.state] = self._state_counts.get(document.state, 0) + 1
+
+    def _increment_state_count(self, state: LedgerState) -> None:
+        self._state_counts[state] = self._state_counts.get(state, 0) + 1
+
+    def _transition_state_count(self, old: LedgerState, new: LedgerState) -> None:
+        if old is new:
+            return
+        if old in self._state_counts:
+            self._state_counts[old] = max(self._state_counts[old] - 1, 0)
+        self._state_counts[new] = self._state_counts.get(new, 0) + 1
+
+    def _update_state_metrics(self) -> None:
         for state in LedgerState:
-            count = sum(1 for document in self._documents.values() if document.state is state)
-            STATE_DISTRIBUTION.labels(state=state.value).set(count)
+            STATE_DISTRIBUTION.labels(state=state.value).set(self._state_counts.get(state, 0))
 
 
 # --------------------------------------------------------------------------- API

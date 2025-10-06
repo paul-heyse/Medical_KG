@@ -402,20 +402,25 @@ class FakeLedger:
     def update_state(
         self,
         doc_id: str,
-        state: LedgerState,
+        new_state: LedgerState,
         *,
+        adapter: str | None = None,
         metadata: Mapping[str, Any] | None = None,
+        error: BaseException | None = None,
+        error_type: str | None = None,
+        error_message: str | None = None,
+        traceback: str | None = None,
     ) -> LedgerAuditRecord:
-        if not isinstance(state, LedgerState):
-            raise TypeError("state must be a LedgerState instance")
+        if not isinstance(new_state, LedgerState):
+            raise TypeError("new_state must be a LedgerState instance")
         existing = self.records.get(doc_id)
         if existing is not None:
-            validate_transition(existing.state, state)
+            validate_transition(existing.state, new_state)
         now = datetime.now(timezone.utc)
         audit = LedgerAuditRecord(
             doc_id=doc_id,
-            old_state=existing.state if existing else state,
-            new_state=state,
+            old_state=existing.state if existing else new_state,
+            new_state=new_state,
             timestamp=now.timestamp(),
             adapter=None,
             metadata=dict(metadata or {}),
@@ -423,14 +428,14 @@ class FakeLedger:
         if existing is None:
             document = LedgerDocumentState(
                 doc_id=doc_id,
-                state=state,
+                state=new_state,
                 updated_at=now,
                 metadata=dict(metadata or {}),
                 history=[audit],
             )
             self.records[doc_id] = document
         else:
-            existing.state = state
+            existing.state = new_state
             existing.updated_at = now
             existing.metadata = dict(metadata or {})
             existing.history.append(audit)

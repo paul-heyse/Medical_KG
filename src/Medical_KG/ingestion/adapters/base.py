@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Generic, TypeVar
+from typing import Any, Callable, Generic, Iterable, TypeVar, cast
 
 from Medical_KG.ingestion.events import PipelineEvent
 from Medical_KG.ingestion.ledger import IngestionLedger, LedgerState
@@ -31,7 +31,16 @@ class BaseAdapter(Generic[RawPayloadT], ABC):
         """Yield ingestion results as they are produced."""
 
         keyword_args: dict[str, object] = dict(kwargs)
-        resume = bool(keyword_args.pop("resume", False))
+        raw_completed_ids = keyword_args.pop("completed_ids", None)
+        completed_ids_iter: Iterable[str] | None
+        if raw_completed_ids is None:
+            completed_ids_iter = None
+        elif isinstance(raw_completed_ids, Iterable):
+            completed_ids_iter = cast(Iterable[str], raw_completed_ids)
+        else:
+            raise TypeError("completed_ids must be an iterable of document IDs")
+        completed_lookup = set(completed_ids_iter or [])
+        keyword_args.pop("resume", None)
         fetcher = self.fetch(*args, **keyword_args)
         if not hasattr(fetcher, "__aiter__"):
             raise TypeError("fetch() must return an AsyncIterator")
@@ -39,16 +48,53 @@ class BaseAdapter(Generic[RawPayloadT], ABC):
             document: Document | None = None
             try:
                 document = self.parse(raw_record)
-                if resume:
-                    existing = self.context.ledger.get(document.doc_id)
-                    if existing is not None and existing.state is LedgerState.COMPLETED:
+                existing = self.context.ledger.get(document.doc_id)
+                if existing is not None:
+                    # Skip documents that are explicitly marked as completed
+                    if completed_lookup and document.doc_id in completed_lookup:
                         continue
-                self.context.ledger.update_state(
-                    doc_id=document.doc_id,
-                    new_state=LedgerState.FETCHING,
-                    metadata={"source": document.source},
-                    adapter=self.source,
-                )
+                    # Skip documents that are already completed (COMPLETED has no valid transitions)
+                    if existing.state is LedgerState.COMPLETED:
+                        continue
+                    # Handle failed documents by transitioning through RETRYING
+                    if existing.state is LedgerState.FAILED:
+                        self.context.ledger.update_state(
+                            doc_id=document.doc_id,
+                            new_state=LedgerState.RETRYING,
+                            metadata={"source": document.source},
+                            adapter=self.source,
+                        )
+                        self.context.ledger.update_state(
+                            doc_id=document.doc_id,
+                            new_state=LedgerState.FETCHING,
+                            metadata={"source": document.source},
+                            adapter=self.source,
+                        )
+                    # Only transition to FETCHING if not already in a processing state
+                    elif existing.state not in (
+                        LedgerState.FETCHING,
+                        LedgerState.FETCHED,
+                        LedgerState.PARSING,
+                        LedgerState.PARSED,
+                        LedgerState.VALIDATING,
+                        LedgerState.VALIDATED,
+                        LedgerState.IR_BUILDING,
+                        LedgerState.IR_READY,
+                    ):
+                        self.context.ledger.update_state(
+                            doc_id=document.doc_id,
+                            new_state=LedgerState.FETCHING,
+                            metadata={"source": document.source},
+                            adapter=self.source,
+                        )
+                else:
+                    # New document, start with FETCHING
+                    self.context.ledger.update_state(
+                        doc_id=document.doc_id,
+                        new_state=LedgerState.FETCHING,
+                        metadata={"source": document.source},
+                        adapter=self.source,
+                    )
                 self.validate(document)
                 result = await self.write(document)
             except Exception as exc:  # pragma: no cover - surfaced to caller
@@ -81,6 +127,49 @@ class BaseAdapter(Generic[RawPayloadT], ABC):
         """Perform source-specific validations (override as needed)."""
 
     async def write(self, document: Document) -> IngestionResult:
+        # Transition through proper states: FETCHING -> FETCHED -> PARSING -> PARSED -> VALIDATING -> VALIDATED -> IR_BUILDING -> IR_READY -> COMPLETED
+        self.context.ledger.update_state(
+            doc_id=document.doc_id,
+            new_state=LedgerState.FETCHED,
+            metadata={"source": document.source},
+            adapter=self.source,
+        )
+        self.context.ledger.update_state(
+            doc_id=document.doc_id,
+            new_state=LedgerState.PARSING,
+            metadata={"source": document.source},
+            adapter=self.source,
+        )
+        self.context.ledger.update_state(
+            doc_id=document.doc_id,
+            new_state=LedgerState.PARSED,
+            metadata={"source": document.source},
+            adapter=self.source,
+        )
+        self.context.ledger.update_state(
+            doc_id=document.doc_id,
+            new_state=LedgerState.VALIDATING,
+            metadata={"source": document.source},
+            adapter=self.source,
+        )
+        self.context.ledger.update_state(
+            doc_id=document.doc_id,
+            new_state=LedgerState.VALIDATED,
+            metadata={"source": document.source},
+            adapter=self.source,
+        )
+        self.context.ledger.update_state(
+            doc_id=document.doc_id,
+            new_state=LedgerState.IR_BUILDING,
+            metadata={"source": document.source},
+            adapter=self.source,
+        )
+        self.context.ledger.update_state(
+            doc_id=document.doc_id,
+            new_state=LedgerState.IR_READY,
+            metadata={"source": document.source},
+            adapter=self.source,
+        )
         audit = self.context.ledger.update_state(
             doc_id=document.doc_id,
             new_state=LedgerState.COMPLETED,

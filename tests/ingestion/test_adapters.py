@@ -42,6 +42,7 @@ from Medical_KG.ingestion.adapters.terminology import (
 from Medical_KG.ingestion.http_client import AsyncHttpClient
 from Medical_KG.ingestion.ledger import LedgerState
 from Medical_KG.ingestion.models import Document
+from Medical_KG.ingestion.types import PubMedDocumentPayload
 from Medical_KG.utils.optional_dependencies import get_httpx_module
 from tests.ingestion.fixtures.clinical import (
     accessgudid_record,
@@ -86,7 +87,6 @@ from tests.ingestion.fixtures.terminology import (
     snomed_record,
     umls_record,
 )
-from Medical_KG.ingestion.types import PubMedDocumentPayload
 
 
 def _run(coro: Any) -> Any:
@@ -105,6 +105,9 @@ def _stub_http_client() -> AsyncHttpClient:
         def add_telemetry(self, *_: object, **__: object) -> None:
             return None
 
+        def bind_retry_callback(self, callback: object) -> None:
+            return None
+
     return cast(AsyncHttpClient, _Stub())
 
 
@@ -118,6 +121,9 @@ def test_http_adapter_registers_telemetry(fake_ledger: Any) -> None:
 
         def add_telemetry(self, telemetry: object, **_: object) -> None:
             self.telemetry = telemetry
+
+        def bind_retry_callback(self, callback: object) -> None:
+            return None
 
     client = cast(AsyncHttpClient, _Client())
     telemetry = object()
@@ -545,8 +551,15 @@ def test_medrxiv_paginates(fake_ledger: Any, monkeypatch: pytest.MonkeyPatch) ->
             async def fake_fetch_json(*_: Any, **__: Any) -> dict[str, Any]:
                 if not getattr(fake_fetch_json, "called", False):
                     fake_fetch_json.called = True  # type: ignore[attr-defined]
-                    return {"results": [medrxiv_record()], "next_cursor": "next"}
-                return {"results": [medrxiv_record()], "next_cursor": None}
+                    # First page - return record with DOI 1
+                    record1 = medrxiv_record()
+                    record1["doi"] = "10.1101/2024.01.01.123456"
+                    return {"results": [record1], "next_cursor": "next"}
+                else:
+                    # Second page - return record with DOI 2
+                    record2 = medrxiv_record()
+                    record2["doi"] = "10.1101/2024.01.01.123457"
+                    return {"results": [record2], "next_cursor": None}
 
             fake_fetch_json.called = False  # type: ignore[attr-defined]
             monkeypatch.setattr(adapter, "fetch_json", fake_fetch_json)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -9,8 +10,8 @@ from Medical_KG.ingestion.ledger import (
     IngestionLedger,
     InvalidStateTransition,
     LedgerAuditRecord,
-    LedgerState,
     LedgerCorruption,
+    LedgerState,
     get_valid_next_states,
     is_retryable_state,
     is_terminal_state,
@@ -142,15 +143,15 @@ def test_alias_entries_still_parse(tmp_path: Path) -> None:
     assert state.state is LedgerState.COMPLETED
 
 
-def test_removed_legacy_state_raises(tmp_path: Path) -> None:
-    ledger_path = tmp_path / "legacy.jsonl"
+def test_unknown_state_marker_raises(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "invalid-state.jsonl"
     timestamp = datetime.now(timezone.utc).timestamp()
     ledger_path.write_text(
         json.dumps(
             {
                 "doc_id": "doc-1",
-                "old_state": "legacy",
-                "new_state": "COMPLETED",
+                "old_state": "FETCHING",
+                "new_state": "deprecated_state",
                 "timestamp": timestamp,
                 "adapter": "stub",
                 "metadata": {},
@@ -161,7 +162,7 @@ def test_removed_legacy_state_raises(tmp_path: Path) -> None:
     )
     with pytest.raises(LedgerCorruption) as excinfo:
         IngestionLedger(ledger_path)
-    assert "removed legacy state" in str(excinfo.value)
+    assert "unknown ledger state" in str(excinfo.value)
 
 
 def test_delta_application(tmp_path: Path) -> None:

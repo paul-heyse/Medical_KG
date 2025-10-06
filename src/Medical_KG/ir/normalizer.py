@@ -71,7 +71,7 @@ class TextNormalizer:
             code = detect(text)
         except Exception:  # pragma: no cover - third-party failures
             return "unknown"
-        return code[:2]
+        return code[:2].lower()
 
 
 def section_from_heading(heading: str, *, default: str = "other") -> str:

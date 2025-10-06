@@ -12,7 +12,7 @@ from typing import Any, Dict, Mapping, Sequence
 
 from bs4 import BeautifulSoup
 
-import yaml
+from Medical_KG.utils.yaml_loader import YamlLoaderError, load_yaml_mapping
 
 # NOTE: These dataclasses are also imported by pytest test modules. When tests load this
 # module via importlib, dataclasses complains if __module__ is None (Python 3.12+). To
@@ -24,6 +24,10 @@ else:
     MODULE_NAME = __name__ or "ops.load_test.check_thresholds"
 
 sys.modules.setdefault(MODULE_NAME, sys.modules.get(__name__))
+
+
+class BudgetError(RuntimeError):
+    """Raised when the load-test budget payload is invalid."""
 
 
 @dataclass(frozen=True)
@@ -80,7 +84,10 @@ def parse_args() -> argparse.Namespace:
 def load_budget(path: Path) -> Mapping[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Budget file not found: {path}")
-    return yaml.safe_load(path.read_text())
+    try:
+        return load_yaml_mapping(path, description=path.name)
+    except YamlLoaderError as exc:
+        raise BudgetError(str(exc)) from exc
 
 
 def load_metrics(path: Path) -> Dict[str, MetricSnapshot]:
@@ -328,7 +335,7 @@ def main() -> int:
     try:
         metrics = load_metrics(args.report)
         budget = load_budget(args.budget)
-    except (FileNotFoundError, ValueError) as exc:
+    except (FileNotFoundError, ValueError, BudgetError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

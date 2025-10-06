@@ -14,6 +14,7 @@ Medical KG emits structured JSON logs and OpenTelemetry traces to simplify opera
 - **Sampling** – Controlled via `MEDKG_LOG_SAMPLE_RATE` (default `1.0`). Values `<1` probabilistically drop lower-value logs while keeping errors.
 - **Enrichment** – Additional context (service version, deployment region) may be attached via `configure_logging(extra_fields=...)` before app start.
 - **Destination** – Logs flow to stdout. Forwarders (Fluent Bit, CloudWatch) should treat the payload as JSON and index `trace_id` for search.
+- **Dependency** – The JSON formatter is provided by `python-json-logger`. When the package is absent the runtime logs a warning with the exact `pip install medical-kg[observability]` command and falls back to the standard library formatter until the dependency is installed.
 
 ## Tracing
 

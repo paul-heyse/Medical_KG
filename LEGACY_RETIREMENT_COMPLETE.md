@@ -6,6 +6,8 @@
 
 Total scope: **581 detailed tasks** removing ~1,290 lines of legacy code and obsolete tests.
 
+**Implementation update:** The follow-on change `implement-optimization-legacy-retirement` is now in production, enforcing typed IR metadata, schema-aligned configuration tooling, and hardened license loaders to fully realize the retirement roadmap.
+
 ## ✅ Proposal Status: ALL COMPLETE & VALIDATED
 
 ### Proposal 1: remove-run-async-legacy ✅

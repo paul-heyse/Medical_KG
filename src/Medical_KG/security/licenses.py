@@ -7,7 +7,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Mapping, MutableMapping
 
-import yaml
+from Medical_KG.utils.yaml_loader import YamlLoaderError, load_yaml_mapping
+
+
+class LicenseRegistryError(RuntimeError):
+    """Raised when the license registry payload is invalid."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,17 +120,27 @@ class LicenseRegistry:
 
     @classmethod
     def from_yaml(cls, path: Path) -> "LicenseRegistry":
-        with path.open("r", encoding="utf-8") as handle:
-            data = yaml.safe_load(handle) or {}
-        vocabs = data.get("vocabs", {})
+        try:
+            data = load_yaml_mapping(path, description=path.name)
+        except YamlLoaderError as exc:
+            raise LicenseRegistryError(str(exc)) from exc
+        vocabs_raw = data.get("vocabs", {})
         tier_defs = data.get("tiers", {})
+        if not isinstance(vocabs_raw, Mapping):
+            raise LicenseRegistryError(
+                f"{path.name} field 'vocabs' must be a mapping"
+            )
+        if not isinstance(tier_defs, Mapping):
+            raise LicenseRegistryError(
+                f"{path.name} field 'tiers' must be a mapping"
+            )
         entries = {
             vocab.upper(): LicenseEntry(
                 vocab=vocab.upper(),
                 licensed=bool(info.get("licensed")),
                 territory=info.get("territory"),
             )
-            for vocab, info in vocabs.items()
+            for vocab, info in vocabs_raw.items()
         }
 
         def _mapping(section: Mapping[str, object] | None) -> Mapping[str, object]:
@@ -136,6 +150,10 @@ class LicenseRegistry:
 
         tiers: dict[str, LicenseTier] = {}
         for name, config in tier_defs.items():
+            if not isinstance(config, Mapping):
+                raise LicenseRegistryError(
+                    f"{path.name} tier '{name}' must be a mapping"
+                )
             can_access = {k.upper(): bool(v) for k, v in _mapping(config.get("vocabs")).items()}
             features = {k: bool(v) for k, v in _mapping(config.get("features")).items()}
             limits = {k: int(v) for k, v in _mapping(config.get("usage_limits")).items()}
@@ -188,4 +206,9 @@ class LicenseRegistry:
         return label
 
 
-__all__ = ["LicenseRegistry", "LicenseTier", "LicenseSession"]
+__all__ = [
+    "LicenseRegistry",
+    "LicenseRegistryError",
+    "LicenseTier",
+    "LicenseSession",
+]

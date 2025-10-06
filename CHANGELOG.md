@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Hardened YAML handling across configuration, licensing, and ops budgets via a shared loader, restored schema-driven CLI validation, and refreshed IR validators to enforce normalized language codes and metadata parity.
+
 ### Removed
 
 - Removed the deprecated `IngestionPipeline.run_async_legacy()` wrapper, related environment toggles, and legacy telemetry labels.
@@ -16,6 +20,7 @@
 
 ### Documentation
 
+- Documented optional logging dependency guidance and fallback behaviour in `docs/logging.md`.
 - Documented the legacy wrapper removal across runbooks, contributor guidance, and operations checklists.
 - Archived CLI migration roadmaps and linked the documentation archive from active guides.
 - Added typed IR construction examples and clarified metadata validation requirements in the IR guide.

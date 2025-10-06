@@ -102,3 +102,10 @@ def test_evaluate_flags_budget_failure(csv_report: Path, budget_file: Path) -> N
     budget = _module.load_budget(budget_file)
     checks = evaluate(metrics, budget, profile="burst")
     assert any(check.metric == "throughput_rps" and not check.passed for check in checks)
+
+
+def test_load_budget_rejects_invalid_payload(tmp_path: Path) -> None:
+    path = tmp_path / "invalid-budget.yaml"
+    path.write_text("scalar", encoding="utf-8")
+    with pytest.raises(_module.BudgetError):
+        _module.load_budget(path)

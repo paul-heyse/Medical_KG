@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import yaml
 from Medical_KG.config.manager import ConfigError, ConfigManager, mask_secrets
 
 
@@ -43,17 +44,26 @@ def base_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NEO4J_PROD_PASSWORD", "prod-password")
 
 
+def write_yaml(path: Path, payload: dict[str, object]) -> None:
+    path.write_text("---\n" + yaml.safe_dump(payload, sort_keys=True), encoding="utf-8")
+
+
+def test_config_loader_rejects_non_mapping(config_dir: Path, base_env: None) -> None:
+    config_path = config_dir / "config.yaml"
+    config_path.write_text("[]\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="config.yaml"):
+        ConfigManager(base_path=config_dir, env="dev")
+
+
 def test_config_loads_with_overrides_and_env(
     config_dir: Path, base_env: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("CONFIG_ENV", "dev")
     monkeypatch.setenv("LOG_LEVEL", "warn")
     override = config_dir / "config-override.yaml"
-    override.write_text(
-        json.dumps(
-            {"retrieval": {"fusion": {"weights": {"bm25": 0.5, "splade": 0.2, "dense": 0.3}}}},
-            indent=2,
-        )
+    write_yaml(
+        override,
+        {"retrieval": {"fusion": {"weights": {"bm25": 0.5, "splade": 0.2, "dense": 0.3}}}},
     )
     manager = ConfigManager(base_path=config_dir, env="dev")
     data = manager.config.data()
@@ -71,11 +81,9 @@ def test_hot_reload_updates_non_breaking_fields(
     manager = ConfigManager(base_path=config_dir, env="dev")
     initial_version = manager.version.raw
     override = config_dir / "config-override.yaml"
-    override.write_text(
-        json.dumps(
-            {"retrieval": {"fusion": {"weights": {"bm25": 0.6, "splade": 0.1, "dense": 0.3}}}},
-            indent=2,
-        )
+    write_yaml(
+        override,
+        {"retrieval": {"fusion": {"weights": {"bm25": 0.6, "splade": 0.1, "dense": 0.3}}}},
     )
     manager.reload()
     assert manager.config.data()["retrieval"]["fusion"]["weights"]["bm25"] == pytest.approx(0.6)
@@ -85,7 +93,7 @@ def test_hot_reload_updates_non_breaking_fields(
 def test_hot_reload_rejects_breaking_change(config_dir: Path, base_env: None) -> None:
     manager = ConfigManager(base_path=config_dir, env="dev")
     override = config_dir / "config-override.yaml"
-    override.write_text(json.dumps({"embeddings": {"vllm_api_base": "https://new-host"}}, indent=2))
+    write_yaml(override, {"embeddings": {"vllm_api_base": "https://new-host"}})
     with pytest.raises(ConfigError) as exc:
         manager.reload()
     assert "Breaking change requires restart" in str(exc.value)
@@ -94,9 +102,7 @@ def test_hot_reload_rejects_breaking_change(config_dir: Path, base_env: None) ->
 def test_licensing_guard_blocks_unlicensed_vocab(config_dir: Path, base_env: None) -> None:
     manager = ConfigManager(base_path=config_dir, env="dev")
     override = config_dir / "config-override.yaml"
-    override.write_text(
-        json.dumps({"catalog": {"vocabs": {"snomed": {"enabled": True}}}}, indent=2)
-    )
+    write_yaml(override, {"catalog": {"vocabs": {"snomed": {"enabled": True}}}})
     with pytest.raises(ConfigError) as exc:
         manager.reload()
     assert "requires affiliate license" in str(exc.value)
@@ -117,21 +123,19 @@ def test_scheduled_pipeline_formats_validate(
 ) -> None:
     monkeypatch.setenv("CONFIG_ENV", "dev")
     override = config_dir / "config-override.yaml"
-    override.write_text(
-        json.dumps(
-            {
-                "pipelines": {
-                    "scheduled": [
-                        {
-                            "adapter": "pubmed",
-                            "interval": "15m",
-                            "enabled": True,
-                        }
-                    ]
-                }
-            },
-            indent=2,
-        )
+    write_yaml(
+        override,
+        {
+            "pipelines": {
+                "scheduled": [
+                    {
+                        "adapter": "pubmed",
+                        "interval": "15m",
+                        "enabled": True,
+                    }
+                ]
+            }
+        },
     )
     manager = ConfigManager(base_path=config_dir, env="dev")
     scheduled = manager.config.data()["pipelines"]["scheduled"]
@@ -144,20 +148,18 @@ def test_invalid_schedule_reports_pointer_and_hint(
 ) -> None:
     monkeypatch.setenv("CONFIG_ENV", "dev")
     override = config_dir / "config-override.yaml"
-    override.write_text(
-        json.dumps(
-            {
-                "pipelines": {
-                    "scheduled": [
-                        {
-                            "adapter": "unknown",
-                            "interval": "5minutes",
-                        }
-                    ]
-                }
-            },
-            indent=2,
-        )
+    write_yaml(
+        override,
+        {
+            "pipelines": {
+                "scheduled": [
+                    {
+                        "adapter": "unknown",
+                        "interval": "5minutes",
+                    }
+                ]
+            }
+        },
     )
     with pytest.raises(ConfigError) as exc:
         ConfigManager(base_path=config_dir, env="dev")
@@ -176,9 +178,7 @@ def test_schema_version_mismatch_warns_by_default(
     monkeypatch.setenv("CONFIG_ENV", "dev")
     monkeypatch.delenv("MEDCFG_ALLOW_OLD_SCHEMA", raising=False)
     override = config_dir / "config-override.yaml"
-    override.write_text(
-        json.dumps({"$schema": "./config.schema.json#v0.9.0"}, indent=2)
-    )
+    write_yaml(override, {"$schema": "./config.schema.json#v0.9.0"})
     with caplog.at_level(logging.WARNING):
         manager = ConfigManager(base_path=config_dir, env="dev")
     assert manager.config.data()["config_version"] == "1.0.0"
@@ -193,9 +193,7 @@ def test_schema_version_mismatch_errors_when_disallowed(
     monkeypatch.setenv("CONFIG_ENV", "dev")
     monkeypatch.setenv("MEDCFG_ALLOW_OLD_SCHEMA", "false")
     override = config_dir / "config-override.yaml"
-    override.write_text(
-        json.dumps({"$schema": "./config.schema.json#v0.9.0"}, indent=2)
-    )
+    write_yaml(override, {"$schema": "./config.schema.json#v0.9.0"})
     with pytest.raises(ConfigError) as exc:
         ConfigManager(base_path=config_dir, env="dev")
     message = str(exc.value)

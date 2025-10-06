@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import shutil
 import sys
@@ -73,6 +75,40 @@ def test_cli_validate_failure_on_invalid_payload(cli_config_dir: Path) -> None:
     )
     assert exit_code == 1
     assert "Configuration invalid" in output
+
+
+def test_cli_validate_explicit_payload_with_schema(cli_config_dir: Path) -> None:
+    schema = cli_config_dir / "config.schema.json"
+    payload = cli_config_dir / "config.yaml"
+    exit_code, output = _run_cli(
+        [
+            "config",
+            "validate",
+            "--schema",
+            str(schema),
+            str(payload),
+        ]
+    )
+    assert exit_code == 0
+    assert "Config valid" in output
+
+
+def test_cli_validate_explicit_payload_failure(cli_config_dir: Path, tmp_path: Path) -> None:
+    schema = cli_config_dir / "config.schema.json"
+    payload = tmp_path / "bad-config.yaml"
+    payload.write_text("---\nobservability: {}\n", encoding="utf-8")
+    exit_code, output = _run_cli(
+        [
+            "config",
+            "validate",
+            "--schema",
+            str(schema),
+            str(payload),
+        ]
+    )
+    assert exit_code == 1
+    assert "Configuration invalid" in output
+    assert "observability" in output
 
 
 def test_cli_show_masks_secrets(cli_config_dir: Path) -> None:

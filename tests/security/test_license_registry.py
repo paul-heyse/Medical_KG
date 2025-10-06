@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from Medical_KG.security import LicenseRegistry
+from Medical_KG.security import LicenseRegistry, LicenseRegistryError
 
 from .fixtures import write_license_file
 
@@ -143,3 +143,10 @@ tiers:
     tier = registry.get_tier("limited")
     assert tier.redactions["TEST"] == "quoted"
     assert registry.filter_labels("TEST", "limited", "label") == "label"
+
+
+def test_license_registry_rejects_non_mapping(tmp_path) -> None:
+    payload = tmp_path / "licenses.yml"
+    payload.write_text("[]\n", encoding="utf-8")
+    with pytest.raises(LicenseRegistryError):
+        LicenseRegistry.from_yaml(payload)

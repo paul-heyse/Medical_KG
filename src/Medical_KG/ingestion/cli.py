@@ -23,12 +23,12 @@ import sys
 import textwrap
 from datetime import datetime, timezone
 from enum import Enum, IntEnum
-from importlib import metadata
+from importlib import import_module, metadata
+from types import ModuleType
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Optional, Sequence, cast
 
 import typer
-from jsonschema import SchemaError
 
 from Medical_KG.ingestion.cli_helpers import (
     BatchValidationError,
@@ -55,6 +55,21 @@ from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion.models import Document
 from Medical_KG.ingestion.pipeline import IngestionPipeline, PipelineResult
 from Medical_KG.utils.json_schema import JsonSchemaValidationError, JsonSchemaValidator
+
+
+def _load_schema_error() -> type[Exception]:
+    module: ModuleType
+    try:  # pragma: no cover - preferred path for modern jsonschema versions
+        module = import_module("jsonschema.exceptions")
+    except Exception:  # pragma: no cover - compatibility fallback
+        module = import_module("jsonschema")
+    schema_error = getattr(module, "SchemaError", None)
+    if not isinstance(schema_error, type) or not issubclass(schema_error, Exception):
+        raise ImportError("SchemaError missing from jsonschema package")
+    return schema_error
+
+
+SchemaError = _load_schema_error()
 
 try:  # pragma: no cover - optional rich dependency
     Console = getattr(importlib.import_module("rich.console"), "Console")
@@ -149,7 +164,7 @@ def _load_json_schema_validator(path: Path) -> Callable[[dict[str, Any]], None]:
             heading="Schema validation failed:",
         )
     except SchemaError as exc:
-        raise typer.BadParameter(f"Schema at {path} is invalid: {exc.message}") from exc
+        raise typer.BadParameter(f"Schema at {path} is invalid: {exc}") from exc
 
     def _validate(instance: dict[str, Any]) -> None:
         try:

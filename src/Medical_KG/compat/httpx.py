@@ -55,6 +55,8 @@ class _FallbackHTTPError(Exception):
     pass
 
 
+HTTPError: type[Exception]
+
 try:  # pragma: no cover - exercised only when dependency available
     HTTPError = cast(type[Exception], getattr(get_httpx_module(), "HTTPError"))
 except MissingDependencyError:  # pragma: no cover - default for tests

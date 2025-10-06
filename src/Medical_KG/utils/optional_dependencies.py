@@ -669,7 +669,7 @@ def build_histogram(
         name,
         documentation,
         buckets=buckets,
-        labelnames=labelnames,
+        labelnames=labelnames or (),
     )
     return cast(HistogramProtocol, histogram)
 

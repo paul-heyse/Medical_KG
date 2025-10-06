@@ -510,6 +510,125 @@ The base `HttpAdapter` automatically forwards telemetry definitions to the share
 
 Telemetry callbacks execute synchronously after each lifecycle event. Keep handlers lightweight (logging, metric increments, span annotations) to maintain the observed <5% overhead during synthetic load tests. Expensive work should be deferred to background tasks.
 
+#### Benchmark Results (Task 14.3)
+
+Synthetic benchmarks against the shared `AsyncHttpClient` confirm telemetry overhead stays within the 5% budget. Using an in-memory `httpx.MockTransport` with a 20 ms artificial network delay (to emulate real upstream latency) we executed 500 GET requests three times with and without telemetry. Enabling Prometheus metrics plus logging + tracing handlers increased mean runtime from **10.58 s** to **10.79 s**—a **2.03 %** delta.【9bc400†L1-L2】
+
+Reproduce locally with:
+
+```bash
+python - <<'PY'
+import asyncio, logging, statistics, sys, time
+from pathlib import Path
+
+import httpx
+from httpx import MockTransport, Response
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+sys.path.insert(0, str(Path.cwd() / "src"))
+
+from Medical_KG.ingestion.http_client import AsyncHttpClient, RateLimit
+from Medical_KG.ingestion.telemetry import LoggingTelemetry, TracingTelemetry
+
+ITERATIONS = 500
+LATENCY = 0.02  # 20 ms
+
+async def handler(request: httpx.Request) -> Response:
+    await asyncio.sleep(LATENCY)
+    return Response(200, json={"ok": True})
+
+transport = MockTransport(handler)
+provider = TracerProvider()
+provider.add_span_processor(SimpleSpanProcessor(InMemorySpanExporter()))
+trace.set_tracer_provider(provider)
+
+logger = logging.getLogger("telemetry.benchmark")
+logger.propagate = False
+logger.addHandler(logging.NullHandler())
+
+async def run(enable_metrics: bool, telemetry=None) -> float:
+    client = AsyncHttpClient(
+        default_rate=RateLimit(rate=ITERATIONS * 10, per=1.0),
+        telemetry=telemetry,
+        enable_metrics=enable_metrics,
+    )
+    client._client = httpx.AsyncClient(transport=transport)
+    start = time.perf_counter()
+    for _ in range(ITERATIONS):
+        await client.get("https://example.com/resource")
+    await client.aclose()
+    return time.perf_counter() - start
+
+async def main() -> None:
+    base = [await run(False) for _ in range(3)]
+    telemetry = [LoggingTelemetry(logger=logger), TracingTelemetry()]
+    instrumented = [await run(True, telemetry) for _ in range(3)]
+    print({
+        "baseline": statistics.mean(base),
+        "instrumented": statistics.mean(instrumented)
+    })
+
+asyncio.run(main())
+PY
+```
+
+Capture results and record the mean delta in deployment notes before production rollout.
+
+### Staging Validation (Tasks 14.4–14.5)
+
+1. **Enable telemetry in staging adapters.** Update the staging configuration (`config-staging.yaml`) so every HTTP adapter passes the shared `telemetry_defaults` bundle (logging + tracing) into `HttpAdapter`.
+2. **Run ingestion smoke tests.** Execute the staged pipeline (`python -m Medical_KG.ingestion.cli run --env staging --limit 50`) and confirm `http_requests_total` and `http_limiter_queue_depth` metrics appear under the `staging` Prometheus workspace.
+3. **Inspect Grafana.** Import `ops/monitoring/grafana/http-client-telemetry.json` into the staging Grafana stack and validate:
+   - Request volume counters increment per adapter host.
+   - Latency panels show the expected ~20 ms baseline for sandbox APIs.
+   - Limiter saturation stays below 0.2 during the run; investigate any spikes.
+4. **Tracing sanity check.** Filter traces in Tempo/Jaeger for the staging service (`service.name="medical-kg-api"`) and ensure spans contain `http.backoff` and `http.retry` events when you throttle a sandbox adapter.
+
+### Production Rollout (Task 14.6)
+
+Adopt a two-step rollout:
+
+1. **Canary enablement.** Deploy telemetry for a single low-volume adapter (e.g., DailyMed) and monitor for 24 hours. Leave `enable_metrics=True` but limit logging telemetry to WARN to minimise log volume. If Prometheus scrape time remains <1 s and no rate limiter alerts trigger, proceed.
+2. **Full rollout.** Gradually roll out to remaining adapters over two additional deploys (cluster groups `ingest-a` and `ingest-b`). After each deploy, confirm the Grafana dashboard shows balanced request volume and limiter saturation <0.6 for all hosts.
+
+Document rollout dates and any deviations in `docs/deployment.md` postmortems.
+
+### Alerting (Task 14.7)
+
+Add the following Prometheus rules (namespace `monitoring`) using `ops/monitoring/prometheus-alerts.yaml`:
+
+```yaml
+- alert: HttpClientErrorRateHigh
+  expr: sum(rate(http_requests_total{status=~"5.."}[5m]))
+        by (host) / sum(rate(http_requests_total[5m])) by (host) > 0.05
+  for: 10m
+  labels:
+    severity: page
+  annotations:
+    summary: "{{ $labels.host }} experiencing >5% HTTP 5xx responses"
+- alert: HttpLimiterSaturationHigh
+  expr: avg_over_time(http_limiter_queue_saturation[5m]) > 0.8
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: "Rate limiter queue saturated for {{ $labels.host }}"
+```
+
+Wire alerts to PagerDuty and Slack (`#medkg-ops`) so on-call receives immediate signals when upstream APIs degrade.
+
+### Post-Deployment Monitoring (Task 14.8)
+
+For the first seven days after production rollout:
+
+- Track `http_request_duration_seconds` P95 latency and `http_retries_total` on the Grafana dashboard twice daily.
+- Export daily snapshots of `http_limiter_queue_depth` and attach them to the ingestion status report (see `ops/reports/daily_ingestion.md`).
+- Review sampled traces to ensure retry/backoff events continue to populate spans; stale spans indicate tracing dropped from the client.
+- File follow-up tasks if retry volume exceeds historical baselines ( >10% of calls for any adapter) or limiter saturation crosses 0.7.
+
 ### Troubleshooting
 
 - Missing metrics usually indicate `prometheus_client` is not installed; install the dependency before enabling metrics or leave `enable_metrics=False`.

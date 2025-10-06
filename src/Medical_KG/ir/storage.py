@@ -3,10 +3,22 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Iterable, Mapping, Protocol
 
 from Medical_KG.ingestion.ledger import LedgerState
 from Medical_KG.ir.models import DocumentIR
+
+
+class LedgerWriter(Protocol):
+    def update_state(
+        self,
+        doc_id: str,
+        state: LedgerState,
+        *,
+        metadata: Mapping[str, str] | None = None,
+        adapter: str | None = None,
+    ) -> None:
+        ...
 
 
 class IrStorage:
@@ -15,7 +27,7 @@ class IrStorage:
     def __init__(self, base_path: Path) -> None:
         self.base_path = base_path
 
-    def write(self, document: DocumentIR, *, ledger: Any | None = None) -> Path:
+    def write(self, document: DocumentIR, *, ledger: LedgerWriter | None = None) -> Path:
         payload = document.as_dict()
         encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
         digest = hashlib.sha256(encoded).hexdigest()
@@ -41,11 +53,11 @@ class IrStorage:
             )
         return path
 
-    def iter_documents(self, source: str) -> Iterable[dict[str, Any]]:
+    def iter_documents(self, source: str) -> Iterable[dict[str, object]]:
         directory = self.base_path / source
         if not directory.exists():
             return []
-        documents: list[dict[str, Any]] = []
+        documents: list[dict[str, object]] = []
         for file in directory.glob("**/*"):
             if file.is_file():
                 data = json.loads(file.read_text())

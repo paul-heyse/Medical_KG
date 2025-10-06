@@ -1,44 +1,44 @@
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
-    hooks:
-      - id: check-merge-conflict
-      - id: end-of-file-fixer
-      - id: trailing-whitespace
-      - id: check-yaml
-  - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.6.9
-    hooks:
-      - id: ruff
-        args: [--fix]
-  - repo: https://github.com/psf/black
-    rev: 24.8.0
-    hooks:
-      - id: black
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.11.1
-    hooks:
-      - id: mypy
-        exclude: ^ops/
-      - id: mypy
-        name: mypy (core services)
-        args:
-          - --strict
-          - src/Medical_KG/config
-          - src/Medical_KG/utils/optional_dependencies.py
-          - src/Medical_KG/cli.py
-        pass_filenames: false
-      - id: mypy
-        name: mypy (IR module)
-        args:
-          - --strict
-          - src/Medical_KG/ir
-        pass_filenames: false
-  - repo: local
-    hooks:
-      - id: validate-configs
-        name: Validate configuration payloads
-        entry: python scripts/validate_all_configs.py --no-color
-        language: system
-        files: ^src/Medical_KG/config/.*\.(yaml|json)$
-        pass_filenames: false
+    - repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v4.6.0
+      hooks:
+          - id: check-merge-conflict
+          - id: end-of-file-fixer
+          - id: trailing-whitespace
+          - id: check-yaml
+    - repo: https://github.com/charliermarsh/ruff-pre-commit
+      rev: v0.6.9
+      hooks:
+          - id: ruff
+            args: [--fix]
+    - repo: https://github.com/psf/black
+      rev: 24.8.0
+      hooks:
+          - id: black
+    - repo: https://github.com/pre-commit/mirrors-mypy
+      rev: v1.11.1
+      hooks:
+          - id: mypy
+            exclude: ^ops/
+          - id: mypy
+            name: mypy (core services)
+            args:
+                - --strict
+                - src/Medical_KG/config
+                - src/Medical_KG/utils/optional_dependencies.py
+                - src/Medical_KG/cli.py
+            pass_filenames: false
+          - id: mypy
+            name: mypy (IR module)
+            args:
+                - --strict
+                - src/Medical_KG/ir
+            pass_filenames: false
+    - repo: local
+      hooks:
+          - id: validate-configs
+            name: Validate configuration payloads
+            entry: python scripts/validate_all_configs.py --no-color
+            language: system
+            files: ^src/Medical_KG/config/.*\.(yaml|json)$
+            pass_filenames: false

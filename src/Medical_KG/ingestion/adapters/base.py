@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Collection
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Generic, Iterable, TypeVar, cast
+from typing import Any, Callable, Generic, TypeVar
 
 from Medical_KG.ingestion.events import PipelineEvent
 from Medical_KG.ingestion.ledger import IngestionLedger, LedgerState

@@ -11,8 +11,12 @@ from Medical_KG.ingestion.types import (
     is_cdc_socrata_payload,
     is_cdc_wonder_payload,
     is_clinical_document_payload,
+    is_clinical_payload,
     is_dailymed_payload,
+    is_guideline_payload,
     is_icd11_payload,
+    is_knowledge_base_payload,
+    is_literature_payload,
     is_loinc_payload,
     is_medrxiv_payload,
     is_mesh_payload,
@@ -23,8 +27,9 @@ from Medical_KG.ingestion.types import (
     is_pubmed_payload,
     is_rxnorm_payload,
     is_snomed_payload,
-    is_umls_payload,
+    is_terminology_payload,
     is_uspstf_payload,
+    is_umls_payload,
     is_who_gho_payload,
 )
 from Medical_KG.ir.models import DocumentIR, ensure_monotonic_spans
@@ -114,6 +119,10 @@ class IRValidator:
         provenance = payload.get("provenance", {})
         if provenance is not None and not isinstance(provenance, dict):
             raise ValidationError("Document provenance must be an object")
+
+        metadata = payload.get("metadata", {})
+        if metadata is not None and not isinstance(metadata, dict):
+            raise ValidationError("Document metadata must be an object")
 
         allowed_keys = set(schema.get("properties", {}).keys()) | {"created_at"}
         extras = set(payload.keys()) - allowed_keys
@@ -207,6 +216,76 @@ class IRValidator:
                 raise ValidationError("Span map page numbers must be >= 1")
             previous_end = canonical_end
 
+    def _validate_metadata(
+        self, document: DocumentIR, raw: AdapterDocumentPayload | None
+    ) -> None:
+        metadata = document.metadata
+        if not isinstance(metadata, Mapping):
+            raise ValidationError("Document metadata must be a mapping")
+        if raw is None:
+            return
+        family = metadata.get("payload_family")
+        if not isinstance(family, str) or not family:
+            raise ValidationError("Document metadata missing payload_family for typed payload")
+        payload_type = metadata.get("payload_type")
+        if not isinstance(payload_type, str) or not payload_type:
+            raise ValidationError("Document metadata missing payload_type for typed payload")
+
+        if is_literature_payload(raw):
+            if is_pubmed_payload(raw):
+                self._require_identifier(metadata, raw["pmid"], "PubMed")
+                self._require_title(metadata, raw.get("title", ""), "PubMed")
+            elif is_pmc_payload(raw):
+                self._require_identifier(metadata, raw["pmcid"], "PMC")
+                self._require_title(metadata, raw.get("title", ""), "PMC")
+            elif is_medrxiv_payload(raw):
+                self._require_identifier(metadata, raw["doi"], "MedRxiv")
+                self._require_title(metadata, raw.get("title", ""), "MedRxiv")
+        elif is_clinical_payload(raw):
+            if is_clinical_document_payload(raw):
+                self._require_identifier(metadata, raw["nct_id"], "ClinicalTrials")
+                self._require_title(metadata, raw.get("title", ""), "ClinicalTrials")
+                self._require_version(metadata, raw.get("version", ""), "ClinicalTrials")
+            elif is_openfda_payload(raw):
+                self._require_identifier(metadata, raw["identifier"], "OpenFDA")
+                self._require_version(metadata, raw["version"], "OpenFDA")
+            elif is_dailymed_payload(raw):
+                self._require_identifier(metadata, raw["setid"], "DailyMed")
+                self._require_title(metadata, raw.get("title", ""), "DailyMed")
+                self._require_version(metadata, raw.get("version", ""), "DailyMed")
+            elif is_rxnorm_payload(raw):
+                self._require_identifier(metadata, raw["rxcui"], "RxNorm")
+            elif is_access_gudid_payload(raw):
+                self._require_identifier(metadata, raw["udi_di"], "AccessGUDID")
+        elif is_guideline_payload(raw):
+            if is_nice_guideline_payload(raw):
+                self._require_identifier(metadata, raw["uid"], "NICE")
+                self._require_title(metadata, raw.get("title", ""), "NICE")
+            elif is_uspstf_payload(raw):
+                identifier = raw.get("id", "") or raw.get("title", "")
+                self._require_identifier(metadata, identifier, "USPSTF")
+                self._require_title(metadata, raw.get("title", ""), "USPSTF")
+        elif is_knowledge_base_payload(raw):
+            if is_cdc_socrata_payload(raw):
+                self._require_identifier(metadata, raw["identifier"], "CDC Socrata")
+            elif is_openprescribing_payload(raw):
+                self._require_identifier(metadata, raw["identifier"], "OpenPrescribing")
+            elif is_cdc_wonder_payload(raw):
+                if "row_count" not in metadata:
+                    raise ValidationError("CDC Wonder metadata must include row_count")
+        elif is_terminology_payload(raw):
+            if is_mesh_payload(raw):
+                self._require_identifier(metadata, raw.get("descriptor_id", "") or raw["name"], "MeSH")
+                self._require_title(metadata, raw["name"], "MeSH")
+            elif is_umls_payload(raw):
+                self._require_identifier(metadata, raw.get("cui", ""), "UMLS", optional=True)
+            elif is_loinc_payload(raw):
+                self._require_identifier(metadata, raw.get("code", ""), "LOINC", optional=True)
+            elif is_icd11_payload(raw):
+                self._require_identifier(metadata, raw.get("code", ""), "ICD-11", optional=True)
+            elif is_snomed_payload(raw):
+                self._require_identifier(metadata, raw.get("code", ""), "SNOMED", optional=True)
+
     def _validate_payload(
         self,
         document: DocumentIR,
@@ -245,134 +324,55 @@ class IRValidator:
                 ):
                     raise ValidationError("PMC IR documents must include PMCID provenance")
 
-    def _validate_metadata(
-        self,
-        document: DocumentIR,
-        raw: AdapterDocumentPayload,
-    ) -> None:
-        metadata = document.metadata
-        if not isinstance(metadata, Mapping):
-            raise ValidationError("Document metadata must be a mapping")
-        expected_family = self._expected_payload_family(raw)
-        observed_family = metadata.get("payload_family")
-        if expected_family != "unknown" and observed_family != expected_family:
-            raise ValidationError(
-                f"{self._payload_label(raw)} metadata must record payload_family='{expected_family}'"
-            )
-        expected_type = self._expected_payload_type(raw)
-        observed_type = metadata.get("payload_type")
-        if expected_type != "unknown" and observed_type != expected_type:
-            raise ValidationError(
-                f"{self._payload_label(raw)} metadata must record payload_type='{expected_type}'"
-            )
-        if is_pubmed_payload(raw):
-            self._assert_metadata_value(metadata, "identifier", raw["pmid"], raw)
-            self._assert_metadata_value(metadata, "title", raw["title"], raw)
-            abstract = raw.get("abstract", "")
-            if abstract:
-                self._assert_metadata_value(metadata, "summary", abstract, raw)
-        elif is_pmc_payload(raw):
-            self._assert_metadata_value(metadata, "identifier", raw["pmcid"], raw)
-            self._assert_metadata_value(metadata, "title", raw["title"], raw)
-            if raw.get("abstract"):
-                self._assert_metadata_value(metadata, "summary", raw["abstract"], raw)
-        elif is_medrxiv_payload(raw):
-            self._assert_metadata_value(metadata, "identifier", raw["doi"], raw)
-            self._assert_metadata_value(metadata, "title", raw["title"], raw)
-            if raw.get("abstract"):
-                self._assert_metadata_value(metadata, "summary", raw["abstract"], raw)
-            if raw.get("date"):
-                self._assert_metadata_value(metadata, "version", raw["date"], raw)
-        if is_clinical_document_payload(raw):
-            self._assert_metadata_value(metadata, "identifier", raw["nct_id"], raw)
-            self._assert_metadata_value(metadata, "title", raw["title"], raw)
-            if raw.get("version"):
-                self._assert_metadata_value(metadata, "version", raw["version"], raw)
-        if is_openfda_payload(raw):
-            self._assert_metadata_value(metadata, "identifier", raw["identifier"], raw)
-            self._assert_metadata_value(metadata, "version", raw["version"], raw)
-            self._assert_metadata_value(metadata, "record", raw["record"], raw)
-        if is_dailymed_payload(raw):
-            self._assert_metadata_value(metadata, "identifier", raw["setid"], raw)
-            self._assert_metadata_value(metadata, "title", raw["title"], raw)
-            if raw.get("version"):
-                self._assert_metadata_value(metadata, "version", raw["version"], raw)
-        if is_rxnorm_payload(raw):
-            self._assert_metadata_value(metadata, "identifier", raw["rxcui"], raw)
-            if raw.get("name"):
-                self._assert_metadata_value(metadata, "title", raw["name"], raw)
-        if is_access_gudid_payload(raw):
-            self._assert_metadata_value(metadata, "identifier", raw["udi_di"], raw)
-            if raw.get("brand"):
-                self._assert_metadata_value(metadata, "title", raw["brand"], raw)
-        if is_nice_guideline_payload(raw):
-            self._assert_metadata_value(metadata, "identifier", raw["uid"], raw)
-            self._assert_metadata_value(metadata, "title", raw["title"], raw)
-            if raw.get("summary"):
-                self._assert_metadata_value(metadata, "summary", raw["summary"], raw)
-        if is_uspstf_payload(raw):
-            self._assert_metadata_value(metadata, "title", raw["title"], raw)
-            if raw.get("id"):
-                self._assert_metadata_value(metadata, "identifier", raw["id"], raw)
-            if raw.get("status"):
-                self._assert_metadata_value(metadata, "status", raw["status"], raw)
-        if is_mesh_payload(raw):
-            if raw.get("descriptor_id"):
-                self._assert_metadata_value(metadata, "identifier", raw["descriptor_id"], raw)
-            self._assert_metadata_value(metadata, "title", raw["name"], raw)
-        if is_umls_payload(raw):
-            if raw.get("cui"):
-                self._assert_metadata_value(metadata, "identifier", raw["cui"], raw)
-            if raw.get("name"):
-                self._assert_metadata_value(metadata, "title", raw["name"], raw)
-        if is_loinc_payload(raw):
-            if raw.get("code"):
-                self._assert_metadata_value(metadata, "identifier", raw["code"], raw)
-            if raw.get("display"):
-                self._assert_metadata_value(metadata, "title", raw["display"], raw)
-        if is_icd11_payload(raw):
-            if raw.get("code"):
-                self._assert_metadata_value(metadata, "identifier", raw["code"], raw)
-            if raw.get("title"):
-                self._assert_metadata_value(metadata, "title", raw["title"], raw)
-        if is_snomed_payload(raw):
-            if raw.get("code"):
-                self._assert_metadata_value(metadata, "identifier", raw["code"], raw)
-            if raw.get("display"):
-                self._assert_metadata_value(metadata, "title", raw["display"], raw)
-        if is_cdc_socrata_payload(raw):
-            self._assert_metadata_value(metadata, "identifier", raw["identifier"], raw)
-            self._assert_metadata_value(metadata, "record", raw["record"], raw)
-        if is_cdc_wonder_payload(raw):
-            if metadata.get("record_rows") != raw["rows"]:
-                raise ValidationError(
-                    f"{self._payload_label(raw)} metadata must expose record_rows matching CDC Wonder rows"
-                )
-        if is_who_gho_payload(raw):
-            if raw.get("indicator"):
-                self._assert_metadata_value(metadata, "indicator", raw["indicator"], raw)
-            self._assert_metadata_value(metadata, "value", raw.get("value"), raw)
-            if raw.get("country"):
-                self._assert_metadata_value(metadata, "country", raw["country"], raw)
-            if raw.get("year"):
-                self._assert_metadata_value(metadata, "version", raw["year"], raw)
-        if is_openprescribing_payload(raw):
-            self._assert_metadata_value(metadata, "identifier", raw["identifier"], raw)
-            self._assert_metadata_value(metadata, "record", raw["record"], raw)
-
-    def _assert_metadata_value(
+    def _require_identifier(
         self,
         metadata: Mapping[str, Any],
-        key: str,
-        expected: Any,
-        raw: AdapterDocumentPayload,
+        identifier: object,
+        source: str,
+        optional: bool = False,
     ) -> None:
-        if expected in (None, "", [], {}):
+        if identifier in (None, "", [], {}):
+            if not optional:
+                raise ValidationError(f"Document metadata missing identifier for {source}")
             return
-        value = metadata.get(key)
-        if value != expected:
+        value = metadata.get("identifier")
+        if value != identifier:
             raise ValidationError(
-                f"{self._payload_label(raw)} metadata field '{key}' must equal {expected!r}"
+                f"Document metadata field 'identifier' must equal {identifier!r} for {source}"
+            )
+
+    def _require_title(
+        self,
+        metadata: Mapping[str, Any],
+        title: object,
+        source: str,
+        optional: bool = False,
+    ) -> None:
+        if title in (None, "", [], {}):
+            if not optional:
+                raise ValidationError(f"Document metadata missing title for {source}")
+            return
+        value = metadata.get("title")
+        if value != title:
+            raise ValidationError(
+                f"Document metadata field 'title' must equal {title!r} for {source}"
+            )
+
+    def _require_version(
+        self,
+        metadata: Mapping[str, Any],
+        version: object,
+        source: str,
+        optional: bool = False,
+    ) -> None:
+        if version in (None, "", [], {}):
+            if not optional:
+                raise ValidationError(f"Document metadata missing version for {source}")
+            return
+        value = metadata.get("version")
+        if value != version:
+            raise ValidationError(
+                f"Document metadata field 'version' must equal {version!r} for {source}"
             )
 
     def _expected_payload_family(self, raw: AdapterDocumentPayload) -> str:

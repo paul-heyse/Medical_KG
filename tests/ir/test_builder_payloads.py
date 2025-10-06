@@ -4,6 +4,9 @@ import pytest
 
 from Medical_KG.ingestion.types import (
     ClinicalDocumentPayload,
+    MeshDocumentPayload,
+    NiceGuidelineDocumentPayload,
+    OpenPrescribingDocumentPayload,
     PmcDocumentPayload,
     PubMedDocumentPayload,
 )
@@ -134,3 +137,63 @@ def test_ir_builder_without_payload() -> None:
             text="Plain text content",
             raw=None,  # type: ignore[arg-type]
         )
+
+
+def test_ir_builder_extracts_guideline_metadata() -> None:
+    builder = IrBuilder()
+    raw: NiceGuidelineDocumentPayload = {
+        "uid": "NG123",
+        "title": "Guideline Title",
+        "summary": "Summary paragraph",
+        "url": "https://nice.org.uk/NG123",
+        "licence": "OpenGov",
+    }
+    document = builder.build(
+        doc_id="nice:NG123",
+        source="nice",
+        uri="https://nice.org.uk/NG123",
+        text="",
+        raw=raw,
+    )
+    assert document.metadata["payload_family"] == "guideline"
+    assert document.metadata["identifier"] == "NG123"
+    assert document.metadata["summary"] == "Summary paragraph"
+    IRValidator().validate_document(document, raw=raw)
+
+
+def test_ir_builder_extracts_terminology_metadata() -> None:
+    builder = IrBuilder()
+    raw: MeshDocumentPayload = {
+        "name": "Aspirin",
+        "terms": ["Acetylsalicylic Acid"],
+        "descriptor_id": "D001241",
+    }
+    document = builder.build(
+        doc_id="mesh:D001241",
+        source="mesh",
+        uri="https://meshb.nlm.nih.gov/record/ui?ui=D001241",
+        text="",
+        raw=raw,
+    )
+    assert document.metadata["payload_family"] == "terminology"
+    assert document.metadata["identifier"] == "D001241"
+    assert document.metadata["title"] == "Aspirin"
+    IRValidator().validate_document(document, raw=raw)
+
+
+def test_ir_builder_extracts_openprescribing_metadata() -> None:
+    builder = IrBuilder()
+    raw: OpenPrescribingDocumentPayload = {
+        "identifier": "chemoprevention",
+        "record": {"title": "Chemoprevention stats"},
+    }
+    document = builder.build(
+        doc_id="openprescribing:chemoprevention",
+        source="openprescribing",
+        uri="https://openprescribing.net/chemoprevention",
+        text="",
+        raw=raw,
+    )
+    assert document.metadata["payload_family"] == "knowledge_base"
+    assert document.metadata["identifier"] == "chemoprevention"
+    IRValidator().validate_document(document, raw=raw)

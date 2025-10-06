@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from Medical_KG.ingestion.types import PubMedDocumentPayload
+from Medical_KG.ir.builder import IrBuilder
 from Medical_KG.ir.models import Block, DocumentIR, SpanMap, Table
 from Medical_KG.ir.validator import IRValidator, ValidationError
 
@@ -216,6 +217,40 @@ def test_ir_validator_block_missing_fields() -> None:
     block_payload = {"type": "heading", "start": 0, "end": 5}
     with pytest.raises(ValidationError, match="missing required"):
         validator._validate_block_payload(block_payload)
+
+
+def _make_pubmed_document() -> tuple[DocumentIR, PubMedDocumentPayload]:
+    builder = IrBuilder()
+    raw: PubMedDocumentPayload = {
+        "pmid": "9876",
+        "title": "Sample PubMed",
+        "abstract": "Abstract text",
+        "authors": ["A"],
+        "mesh_terms": [],
+        "pub_types": ["Journal"],
+    }
+    document = builder.build(
+        doc_id="pubmed:9876",
+        source="pubmed",
+        uri="https://pubmed.ncbi.nlm.nih.gov/9876/",
+        text="",
+        raw=raw,
+    )
+    return document, raw
+
+
+def test_ir_validator_requires_metadata_payload_family() -> None:
+    document, raw = _make_pubmed_document()
+    document.metadata.pop("payload_family", None)
+    with pytest.raises(ValidationError, match="payload_family"):
+        IRValidator().validate_document(document, raw=raw)
+
+
+def test_ir_validator_catches_identifier_mismatch() -> None:
+    document, raw = _make_pubmed_document()
+    document.metadata["identifier"] = "wrong"
+    with pytest.raises(ValidationError, match="identifier mismatch"):
+        IRValidator().validate_document(document, raw=raw)
 
 
 def test_ir_validator_block_type_and_text_validation() -> None:

@@ -5,9 +5,26 @@ from __future__ import annotations
 import logging
 import os
 import random
-from typing import Any
+from importlib import import_module
+from types import ModuleType
+from typing import Any, Optional, cast
 
-from pythonjsonlogger import jsonlogger
+
+def _load_jsonlogger() -> Optional[ModuleType]:
+    try:  # pragma: no cover - optional dependency
+        return import_module("pythonjsonlogger.jsonlogger")
+    except ModuleNotFoundError:  # pragma: no cover - fallback to stdlib formatter
+        return None
+
+
+def _get_json_formatter_class(module: ModuleType) -> type[Any]:
+    formatter_cls = getattr(module, "JsonFormatter", None)
+    if formatter_cls is None:
+        raise RuntimeError("python-json-logger is missing JsonFormatter")
+    return cast(type[Any], formatter_cls)
+
+
+jsonlogger = _load_jsonlogger()
 
 __all__ = ["configure_logging"]
 
@@ -31,17 +48,25 @@ _configured = False
 def configure_logging(extra_fields: dict[str, Any] | None = None) -> None:
     """Configure application-wide JSON logging with sampling support."""
 
+    def _build_formatter() -> logging.Formatter:
+        if jsonlogger is None:
+            return logging.Formatter(
+                "%(asctime)s %(levelname)s %(name)s %(message)s", datefmt="%Y-%m-%dT%H:%M:%S%z"
+            )
+        formatter_cls = _get_json_formatter_class(jsonlogger)
+        formatter = formatter_cls(
+            "%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s %(trace_id)s %(span_id)s",
+            rename_fields={"levelname": "level", "asctime": "timestamp"},
+        )
+        return cast(logging.Formatter, formatter)
+
     global _configured
     if _configured:
         return
     level = os.getenv("MEDKG_LOG_LEVEL", "INFO").upper()
     sample_rate = float(os.getenv("MEDKG_LOG_SAMPLE_RATE", "1.0"))
     handler = logging.StreamHandler()
-    formatter = jsonlogger.JsonFormatter(
-        "%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s %(trace_id)s %(span_id)s",
-        rename_fields={"levelname": "level", "asctime": "timestamp"},
-    )
-    handler.setFormatter(formatter)
+    handler.setFormatter(_build_formatter())
     handler.addFilter(SamplingFilter(sample_rate))
     root = logging.getLogger()
     root.handlers.clear()

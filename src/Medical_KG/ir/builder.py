@@ -130,6 +130,11 @@ class IrBuilder:
         payload_metadata: Mapping[str, Any] | None,
     ) -> DocumentIR:
         metadata_mapping: Mapping[str, Any] = metadata if metadata is not None else {}
+        document_metadata: dict[str, Any] = {}
+        if (metadata_values := metadata_mapping.get("metadata")) and isinstance(metadata_values, Mapping):
+            document_metadata.update(metadata_values)
+        if payload_metadata:
+            document_metadata.update(payload_metadata)
         normalized = self.normalizer.normalize(text)
         document = DocumentIR(
             doc_id=doc_id,
@@ -138,6 +143,7 @@ class IrBuilder:
             language=normalized.language,
             text=normalized.text,
             raw_text=normalized.raw_text,
+            metadata=document_metadata,
         )
         document.span_map = SpanMap()
         span_entries = metadata_mapping.get("span_map")
@@ -168,6 +174,102 @@ class IrBuilder:
         if tables:
             self._add_tables(document, tables)
         return document
+
+    def _extract_metadata(self, raw: AdapterDocumentPayload) -> dict[str, Any]:
+        metadata: dict[str, Any] = {}
+        family = self._detect_payload_family(raw)
+        metadata["payload_family"] = family
+        metadata["payload_type"] = self._detect_payload_type(raw)
+        if is_pubmed_payload(raw):
+            metadata["identifier"] = raw["pmid"]
+            metadata["title"] = raw["title"]
+            metadata["summary"] = raw.get("abstract", "")
+            if raw.get("doi"):
+                metadata["doi"] = raw["doi"]
+            if raw.get("pmcid"):
+                metadata["pmcid"] = raw["pmcid"]
+        elif is_pmc_payload(raw):
+            metadata["identifier"] = raw["pmcid"]
+            metadata["title"] = raw["title"]
+            metadata["summary"] = raw.get("abstract", "")
+        elif is_medrxiv_payload(raw):
+            metadata["identifier"] = raw["doi"]
+            metadata["title"] = raw["title"]
+            metadata["summary"] = raw.get("abstract", "")
+            if raw.get("date"):
+                metadata["version"] = raw["date"]
+        elif is_clinical_document_payload(raw):
+            metadata["identifier"] = raw["nct_id"]
+            metadata["title"] = raw["title"]
+            metadata["version"] = raw.get("version") or ""
+            if raw.get("status"):
+                metadata["status"] = raw["status"]
+        elif is_openfda_payload(raw):
+            metadata["identifier"] = raw["identifier"]
+            metadata["version"] = raw["version"]
+            metadata["record"] = raw["record"]
+        elif is_dailymed_payload(raw):
+            metadata["identifier"] = raw["setid"]
+            metadata["title"] = raw["title"]
+            metadata["version"] = raw.get("version") or ""
+        elif is_rxnorm_payload(raw):
+            metadata["identifier"] = raw["rxcui"]
+            if raw.get("name"):
+                metadata["title"] = raw["name"]
+        elif is_access_gudid_payload(raw):
+            metadata["identifier"] = raw["udi_di"]
+            if raw.get("brand"):
+                metadata["title"] = raw["brand"]
+        elif is_nice_guideline_payload(raw):
+            metadata["identifier"] = raw["uid"]
+            metadata["title"] = raw["title"]
+            if raw.get("summary"):
+                metadata["summary"] = raw["summary"]
+        elif is_uspstf_payload(raw):
+            metadata["identifier"] = raw.get("id") or raw["title"]
+            metadata["title"] = raw["title"]
+        elif is_cdc_socrata_payload(raw):
+            metadata["identifier"] = raw["identifier"]
+            metadata["record"] = raw["record"]
+        elif is_cdc_wonder_payload(raw):
+            metadata["row_count"] = len(raw.get("rows", []))
+        elif is_who_gho_payload(raw):
+            if raw.get("indicator"):
+                metadata["indicator"] = raw["indicator"]
+            if raw.get("year"):
+                metadata["year"] = raw["year"]
+            if raw.get("country"):
+                metadata["country"] = raw["country"]
+        elif is_openprescribing_payload(raw):
+            metadata["identifier"] = raw["identifier"]
+            metadata["record"] = raw["record"]
+        elif is_mesh_payload(raw):
+            metadata["identifier"] = raw.get("descriptor_id") or raw["name"]
+            metadata["title"] = raw["name"]
+        elif is_umls_payload(raw):
+            if raw.get("cui"):
+                metadata["identifier"] = raw["cui"]
+            if raw.get("name"):
+                metadata["title"] = raw["name"]
+        elif is_loinc_payload(raw):
+            if raw.get("code"):
+                metadata["identifier"] = raw["code"]
+            if raw.get("display"):
+                metadata["title"] = raw["display"]
+        elif is_icd11_payload(raw):
+            if raw.get("code"):
+                metadata["identifier"] = raw["code"]
+            if raw.get("title"):
+                metadata["title"] = raw["title"]
+        elif is_snomed_payload(raw):
+            if raw.get("code"):
+                metadata["identifier"] = raw["code"]
+            if raw.get("display"):
+                metadata["title"] = raw["display"]
+        if not metadata:
+            metadata["payload_family"] = family
+            metadata["payload_type"] = self._detect_payload_type(raw)
+        return metadata
 
     def _add_blocks(
         self,
@@ -246,113 +348,6 @@ class IrBuilder:
         if is_guideline_payload(raw):
             return self._prepare_guideline_payload(text, raw)
         return text, [], [], {}
-
-    def _extract_metadata(self, raw: AdapterDocumentPayload) -> dict[str, Any]:
-        metadata: dict[str, Any] = {}
-        family = self._detect_payload_family(raw)
-        metadata["payload_family"] = family
-        metadata["payload_type"] = self._detect_payload_type(raw)
-        if is_pubmed_payload(raw):
-            metadata["identifier"] = raw["pmid"]
-            metadata["title"] = raw["title"]
-            metadata["summary"] = raw.get("abstract", "")
-            if raw.get("doi"):
-                metadata["doi"] = raw["doi"]
-            if raw.get("pmcid"):
-                metadata["pmcid"] = raw["pmcid"]
-        elif is_pmc_payload(raw):
-            metadata["identifier"] = raw["pmcid"]
-            metadata["title"] = raw["title"]
-            metadata["summary"] = raw.get("abstract", "")
-        elif is_medrxiv_payload(raw):
-            metadata["identifier"] = raw["doi"]
-            metadata["title"] = raw["title"]
-            metadata["summary"] = raw.get("abstract", "")
-            if raw.get("date"):
-                metadata["version"] = raw["date"]
-        elif is_clinical_document_payload(raw):
-            metadata["identifier"] = raw["nct_id"]
-            metadata["title"] = raw["title"]
-            metadata["version"] = raw.get("version") or ""
-            if raw.get("status"):
-                metadata["status"] = raw["status"]
-        elif is_openfda_payload(raw):
-            metadata["identifier"] = raw["identifier"]
-            metadata["version"] = raw["version"]
-            metadata["record"] = raw["record"]
-        elif is_dailymed_payload(raw):
-            metadata["identifier"] = raw["setid"]
-            metadata["title"] = raw["title"]
-            metadata["version"] = raw.get("version") or ""
-        elif is_rxnorm_payload(raw):
-            metadata["identifier"] = raw["rxcui"]
-            if raw.get("name"):
-                metadata["title"] = raw["name"]
-        elif is_access_gudid_payload(raw):
-            metadata["identifier"] = raw["udi_di"]
-            if raw.get("brand"):
-                metadata["title"] = raw["brand"]
-        elif is_nice_guideline_payload(raw):
-            metadata["identifier"] = raw["uid"]
-            metadata["title"] = raw["title"]
-            metadata["summary"] = raw.get("summary", "")
-            if raw.get("licence"):
-                metadata["licence"] = raw["licence"]
-            if raw.get("url"):
-                metadata["source_url"] = raw["url"]
-        elif is_uspstf_payload(raw):
-            metadata["title"] = raw["title"]
-            if raw.get("id"):
-                metadata["identifier"] = raw["id"]
-            if raw.get("status"):
-                metadata["status"] = raw["status"]
-            if raw.get("url"):
-                metadata["source_url"] = raw["url"]
-        elif is_mesh_payload(raw):
-            if raw.get("descriptor_id"):
-                metadata["identifier"] = raw["descriptor_id"]
-            metadata["title"] = raw["name"]
-        elif is_umls_payload(raw):
-            if raw.get("cui"):
-                metadata["identifier"] = raw["cui"]
-            if raw.get("name"):
-                metadata["title"] = raw["name"]
-        elif is_loinc_payload(raw):
-            if raw.get("code"):
-                metadata["identifier"] = raw["code"]
-            if raw.get("display"):
-                metadata["title"] = raw["display"]
-        elif is_icd11_payload(raw):
-            if raw.get("code"):
-                metadata["identifier"] = raw["code"]
-            if raw.get("title"):
-                metadata["title"] = raw["title"]
-        elif is_snomed_payload(raw):
-            if raw.get("code"):
-                metadata["identifier"] = raw["code"]
-            if raw.get("display"):
-                metadata["title"] = raw["display"]
-        elif is_cdc_socrata_payload(raw):
-            metadata["identifier"] = raw["identifier"]
-            metadata["record"] = raw["record"]
-        elif is_cdc_wonder_payload(raw):
-            metadata["record_rows"] = raw["rows"]
-        elif is_who_gho_payload(raw):
-            metadata["indicator"] = raw.get("indicator")
-            metadata["value"] = raw.get("value")
-            if raw.get("country"):
-                metadata["country"] = raw["country"]
-            if raw.get("year"):
-                metadata["version"] = raw["year"]
-        elif is_openprescribing_payload(raw):
-            metadata["identifier"] = raw["identifier"]
-            metadata["record"] = raw["record"]
-        cleaned: dict[str, Any] = {}
-        for key, value in metadata.items():
-            if value in (None, "", [], {}):
-                continue
-            cleaned[key] = value
-        return cleaned
 
     def _detect_payload_family(self, raw: AdapterDocumentPayload) -> str:
         if is_literature_payload(raw):
@@ -637,7 +632,7 @@ class ClinicalTrialsBuilder(IrBuilder):
             blocks=sections,
             tables=(),
             payload_provenance=None,
-            payload_metadata={},
+            payload_metadata=None,
         )
 
         outcomes = study.get("outcomes") or []
@@ -701,7 +696,7 @@ class PmcBuilder(IrBuilder):
             blocks=sections,
             tables=table_entries,
             payload_provenance=None,
-            payload_metadata={},
+            payload_metadata=None,
         )
 
 
@@ -732,7 +727,7 @@ class DailyMedBuilder(IrBuilder):
             blocks=block_payloads,
             tables=table_entries,
             payload_provenance=None,
-            payload_metadata={},
+            payload_metadata=None,
         )
 
 
@@ -755,7 +750,7 @@ class MinerUBuilder(IrBuilder):
             blocks=(),
             tables=(),
             payload_provenance=None,
-            payload_metadata={},
+            payload_metadata=None,
         )
 
         canonical_text = document.text
@@ -973,5 +968,5 @@ class GuidelineBuilder(IrBuilder):
             blocks=blocks,
             tables=table_entries,
             payload_provenance=None,
-            payload_metadata={},
+            payload_metadata=None,
         )

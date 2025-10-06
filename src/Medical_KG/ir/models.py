@@ -135,6 +135,7 @@ class DocumentIR:
     span_map: SpanMap = field(default_factory=SpanMap)
     created_at: datetime = field(default_factory=datetime.utcnow)
     provenance: MutableMapping[str, Any] = field(default_factory=dict)
+    metadata: MutableMapping[str, Any] = field(default_factory=dict)
 
     def add_block(self, block: Block) -> None:
         self.blocks.append(block)
@@ -175,6 +176,7 @@ class DocumentIR:
             "span_map": self.span_map.to_list(),
             "created_at": self.created_at.isoformat(),
             "provenance": dict(self.provenance),
+            "metadata": dict(self.metadata),
         }
 
 

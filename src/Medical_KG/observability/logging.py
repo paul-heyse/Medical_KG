@@ -7,7 +7,10 @@ import os
 import random
 from typing import Any
 
-from pythonjsonlogger import jsonlogger
+try:  # pragma: no cover - optional dependency
+    from pythonjsonlogger import jsonlogger
+except ModuleNotFoundError:  # pragma: no cover - fallback to stdlib formatter
+    jsonlogger = None
 
 __all__ = ["configure_logging"]
 
@@ -37,10 +40,15 @@ def configure_logging(extra_fields: dict[str, Any] | None = None) -> None:
     level = os.getenv("MEDKG_LOG_LEVEL", "INFO").upper()
     sample_rate = float(os.getenv("MEDKG_LOG_SAMPLE_RATE", "1.0"))
     handler = logging.StreamHandler()
-    formatter = jsonlogger.JsonFormatter(
-        "%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s %(trace_id)s %(span_id)s",
-        rename_fields={"levelname": "level", "asctime": "timestamp"},
-    )
+    if jsonlogger is not None:
+        formatter = jsonlogger.JsonFormatter(
+            "%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s %(trace_id)s %(span_id)s",
+            rename_fields={"levelname": "level", "asctime": "timestamp"},
+        )
+    else:
+        formatter = logging.Formatter(
+            "%(asctime)s %(levelname)s %(name)s %(message)s", datefmt="%Y-%m-%dT%H:%M:%S%z"
+        )
     handler.setFormatter(formatter)
     handler.addFilter(SamplingFilter(sample_rate))
     root = logging.getLogger()

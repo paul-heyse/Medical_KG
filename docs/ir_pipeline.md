@@ -30,6 +30,30 @@ To extend the system, create a new builder subclassing `IrBuilder`, call `super(
 - Literature payloads (PubMed, PMC, MedRxiv) emit title/abstract blocks, section hierarchies, and Mesh term provenance without JSON casting.
 - Clinical trial payloads surface eligibility text, arm/outcome blocks, and populate the document provenance with the canonical NCT identifier.
 - Guideline payloads (NICE, USPSTF) expose summary paragraphs and retain source URLs/licensing metadata in provenance.
+- Structured metadata extracted from typed payloads is attached to `DocumentIR.metadata` with standard keys (`payload_family`, `payload_type`, `identifier`, `version`, `title`, `summary`).
+
+#### Example: Typed Document Construction
+
+```python
+from Medical_KG.ingestion.models import Document
+from Medical_KG.ingestion.types import PubMedDocumentPayload
+
+raw: PubMedDocumentPayload = {
+    "pmid": "31452104",
+    "title": "Example Study",
+    "abstract": "Structured abstract text",
+    "authors": ["Doe, Jane"],
+    "mesh_terms": ["Hypertension"],
+    "pub_types": ["Journal Article"],
+}
+
+document = Document(
+    doc_id="pubmed:31452104",
+    source="pubmed",
+    content=raw["abstract"],
+    raw=raw,
+)
+```
 
 ## Validation Rules
 
@@ -48,4 +72,4 @@ Validation failures raise `ValidationError` with contextual error messages; test
 1. Normalise text with `TextNormalizer` (UTF-8, NFC, whitespace collapse, dictionary de-hyphenation, language detection).
 2. Build IR via the appropriate builder; attach provenance metadata to ensure traceability.
 3. Persist through `IrStorage.write`, which content-addresses records and records ledger state transitions.
-4. Validate using `IRValidator` before downstream ingestion into the knowledge graph. Pass `raw=document.raw` so payload-aware checks (e.g., PubMed PMID/PMCID or clinical NCT ID provenance) run alongside schema validation.
+4. Validate using `IRValidator` before downstream ingestion into the knowledge graph. Pass `raw=document.raw` so payload-aware checks (e.g., PubMed PMID/PMCID or clinical NCT ID provenance) run alongside schema validation and metadata requirements.

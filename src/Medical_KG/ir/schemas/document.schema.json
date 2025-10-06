@@ -40,7 +40,8 @@
       }
     },
     "created_at": {"type": "string"},
-    "provenance": {"type": "object"}
+    "provenance": {"type": "object"},
+    "metadata": {"type": "object"}
   },
   "additionalProperties": false
 }

@@ -32,6 +32,7 @@ from Medical_KG.utils.optional_dependencies import (
     get_httpx_module,
     iter_dependency_statuses,
 )
+from Medical_KG.utils.yaml_loader import YamlLoaderError, load_yaml_mapping
 
 
 class HttpxResponse(Protocol):
@@ -86,10 +87,29 @@ def _build_pipeline(manager: ConfigManager) -> PdfPipeline:
 
 
 def _command_validate(args: argparse.Namespace) -> int:
+    payload_path: Path | None = getattr(args, "payload", None)
+    schema_path: Path | None = getattr(args, "schema", None)
+
+    if payload_path is not None:
+        if schema_path is None:
+            print("Configuration invalid: --schema is required when providing a payload")
+            return 2
+        try:
+            payload = load_yaml_mapping(payload_path, description=payload_path.name)
+            validator = ConfigSchemaValidator(schema_path)
+            validator.validate(payload, source=payload_path.name)
+        except (ConfigError, YamlLoaderError) as exc:
+            print(f"Configuration invalid: {exc}")
+            return 1
+        message = "Config valid (strict)" if args.strict else "Config valid"
+        print(message)
+        return 0
+
     try:
         manager = _load_manager(args.config_dir)
         payload = manager.raw_payload()
-        ConfigSchemaValidator(manager.base_path / "config.schema.json").validate(
+        validator_path = schema_path or manager.base_path / "config.schema.json"
+        ConfigSchemaValidator(validator_path).validate(
             payload, source="CLI payload"
         )
         _ = manager.config
@@ -356,6 +376,8 @@ def build_parser() -> argparse.ArgumentParser:
     validate = config_subparsers.add_parser("validate", help="Validate configuration files")
     validate.add_argument("--strict", action="store_true", help="Fail on any warning")
     validate.add_argument("--config-dir", type=Path, default=None, help="Config directory")
+    validate.add_argument("--schema", type=Path, default=None, help="Override schema file")
+    validate.add_argument("payload", nargs="?", type=Path, help="Optional config payload to validate")
     validate.set_defaults(func=_command_validate)
 
     show = config_subparsers.add_parser("show", help="Print effective configuration")

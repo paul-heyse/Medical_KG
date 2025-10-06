@@ -7,6 +7,8 @@ Use this checklist before promoting a build to production. All items must be ✅
 - [ ] `pytest -q` and `ruff check` pass on the release branch.
 - [ ] `ops/e2e/run_verification.py --mode offline` passes in CI.
 - [ ] Nightly verification (`.github/workflows/nightly-e2e.yml`) green for the past 3 runs.
+- [ ] Configuration payload validated via `med config validate --schema config/config.schema.json config/config.yaml`.
+- [ ] `med licensing validate --licenses licenses.yml` succeeds against the release artefact.
 - [ ] Load test budgets met (`ops/load_test/check_thresholds.py`).
 - [ ] Chaos suite dry-run executed (no outstanding TODOs or skipped tests).
 

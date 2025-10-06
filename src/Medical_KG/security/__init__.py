@@ -1,7 +1,7 @@
 """Security and compliance utilities."""
 
 from .audit import AuditEvent, AuditLogger
-from .licenses import LicenseRegistry, LicenseSession, LicenseTier
+from .licenses import LicenseRegistry, LicenseRegistryError, LicenseSession, LicenseTier
 from .provenance import ExtractionActivity, ProvenanceStore
 from .rbac import RBACEngine, Role, ScopeEnforcer, ScopeError
 from .retention import PurgePipeline, RetentionPolicy, RetentionRecord, RetentionResult
@@ -17,6 +17,7 @@ __all__ = [
     "AuditEvent",
     "AuditLogger",
     "LicenseRegistry",
+    "LicenseRegistryError",
     "LicenseTier",
     "LicenseSession",
     "ScopeEnforcer",

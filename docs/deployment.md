@@ -264,6 +264,10 @@ curl -s 'http://prometheus:9090/api/v1/alerts' | jq '.data.alerts | length'
 # Expected: 0 or only info-level alerts
 ```
 
+- Tail the API pod (`kubectl logs deployment/api -n medkg`) for structured log warnings. New schema validation failures surface as `Configuration invalid` messages with JSON pointers; investigate before proceeding.
+- Run `med licensing validate --licenses ops/releases/<date>/licenses.yml` from the release artefact to confirm the hardened loader accepts the payload.
+- Review load-test budget output (`python ops/load_test/check_thresholds.py --budget ops/load_test/budget.yaml <report>`) to ensure the shared YAML loader produces structured thresholds.
+
 ### 4. Smoke Test Each Endpoint
 
 ```bash

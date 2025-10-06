@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-import yaml
+from Medical_KG.utils.yaml_loader import YamlLoaderError, load_yaml_mapping
 
 from .loaders import ConceptLoader
 from .models import Concept
@@ -40,7 +40,10 @@ class LicensePolicy:
     def from_file(cls, path: str | Path) -> "LicensePolicy":
         """Load entitlements and loader overrides from a YAML configuration file."""
 
-        data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+        try:
+            data = load_yaml_mapping(Path(path), description="catalog license policy")
+        except YamlLoaderError as exc:
+            raise RuntimeError(str(exc)) from exc
         buckets = data.get("buckets", {})
         entitlements = {
             "open": bool(buckets.get("open", True)),

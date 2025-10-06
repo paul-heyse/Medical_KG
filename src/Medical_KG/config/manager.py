@@ -17,12 +17,17 @@ from pathlib import Path
 from typing import Any, Iterable, cast
 
 from jsonschema import FormatChecker, ValidationError
-from jsonschema.validators import validator_for
 from packaging.version import InvalidVersion, Version
 
-import yaml
 from Medical_KG.compat.prometheus import Gauge, GaugeLike
 from Medical_KG.types import JSONMapping, JSONObject, JSONValue, MutableJSONMapping
+from Medical_KG.utils.json_schema import (
+    JsonSchemaValidationError,
+    JsonSchemaValidator,
+    pointer_from_path,
+    stringify_instance,
+)
+from Medical_KG.utils.yaml_loader import YamlLoaderError, load_yaml_mapping
 
 from .models import AuthSettings, Config, PolicyDocument, validate_constraints
 
@@ -102,20 +107,6 @@ def _build_format_checker() -> FormatChecker:
         return isinstance(value, str) and value in _adapter_names()
 
     return checker
-
-
-def _pointer_from_path(path: Iterable[Any]) -> str:
-    parts = [str(part) for part in path]
-    if not parts:
-        return "<root>"
-    return "/" + "/".join(parts)
-
-
-def _stringify_instance(value: JSONValue) -> str:
-    try:
-        return json.dumps(value, sort_keys=True)
-    except (TypeError, ValueError):
-        return repr(value)
 
 
 def _expected_description(error: ValidationError) -> str | None:
@@ -226,9 +217,12 @@ class ConfigSchemaValidator:
                 "config.schema.json 'version' must follow semantic versioning"
             ) from exc
         self._allow_older = allow_older if allow_older is not None else _env_flag(ALLOW_OLD_SCHEMA_ENV, True)
-        validator_cls = validator_for(schema)
-        validator_cls.check_schema(schema)
-        self._validator = validator_cls(schema, format_checker=self._format_checker)
+        self._schema_validator = JsonSchemaValidator(
+            schema,
+            heading="Configuration validation failed:",
+            format_checker=self._format_checker,
+            formatter=self._format_error,
+        )
 
     def validate(self, payload: JSONMapping, *, source: str = "configuration") -> None:
         declared_version = _extract_declared_version(payload)
@@ -260,21 +254,14 @@ class ConfigSchemaValidator:
                 else:
                     raise ConfigError(message + f" Set {ALLOW_OLD_SCHEMA_ENV}=1 to permit older schemas.")
 
-        errors = sorted(
-            self._validator.iter_errors(payload), key=lambda err: tuple(str(p) for p in err.absolute_path)
-        )
-        if not errors:
-            return
-
-        messages = [
-            self._format_error(error, source)
-            for error in errors
-        ]
-        raise ConfigError("Configuration validation failed:\n" + "\n\n".join(messages))
+        try:
+            self._schema_validator.validate(payload, source=source)
+        except JsonSchemaValidationError as exc:
+            raise ConfigError(str(exc)) from exc
 
     def _format_error(self, error: ValidationError, source: str) -> str:
-        pointer = _pointer_from_path(error.absolute_path)
-        value_repr = _stringify_instance(cast(JSONValue, error.instance))
+        pointer = pointer_from_path(error.absolute_path)
+        value_repr = stringify_instance(cast(JSONValue, error.instance))
         expected = _expected_description(error)
         hint = _remediation_hint(error)
         lines = [
@@ -322,10 +309,10 @@ class ConfigManager:
 
     def _load_policy(self) -> PolicyDocument:
         policy_path = self.base_path / "policy.yaml"
-        with policy_path.open("r", encoding="utf-8") as handle:
-            policy_data = yaml.safe_load(handle) or {}
-        if not isinstance(policy_data, MutableMapping):
-            raise ConfigError("policy.yaml must contain a mapping at the root")
+        try:
+            policy_data = load_yaml_mapping(policy_path, description="policy.yaml")
+        except YamlLoaderError as exc:
+            raise ConfigError(str(exc)) from exc
         try:
             normalized = dict(cast(MutableJSONMapping, policy_data))
             return PolicyDocument.from_dict(normalized)
@@ -368,10 +355,10 @@ class ConfigManager:
         return self._apply_env_overrides(payload)
 
     def _load_yaml(self, path: Path) -> JSONObject:
-        with path.open("r", encoding="utf-8") as handle:
-            data = yaml.safe_load(handle) or {}
-        if not isinstance(data, MutableMapping):
-            raise ConfigError(f"{path.name} must contain a mapping at the root")
+        try:
+            data = load_yaml_mapping(path, description=path.name)
+        except YamlLoaderError as exc:
+            raise ConfigError(str(exc)) from exc
         return dict(cast(MutableJSONMapping, data))
 
     def _deep_merge(self, base: MutableJSONMapping, overlay: JSONMapping) -> JSONObject:

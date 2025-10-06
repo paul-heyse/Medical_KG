@@ -107,7 +107,7 @@ class IRValidator:
                 raise ValidationError(f"Document field '{field}' cannot be empty")
 
         if self._language_pattern and not self._language_pattern.fullmatch(payload["language"]):
-            raise ValidationError("Document language must be a two-letter code")
+            raise ValidationError("Document field 'language' must be a two-letter ISO code")
 
         if not isinstance(payload.get("blocks"), list):
             raise ValidationError("Document blocks must be an array")

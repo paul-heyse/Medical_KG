@@ -25,9 +25,10 @@ from datetime import datetime, timezone
 from enum import Enum, IntEnum
 from importlib import metadata
 from pathlib import Path
-from typing import Any, Callable, Iterator, Optional, Sequence, cast
+from typing import Any, Callable, Iterator, Mapping, Optional, Sequence, cast
 
 import typer
+from jsonschema import SchemaError
 
 from Medical_KG.ingestion.cli_helpers import (
     BatchValidationError,
@@ -53,6 +54,7 @@ from Medical_KG.ingestion.events import (
 from Medical_KG.ingestion.ledger import IngestionLedger
 from Medical_KG.ingestion.models import Document
 from Medical_KG.ingestion.pipeline import IngestionPipeline, PipelineResult
+from Medical_KG.utils.json_schema import JsonSchemaValidationError, JsonSchemaValidator
 
 try:  # pragma: no cover - optional rich dependency
     Console = getattr(importlib.import_module("rich.console"), "Console")
@@ -132,32 +134,29 @@ def _build_pipeline(ledger_path: Path) -> IngestionPipeline:
 
 def _load_json_schema_validator(path: Path) -> Callable[[dict[str, Any]], None]:
     try:
-        import jsonschema
-    except Exception as exc:  # pragma: no cover - optional dependency handling
-        raise typer.BadParameter(
-            "jsonschema is required when using --schema. Install it via 'micromamba install jsonschema' or 'pip install jsonschema'."
-        ) from exc
-
-    try:
-        with path.open("r", encoding="utf-8") as handle:
-            schema = json.load(handle)
+        schema_data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise typer.BadParameter(f"Failed to parse JSON schema at {path}: {exc.msg}") from exc
 
+    if not isinstance(schema_data, Mapping):
+        raise typer.BadParameter(f"Schema at {path} must contain a JSON object at the root")
+
+    schema_mapping = cast(Mapping[str, Any], schema_data)
+
     try:
-        validator_cls = jsonschema.validators.validator_for(schema)
-        validator_cls.check_schema(schema)
-        validator = validator_cls(schema)
-    except jsonschema.SchemaError as exc:
+        validator = JsonSchemaValidator(
+            schema_mapping,
+            heading="Schema validation failed:",
+        )
+    except SchemaError as exc:
         raise typer.BadParameter(f"Schema at {path} is invalid: {exc.message}") from exc
 
     def _validate(instance: dict[str, Any]) -> None:
         try:
-            validator.validate(instance)
-        except jsonschema.ValidationError as exc:
-            location = "/".join(str(part) for part in exc.path) or "<root>"
+            validator.validate(instance, source="batch entry")
+        except JsonSchemaValidationError as exc:
             raise BatchValidationError(
-                f"Schema validation failed at {location}: {exc.message}",
+                str(exc),
                 hint="Update the NDJSON payload or adjust the provided schema.",
             ) from exc
 

@@ -4,6 +4,8 @@
 
 **5 comprehensive OpenSpec change proposals** have been created, validated, and are ready for implementation. Total scope: **522 detailed tasks** transforming the Medical_KG codebase into a production-grade, maintainable platform.
 
+**Implementation update:** The `implement-optimization-legacy-retirement` build has landed—shared YAML loaders, CLI schema validation, and observability dependency ergonomics now match the approved specs, closing the final integration gap.
+
 ## ✅ Proposal Status: ALL COMPLETE & VALIDATED
 
 ### Proposal 1: refactor-ingestion-pipeline-streaming ✅

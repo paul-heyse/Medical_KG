@@ -45,6 +45,7 @@ def test_ir_builder_uses_pubmed_payload() -> None:
     assert document.metadata["payload_type"] == "pubmed"
     assert document.metadata["identifier"] == "12345"
     assert document.metadata["summary"] == "Summary of the article."
+    assert document.language == "en"
     validator = IRValidator()
     validator.validate_document(document, raw=raw)
 
@@ -83,6 +84,7 @@ def test_ir_builder_extracts_pmc_sections() -> None:
     assert document.metadata["payload_type"] == "pmc"
     assert document.metadata["identifier"] == "PMC67890"
     assert document.metadata["title"] == "PMC Article"
+    assert document.language == "en"
     IRValidator().validate_document(document, raw=raw)
 
 
@@ -124,6 +126,7 @@ def test_ir_builder_extracts_clinical_payload() -> None:
     assert document.metadata["payload_type"] == "clinical_document"
     assert document.metadata["identifier"] == "NCT00000000"
     assert document.metadata["version"] == "v1"
+    assert document.language == "en"
     IRValidator().validate_document(document, raw=raw)
 
 

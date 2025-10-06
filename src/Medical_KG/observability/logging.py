@@ -5,16 +5,26 @@ from __future__ import annotations
 import logging
 import os
 import random
-from importlib import import_module
 from types import ModuleType
 from typing import Any, Optional, cast
 
+from Medical_KG.utils.optional_dependencies import MissingDependencyError, optional_import
+
+_jsonlogger_error: MissingDependencyError | None = None
+
 
 def _load_jsonlogger() -> Optional[ModuleType]:
+    global _jsonlogger_error
     try:  # pragma: no cover - optional dependency
-        return import_module("pythonjsonlogger.jsonlogger")
-    except ModuleNotFoundError:  # pragma: no cover - fallback to stdlib formatter
+        module = optional_import(
+            "pythonjsonlogger.jsonlogger",
+            feature_name="observability",
+            package_name="python-json-logger",
+        )
+    except MissingDependencyError as exc:  # pragma: no cover - fallback to stdlib formatter
+        _jsonlogger_error = exc
         return None
+    return cast(ModuleType, module)
 
 
 def _get_json_formatter_class(module: ModuleType) -> type[Any]:
@@ -25,6 +35,7 @@ def _get_json_formatter_class(module: ModuleType) -> type[Any]:
 
 
 jsonlogger = _load_jsonlogger()
+_hint_emitted = False
 
 __all__ = ["configure_logging"]
 
@@ -50,6 +61,10 @@ def configure_logging(extra_fields: dict[str, Any] | None = None) -> None:
 
     def _build_formatter() -> logging.Formatter:
         if jsonlogger is None:
+            global _hint_emitted
+            if not _hint_emitted and _jsonlogger_error is not None:
+                logging.getLogger(__name__).warning("%s", _jsonlogger_error)
+                _hint_emitted = True
             return logging.Formatter(
                 "%(asctime)s %(levelname)s %(name)s %(message)s", datefmt="%Y-%m-%dT%H:%M:%S%z"
             )

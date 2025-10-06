@@ -20,7 +20,12 @@ please follow the steps below before sending a pull request.
    - `ruff check src tests`
    - `mypy --strict src/Medical_KG`
    - `pytest -q`
-5. **Update docs** – if you add new patterns or optional integrations, document the
+5. **Enforce IR type safety** – when modifying `src/Medical_KG/ir/`, run
+   `mypy --strict src/Medical_KG/ir` and ensure `DocumentIR.metadata` retains
+   the `payload_family`/`payload_type` contract. The IR module is linted with
+   `ANN401`, so avoid introducing `Any` values outside of sanctioned
+   compatibility shims.
+6. **Update docs** – if you add new patterns or optional integrations, document the
    approach in [`docs/type_safety.md`](./docs/type_safety.md) and reference the unified
    ingestion CLI (`med ingest <adapter>`) for examples. All ingestion code should consume
    `IngestionPipeline.stream_events()` (or the eager `run_async()` helper); the deprecated

@@ -214,6 +214,17 @@ def test_kg_write_happy_path_and_validation_error(app: FastAPI) -> None:
     asyncio.run(run())
 
 
+def _stream_raw_payload(doc_id: str) -> PubMedDocumentPayload:
+    return {
+        "pmid": doc_id,
+        "title": "Untitled",
+        "abstract": "",
+        "authors": [],
+        "mesh_terms": [],
+        "pub_types": [],
+    }
+
+
 def test_ingestion_stream_endpoint(app: FastAPI) -> None:
     headers: dict[str, str] = {"X-API-Key": "demo-key"}
 
@@ -240,17 +251,6 @@ def test_ingestion_stream_endpoint(app: FastAPI) -> None:
                 duration=0.1,
                 adapter_metadata={},
             )
-
-
-def _stream_raw_payload(doc_id: str) -> PubMedDocumentPayload:
-    return {
-        "pmid": doc_id,
-        "title": "Untitled",
-        "abstract": "",
-        "authors": [],
-        "mesh_terms": [],
-        "pub_types": [],
-    }
             yield BatchProgress(
                 timestamp=0.2,
                 pipeline_id="test",

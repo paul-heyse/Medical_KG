@@ -4,6 +4,9 @@ import pytest
 
 from Medical_KG.ingestion.types import (
     ClinicalDocumentPayload,
+    MeshDocumentPayload,
+    NiceGuidelineDocumentPayload,
+    OpenPrescribingDocumentPayload,
     PmcDocumentPayload,
     PubMedDocumentPayload,
 )
@@ -38,6 +41,9 @@ def test_ir_builder_uses_pubmed_payload() -> None:
     assert "abstract" in sections
     assert document.provenance["pubmed"]["pmid"] == "12345"
     assert document.provenance["mesh_terms"] == ["Term1", "Term2"]
+    assert document.metadata["payload_family"] == "literature"
+    assert document.metadata["identifier"] == "12345"
+    assert document.metadata["doi"] == "10.1000/example"
     validator = IRValidator()
     validator.validate_document(document, raw=raw)
 
@@ -72,6 +78,8 @@ def test_ir_builder_extracts_pmc_sections() -> None:
     assert heading_sections, "Expected heading blocks from PMC sections"
     assert len(paragraph_sections) >= 2
     assert document.provenance["pmcid"] == "PMC67890"
+    assert document.metadata["payload_type"] == "pmc"
+    assert document.metadata["identifier"] == "PMC67890"
     IRValidator().validate_document(document, raw=raw)
 
 
@@ -109,6 +117,8 @@ def test_ir_builder_extracts_clinical_payload() -> None:
     assert len(arm_blocks) == 2
     assert len(outcome_blocks) == 1
     assert document.provenance["nct_id"] == "NCT00000000"
+    assert document.metadata["payload_family"] == "clinical"
+    assert document.metadata["version"] == "v1"
     IRValidator().validate_document(document, raw=raw)
 
 
@@ -120,4 +130,65 @@ def test_ir_builder_without_payload() -> None:
             source="generic",
             uri="https://example.org/doc/1",
             text="Plain text content",
+            raw=None,
         )
+
+
+def test_ir_builder_extracts_guideline_metadata() -> None:
+    builder = IrBuilder()
+    raw: NiceGuidelineDocumentPayload = {
+        "uid": "NG123",
+        "title": "Guideline Title",
+        "summary": "Summary paragraph",
+        "url": "https://nice.org.uk/NG123",
+        "licence": "OpenGov",
+    }
+    document = builder.build(
+        doc_id="nice:NG123",
+        source="nice",
+        uri="https://nice.org.uk/NG123",
+        text="",
+        raw=raw,
+    )
+    assert document.metadata["payload_family"] == "guideline"
+    assert document.metadata["identifier"] == "NG123"
+    assert document.metadata["summary"] == "Summary paragraph"
+    IRValidator().validate_document(document, raw=raw)
+
+
+def test_ir_builder_extracts_terminology_metadata() -> None:
+    builder = IrBuilder()
+    raw: MeshDocumentPayload = {
+        "name": "Aspirin",
+        "terms": ["Acetylsalicylic Acid"],
+        "descriptor_id": "D001241",
+    }
+    document = builder.build(
+        doc_id="mesh:D001241",
+        source="mesh",
+        uri="https://meshb.nlm.nih.gov/record/ui?ui=D001241",
+        text="",
+        raw=raw,
+    )
+    assert document.metadata["payload_family"] == "terminology"
+    assert document.metadata["identifier"] == "D001241"
+    assert document.metadata["title"] == "Aspirin"
+    IRValidator().validate_document(document, raw=raw)
+
+
+def test_ir_builder_extracts_openprescribing_metadata() -> None:
+    builder = IrBuilder()
+    raw: OpenPrescribingDocumentPayload = {
+        "identifier": "chemoprevention",
+        "record": {"title": "Chemoprevention stats"},
+    }
+    document = builder.build(
+        doc_id="openprescribing:chemoprevention",
+        source="openprescribing",
+        uri="https://openprescribing.net/chemoprevention",
+        text="",
+        raw=raw,
+    )
+    assert document.metadata["payload_family"] == "knowledge_base"
+    assert document.metadata["identifier"] == "chemoprevention"
+    IRValidator().validate_document(document, raw=raw)

@@ -5,6 +5,7 @@
 - Removed the deprecated `IngestionPipeline.run_async_legacy()` wrapper, related environment toggles, and legacy telemetry labels.
 - Deleted CLI migration tooling and helper scripts now that the unified CLI is fully adopted.
 - Removed the final ledger compatibility shims (`LedgerState.LEGACY`, string coercion helpers) and introduced enum-only validation tooling.
+- Retired IR builder fallback payload coercion; `DocumentIR` now requires typed `Document.raw` metadata and exposes structured `metadata` for downstream consumers.
 
 ### Documentation
 - Documented the legacy wrapper removal across runbooks, contributor guidance, and operations checklists.

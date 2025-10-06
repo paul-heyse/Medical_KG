@@ -15,8 +15,8 @@ class Document:
     doc_id: str
     source: str
     content: str
-    metadata: MutableJSONMapping = field(default_factory=dict)
     raw: DocumentRaw
+    metadata: MutableJSONMapping = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.raw is None:

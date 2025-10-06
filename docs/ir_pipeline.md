@@ -31,6 +31,44 @@ To extend the system, create a new builder subclassing `IrBuilder`, call `super(
 - Clinical trial payloads surface eligibility text, arm/outcome blocks, and populate the document provenance with the canonical NCT identifier.
 - Guideline payloads (NICE, USPSTF) expose summary paragraphs and retain source URLs/licensing metadata in provenance.
 
+#### Example: Building and validating a typed document
+
+```python
+from Medical_KG.ingestion.models import Document
+from Medical_KG.ingestion.types import PubMedDocumentPayload
+from Medical_KG.ir.builder import IrBuilder
+from Medical_KG.ir.validator import IRValidator
+
+payload: PubMedDocumentPayload = {
+    "pmid": "12345",
+    "title": "Example Title",
+    "abstract": "Structured summary",
+    "authors": ["Author One", "Author Two"],
+    "mesh_terms": ["Term1"],
+    "pub_types": ["Journal Article"],
+}
+
+document = Document(
+    doc_id="pubmed:12345",
+    source="pubmed",
+    content=payload["abstract"],
+    raw=payload,
+)
+
+ir = IrBuilder().build(
+    doc_id=document.doc_id,
+    source=document.source,
+    uri="https://pubmed.ncbi.nlm.nih.gov/12345/",
+    text=document.content,
+    metadata=document.metadata,
+    raw=document.raw,
+)
+
+IRValidator().validate_document(ir, raw=document.raw)
+```
+
+The resulting `DocumentIR.metadata` contains `payload_family`, `payload_type`, `identifier`, and other structured fields extracted directly from the typed payload, enabling downstream consumers to reason about source-specific metadata without casts.
+
 ## Validation Rules
 
 `IRValidator` enforces:
@@ -40,6 +78,9 @@ To extend the system, create a new builder subclassing `IrBuilder`, call `super(
 3. Monotonic block offsets and span-map ordering.
 4. Table span validity (`end >= start`).
 5. Domain-specific guards (e.g., span maps must be non-empty when provided).
+6. Typed payload conformance—identifier, version, and summary fields extracted into `DocumentIR.metadata` must mirror the original adapter payload.
+
+`IRValidator.validate_document(document, raw=payload)` now raises descriptive errors such as `"pubmed payload metadata field 'identifier' must equal '12345'"` when metadata and payload drift, guiding adapter authors toward fixing typed payload regressions.
 
 Validation failures raise `ValidationError` with contextual error messages; tests cover invalid spans, missing fields, and schema mismatches.
 

@@ -560,6 +560,30 @@ def test_stream_events_handle_large_batches(tmp_path: Path) -> None:
     assert processed == record_count
 
 
+def test_pipeline_integration_state_history(tmp_path: Path) -> None:
+    ledger_path = tmp_path / "ledger-history.jsonl"
+    ledger = IngestionLedger(ledger_path)
+    records = [
+        {"id": "doc-1", "content": "payload"},
+        {"id": "doc-2", "content": "payload"},
+    ]
+    adapter = _StubAdapter(AdapterContext(ledger), records=records)
+    pipeline = IngestionPipeline(
+        ledger,
+        registry=_Registry(adapter),
+        client_factory=lambda: _NoopClient(),
+    )
+
+    results = pipeline.run("stub")
+    assert results
+    history_doc1 = ledger.get_state_history("doc-1")
+    assert history_doc1
+    states = [audit.new_state for audit in history_doc1]
+    assert states[0] is LedgerState.FETCHING
+    assert states[-1] is LedgerState.COMPLETED
+    assert LedgerState.VALIDATED in states
+
+
 def test_stream_events_support_concurrent_execution(tmp_path: Path) -> None:
     ledger_a = IngestionLedger(tmp_path / "ledger-a.jsonl")
     ledger_b = IngestionLedger(tmp_path / "ledger-b.jsonl")

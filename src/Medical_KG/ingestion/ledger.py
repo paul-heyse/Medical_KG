@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -218,6 +219,31 @@ def _ensure_ledger_state(value: object, *, argument: str) -> LedgerState:
         f"{argument} must be a LedgerState instance (received {value!r}). "
         "Use the LedgerState enum, e.g. LedgerState.COMPLETED."
     )
+
+
+def _coerce_deprecated_state(value: str, *, argument: str) -> LedgerState:
+    token = value.strip()
+    if not token:
+        raise TypeError(
+            f"{argument} cannot be an empty string. Pass a LedgerState enum."
+        )
+    warnings.warn(
+        (
+            f"String-based ledger states are deprecated; pass LedgerState instead "
+            f"(received {value!r})."
+        ),
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    alias = _PERSISTED_STATE_ALIASES.get(token.lower())
+    if alias is not None:
+        return alias
+    try:
+        return LedgerState[token.upper()]
+    except KeyError as exc:  # pragma: no cover - defensive guard for bad inputs
+        raise TypeError(
+            f"Unknown ledger state {value!r}; pass a LedgerState enum value."
+        ) from exc
 
 
 def _decode_state(
@@ -697,7 +723,7 @@ class IngestionLedger:
     def record(
         self,
         doc_id: str,
-        state: LedgerState,
+        state: LedgerState | str,
         metadata: Mapping[str, JSONValue] | None = None,
         *,
         adapter: str | None = None,
@@ -706,9 +732,12 @@ class IngestionLedger:
         duration_seconds: float | None = None,
         parameters: Mapping[str, JSONValue] | None = None,
     ) -> LedgerAuditRecord:
-        """Alias for :meth:`update_state` requiring :class:`LedgerState`."""
+        """Alias for :meth:`update_state` accepting legacy string states."""
 
-        coerced = _ensure_ledger_state(state, argument="state")
+        if isinstance(state, str):
+            coerced = _coerce_deprecated_state(state, argument="state")
+        else:
+            coerced = _ensure_ledger_state(state, argument="state")
         return self.update_state(
             doc_id,
             coerced,

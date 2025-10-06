@@ -38,6 +38,10 @@ def test_ir_builder_uses_pubmed_payload() -> None:
     assert "abstract" in sections
     assert document.provenance["pubmed"]["pmid"] == "12345"
     assert document.provenance["mesh_terms"] == ["Term1", "Term2"]
+    assert document.metadata["payload_family"] == "literature"
+    assert document.metadata["payload_type"] == "pubmed"
+    assert document.metadata["identifier"] == "12345"
+    assert document.metadata["summary"] == "Summary of the article."
     validator = IRValidator()
     validator.validate_document(document, raw=raw)
 
@@ -72,6 +76,10 @@ def test_ir_builder_extracts_pmc_sections() -> None:
     assert heading_sections, "Expected heading blocks from PMC sections"
     assert len(paragraph_sections) >= 2
     assert document.provenance["pmcid"] == "PMC67890"
+    assert document.metadata["payload_family"] == "literature"
+    assert document.metadata["payload_type"] == "pmc"
+    assert document.metadata["identifier"] == "PMC67890"
+    assert document.metadata["title"] == "PMC Article"
     IRValidator().validate_document(document, raw=raw)
 
 
@@ -109,15 +117,20 @@ def test_ir_builder_extracts_clinical_payload() -> None:
     assert len(arm_blocks) == 2
     assert len(outcome_blocks) == 1
     assert document.provenance["nct_id"] == "NCT00000000"
+    assert document.metadata["payload_family"] == "clinical"
+    assert document.metadata["payload_type"] == "clinical_document"
+    assert document.metadata["identifier"] == "NCT00000000"
+    assert document.metadata["version"] == "v1"
     IRValidator().validate_document(document, raw=raw)
 
 
 def test_ir_builder_without_payload() -> None:
     builder = IrBuilder()
-    with pytest.raises(ValueError, match="raw"):
+    with pytest.raises(TypeError, match="unexpected raw payload type"):
         builder.build(
             doc_id="doc:1",
             source="generic",
             uri="https://example.org/doc/1",
             text="Plain text content",
+            raw=None,  # type: ignore[arg-type]
         )

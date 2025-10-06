@@ -8,25 +8,32 @@ please follow the steps below before sending a pull request.
 1. **Create typed modules** – every new function, method, and class MUST include type
    annotations. Avoid `Any` unless interfacing with third-party libraries and prefer the
    typed facades in [`Medical_KG.compat`](./src/Medical_KG/compat/).
-2. **Handle optional dependencies via compat** – use helpers such as `create_async_client`,
+2. **Enforce typed IR payloads** – `Document.raw` **must** be a member of the
+   [`DocumentRaw`](./src/Medical_KG/ingestion/types.py) union. When extending the IR
+   layer, call `IrBuilder.build(..., raw=document.raw)` and
+   `IRValidator().validate_document(document_ir, raw=document.raw)` so metadata
+   extraction stays type-safe. Populate `DocumentIR.metadata` with `payload_family`,
+   `payload_type`, and identifiers sourced from the typed payload; validator failures now
+   surface precise guidance when metadata drifts from adapter contracts.
+3. **Handle optional dependencies via compat** – use helpers such as `create_async_client`,
    `load_pipeline`, `load_encoding`, and `load_locust` so strict mypy checks work even when
    optional packages are missing locally.
-3. **Standardise new extras** – when introducing a feature that depends on an optional
+4. **Standardise new extras** – when introducing a feature that depends on an optional
    package, update `DEPENDENCY_REGISTRY` (and tests) in
    [`Medical_KG.utils.optional_dependencies`](./src/Medical_KG/utils/optional_dependencies.py),
    add the extras group in `pyproject.toml`, refresh `docs/dependencies.md`, and provide a
    stub under `stubs/` so `mypy --strict` continues to pass.
-4. **Run quality gates**:
+5. **Run quality gates**:
    - `ruff check src tests`
    - `mypy --strict src/Medical_KG`
    - `pytest -q`
-5. **Update docs** – if you add new patterns or optional integrations, document the
+6. **Update docs** – if you add new patterns or optional integrations, document the
    approach in [`docs/type_safety.md`](./docs/type_safety.md) and reference the unified
    ingestion CLI (`med ingest <adapter>`) for examples. All ingestion code should consume
    `IngestionPipeline.stream_events()` (or the eager `run_async()` helper); the deprecated
    `run_async_legacy()` wrapper was removed in October 2025. Historical migration material lives
    under [`docs/archive/cli_unification/`](./docs/archive/cli_unification/).
-6. **Follow current testing guidance** – align with the streaming-first testing
+7. **Follow current testing guidance** – align with the streaming-first testing
    expectations described in [`docs/testing_strategy.md`](./docs/testing_strategy.md)
    and the legacy cleanup summary in [`docs/test_suite_cleanup.md`](./docs/test_suite_cleanup.md)
    before authoring or updating tests.

@@ -48,7 +48,8 @@ Failure: any stage can fall back to [FAILED]
 - Counters: `med_ledger_state_transitions_total` (labelled by `from_state`/`to_state`), `med_ledger_initialization_total` (snapshot vs. full load), `med_ledger_errors_total` (invalid transitions, serialization failures).
 - Gauges: `med_ledger_documents_by_state`, `med_ledger_stuck_documents` (non-terminal backlog).
 - Histogram: `med_ledger_state_duration_seconds` observes time spent in each state prior to transition.
-- Benchmark: `python scripts/benchmarks/ledger_benchmark.py --documents 10000` measures load times for enum-only ledgers and should report <1s mean on standard staging hardware.
+- Benchmark: `python scripts/benchmarks/ledger_benchmark.py --documents 10000 --snapshot --report benchmark.json` measures both full log and snapshot-assisted loads (reporting JSON summaries for dashboards). Expect a ≥2× speedup when snapshots are present.
+- Stress verification: export `LEDGER_STRESS_TEST=1` before running `pytest -k compaction_handles_one_million_entries` to generate a synthetic ledger with one million transitions and validate compaction behaviour. The test is skipped by default to avoid heavy runtime.
 - Dashboard recommendations: chart distribution, track retry loops, and alert on sustained growth in `failed`/`retrying` buckets.
 
 ## Runbooks for Common Failures

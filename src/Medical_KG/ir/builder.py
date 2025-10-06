@@ -43,27 +43,41 @@ from Medical_KG.ingestion.types import (
     JSONMapping,
     JSONValue,
     LiteratureDocumentPayload,
+    is_access_gudid_payload,
+    is_cdc_socrata_payload,
+    is_cdc_wonder_payload,
     is_clinical_document_payload,
     is_clinical_payload,
+    is_dailymed_payload,
     is_guideline_payload,
+    is_icd11_payload,
+    is_knowledge_base_payload,
     is_literature_payload,
+    is_loinc_payload,
     is_medrxiv_payload,
+    is_mesh_payload,
     is_nice_guideline_payload,
+    is_openfda_payload,
+    is_openprescribing_payload,
     is_pmc_payload,
     is_pubmed_payload,
+    is_rxnorm_payload,
+    is_snomed_payload,
+    is_terminology_payload,
+    is_umls_payload,
     is_uspstf_payload,
+    is_who_gho_payload,
 )
 from Medical_KG.ir.models import Block, DocumentIR, SpanMap, Table
 from Medical_KG.ir.normalizer import TextNormalizer, section_from_heading
 
 
 class IrBuilder:
-    """Base builder converting source payloads into IR objects.
+    """Base builder converting typed adapter payloads into IR objects.
 
-    ``build()`` accepts the optional ``raw`` payload union emitted by ingestion
-    adapters. When provided the builder derives canonical text, semantic blocks,
-    and provenance metadata directly from the typed payload while preserving the
-    legacy behaviour for callers that omit ``raw``.
+    ``build()`` requires the typed ``raw`` payload union emitted by ingestion
+    adapters. The builder derives canonical text, semantic blocks, structured
+    metadata, and provenance directly from the typed payload.
     """
 
     def __init__(self, *, normalizer: TextNormalizer | None = None) -> None:
@@ -77,12 +91,8 @@ class IrBuilder:
         uri: str,
         text: str,
         metadata: Mapping[str, Any] | None = None,
-        raw: AdapterDocumentPayload | None = None,
+        raw: AdapterDocumentPayload,
     ) -> DocumentIR:
-        if raw is None:
-            raise ValueError(
-                "IrBuilder.build() requires a typed raw payload; ensure the adapter emitted DocumentRaw data."
-            )
         if not isinstance(raw, Mapping):
             raise TypeError(
                 "IrBuilder.build() received an unexpected raw payload type; expected a mapping produced by adapters."
@@ -93,6 +103,7 @@ class IrBuilder:
             payload_tables,
             payload_provenance,
         ) = self._prepare_payload(text, raw)
+        payload_metadata = self._extract_metadata(raw)
         return self._create_document_ir(
             doc_id=doc_id,
             source=source,
@@ -102,6 +113,7 @@ class IrBuilder:
             blocks=payload_blocks,
             tables=payload_tables,
             payload_provenance=payload_provenance,
+            payload_metadata=payload_metadata,
         )
 
     def _create_document_ir(
@@ -115,6 +127,7 @@ class IrBuilder:
         blocks: Sequence[tuple[str, str, str | None, dict[str, Any]]],
         tables: Sequence[tuple[str, list[str], list[list[str]], dict[str, Any]]],
         payload_provenance: Mapping[str, Any] | None,
+        payload_metadata: Mapping[str, Any] | None,
     ) -> DocumentIR:
         metadata_mapping: Mapping[str, Any] = metadata if metadata is not None else {}
         normalized = self.normalizer.normalize(text)
@@ -141,10 +154,15 @@ class IrBuilder:
                     page=entry.get("page"),
                     bbox=entry.get("bbox"),
                 )
+        document_metadata = self._coerce_document_metadata(metadata_mapping)
+        if document_metadata:
+            document.metadata.update(document_metadata)
         if provenance := metadata_mapping.get("provenance"):
             self._merge_provenance(document.provenance, provenance)
         if payload_provenance:
             self._merge_provenance(document.provenance, payload_provenance)
+        if payload_metadata:
+            document.metadata.update(payload_metadata)
         if blocks:
             self._add_blocks(document, blocks)
         if tables:
@@ -190,6 +208,15 @@ class IrBuilder:
                 Table(caption=caption, headers=headers, rows=rows, start=start, end=end, meta=meta)
             )
 
+    @staticmethod
+    def _coerce_document_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
+        reserved_keys = {"span_map", "provenance"}
+        return {
+            key: value
+            for key, value in metadata.items()
+            if key not in reserved_keys
+        }
+
     def _merge_provenance(
         self,
         target: MutableMapping[str, Any],
@@ -219,6 +246,167 @@ class IrBuilder:
         if is_guideline_payload(raw):
             return self._prepare_guideline_payload(text, raw)
         return text, [], [], {}
+
+    def _extract_metadata(self, raw: AdapterDocumentPayload) -> dict[str, Any]:
+        metadata: dict[str, Any] = {}
+        family = self._detect_payload_family(raw)
+        metadata["payload_family"] = family
+        metadata["payload_type"] = self._detect_payload_type(raw)
+        if is_pubmed_payload(raw):
+            metadata["identifier"] = raw["pmid"]
+            metadata["title"] = raw["title"]
+            metadata["summary"] = raw.get("abstract", "")
+            if raw.get("doi"):
+                metadata["doi"] = raw["doi"]
+            if raw.get("pmcid"):
+                metadata["pmcid"] = raw["pmcid"]
+        elif is_pmc_payload(raw):
+            metadata["identifier"] = raw["pmcid"]
+            metadata["title"] = raw["title"]
+            metadata["summary"] = raw.get("abstract", "")
+        elif is_medrxiv_payload(raw):
+            metadata["identifier"] = raw["doi"]
+            metadata["title"] = raw["title"]
+            metadata["summary"] = raw.get("abstract", "")
+            if raw.get("date"):
+                metadata["version"] = raw["date"]
+        elif is_clinical_document_payload(raw):
+            metadata["identifier"] = raw["nct_id"]
+            metadata["title"] = raw["title"]
+            metadata["version"] = raw.get("version") or ""
+            if raw.get("status"):
+                metadata["status"] = raw["status"]
+        elif is_openfda_payload(raw):
+            metadata["identifier"] = raw["identifier"]
+            metadata["version"] = raw["version"]
+            metadata["record"] = raw["record"]
+        elif is_dailymed_payload(raw):
+            metadata["identifier"] = raw["setid"]
+            metadata["title"] = raw["title"]
+            metadata["version"] = raw.get("version") or ""
+        elif is_rxnorm_payload(raw):
+            metadata["identifier"] = raw["rxcui"]
+            if raw.get("name"):
+                metadata["title"] = raw["name"]
+        elif is_access_gudid_payload(raw):
+            metadata["identifier"] = raw["udi_di"]
+            if raw.get("brand"):
+                metadata["title"] = raw["brand"]
+        elif is_nice_guideline_payload(raw):
+            metadata["identifier"] = raw["uid"]
+            metadata["title"] = raw["title"]
+            metadata["summary"] = raw.get("summary", "")
+            if raw.get("licence"):
+                metadata["licence"] = raw["licence"]
+            if raw.get("url"):
+                metadata["source_url"] = raw["url"]
+        elif is_uspstf_payload(raw):
+            metadata["title"] = raw["title"]
+            if raw.get("id"):
+                metadata["identifier"] = raw["id"]
+            if raw.get("status"):
+                metadata["status"] = raw["status"]
+            if raw.get("url"):
+                metadata["source_url"] = raw["url"]
+        elif is_mesh_payload(raw):
+            if raw.get("descriptor_id"):
+                metadata["identifier"] = raw["descriptor_id"]
+            metadata["title"] = raw["name"]
+        elif is_umls_payload(raw):
+            if raw.get("cui"):
+                metadata["identifier"] = raw["cui"]
+            if raw.get("name"):
+                metadata["title"] = raw["name"]
+        elif is_loinc_payload(raw):
+            if raw.get("code"):
+                metadata["identifier"] = raw["code"]
+            if raw.get("display"):
+                metadata["title"] = raw["display"]
+        elif is_icd11_payload(raw):
+            if raw.get("code"):
+                metadata["identifier"] = raw["code"]
+            if raw.get("title"):
+                metadata["title"] = raw["title"]
+        elif is_snomed_payload(raw):
+            if raw.get("code"):
+                metadata["identifier"] = raw["code"]
+            if raw.get("display"):
+                metadata["title"] = raw["display"]
+        elif is_cdc_socrata_payload(raw):
+            metadata["identifier"] = raw["identifier"]
+            metadata["record"] = raw["record"]
+        elif is_cdc_wonder_payload(raw):
+            metadata["record_rows"] = raw["rows"]
+        elif is_who_gho_payload(raw):
+            metadata["indicator"] = raw.get("indicator")
+            metadata["value"] = raw.get("value")
+            if raw.get("country"):
+                metadata["country"] = raw["country"]
+            if raw.get("year"):
+                metadata["version"] = raw["year"]
+        elif is_openprescribing_payload(raw):
+            metadata["identifier"] = raw["identifier"]
+            metadata["record"] = raw["record"]
+        cleaned: dict[str, Any] = {}
+        for key, value in metadata.items():
+            if value in (None, "", [], {}):
+                continue
+            cleaned[key] = value
+        return cleaned
+
+    def _detect_payload_family(self, raw: AdapterDocumentPayload) -> str:
+        if is_literature_payload(raw):
+            return "literature"
+        if is_clinical_payload(raw):
+            return "clinical"
+        if is_guideline_payload(raw):
+            return "guideline"
+        if is_terminology_payload(raw):
+            return "terminology"
+        if is_knowledge_base_payload(raw):
+            return "knowledge_base"
+        return "unknown"
+
+    def _detect_payload_type(self, raw: AdapterDocumentPayload) -> str:
+        if is_pubmed_payload(raw):
+            return "pubmed"
+        if is_pmc_payload(raw):
+            return "pmc"
+        if is_medrxiv_payload(raw):
+            return "medrxiv"
+        if is_clinical_document_payload(raw):
+            return "clinical_document"
+        if is_openfda_payload(raw):
+            return "openfda"
+        if is_dailymed_payload(raw):
+            return "dailymed"
+        if is_rxnorm_payload(raw):
+            return "rxnorm"
+        if is_access_gudid_payload(raw):
+            return "access_gudid"
+        if is_nice_guideline_payload(raw):
+            return "nice_guideline"
+        if is_uspstf_payload(raw):
+            return "uspstf_guideline"
+        if is_mesh_payload(raw):
+            return "mesh"
+        if is_umls_payload(raw):
+            return "umls"
+        if is_loinc_payload(raw):
+            return "loinc"
+        if is_icd11_payload(raw):
+            return "icd11"
+        if is_snomed_payload(raw):
+            return "snomed"
+        if is_cdc_socrata_payload(raw):
+            return "cdc_socrata"
+        if is_cdc_wonder_payload(raw):
+            return "cdc_wonder"
+        if is_who_gho_payload(raw):
+            return "who_gho"
+        if is_openprescribing_payload(raw):
+            return "openprescribing"
+        return "unknown"
 
     def _prepare_literature_payload(
         self,
@@ -449,6 +637,7 @@ class ClinicalTrialsBuilder(IrBuilder):
             blocks=sections,
             tables=(),
             payload_provenance=None,
+            payload_metadata={},
         )
 
         outcomes = study.get("outcomes") or []
@@ -512,6 +701,7 @@ class PmcBuilder(IrBuilder):
             blocks=sections,
             tables=table_entries,
             payload_provenance=None,
+            payload_metadata={},
         )
 
 
@@ -542,6 +732,7 @@ class DailyMedBuilder(IrBuilder):
             blocks=block_payloads,
             tables=table_entries,
             payload_provenance=None,
+            payload_metadata={},
         )
 
 
@@ -564,6 +755,7 @@ class MinerUBuilder(IrBuilder):
             blocks=(),
             tables=(),
             payload_provenance=None,
+            payload_metadata={},
         )
 
         canonical_text = document.text
@@ -781,4 +973,5 @@ class GuidelineBuilder(IrBuilder):
             blocks=blocks,
             tables=table_entries,
             payload_provenance=None,
+            payload_metadata={},
         )

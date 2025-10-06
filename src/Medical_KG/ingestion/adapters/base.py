@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Collection
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Generic, Iterable, TypeVar, cast
@@ -31,15 +31,14 @@ class BaseAdapter(Generic[RawPayloadT], ABC):
         """Yield ingestion results as they are produced."""
 
         keyword_args: dict[str, object] = dict(kwargs)
-        raw_completed_ids = keyword_args.pop("completed_ids", None)
-        completed_ids_iter: Iterable[str] | None
-        if raw_completed_ids is None:
-            completed_ids_iter = None
-        elif isinstance(raw_completed_ids, Iterable):
-            completed_ids_iter = cast(Iterable[str], raw_completed_ids)
+        completed_arg = keyword_args.pop("completed_ids", None)
+        completed_lookup: set[str]
+        if completed_arg is None:
+            completed_lookup = set()
+        elif isinstance(completed_arg, Collection) and not isinstance(completed_arg, (str, bytes)):
+            completed_lookup = {str(identifier) for identifier in completed_arg}
         else:
-            raise TypeError("completed_ids must be an iterable of document IDs")
-        completed_lookup = set(completed_ids_iter or [])
+            raise TypeError("completed_ids must be an iterable of document identifiers")
         keyword_args.pop("resume", None)
         fetcher = self.fetch(*args, **keyword_args)
         if not hasattr(fetcher, "__aiter__"):

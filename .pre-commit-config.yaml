@@ -28,6 +28,12 @@ repos:
           - src/Medical_KG/utils/optional_dependencies.py
           - src/Medical_KG/cli.py
         pass_filenames: false
+      - id: mypy
+        name: mypy (IR module)
+        args:
+          - --strict
+          - src/Medical_KG/ir
+        pass_filenames: false
   - repo: local
     hooks:
       - id: validate-configs

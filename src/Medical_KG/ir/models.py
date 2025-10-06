@@ -133,6 +133,7 @@ class DocumentIR:
     blocks: List[Block] = field(default_factory=list)
     tables: List[Table] = field(default_factory=list)
     span_map: SpanMap = field(default_factory=SpanMap)
+    metadata: MutableMapping[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.utcnow)
     provenance: MutableMapping[str, Any] = field(default_factory=dict)
 
@@ -173,6 +174,7 @@ class DocumentIR:
                 for table in self.tables
             ],
             "span_map": self.span_map.to_list(),
+            "metadata": dict(self.metadata),
             "created_at": self.created_at.isoformat(),
             "provenance": dict(self.provenance),
         }

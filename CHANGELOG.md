@@ -7,10 +7,12 @@
 - Removed the final ledger compatibility shims (`LedgerState.LEGACY`, string coercion helpers) and introduced enum-only validation tooling.
 - Deleted the remaining legacy-focused regression tests and fixtures so the suite
   reflects the streaming-first API surface.
+- Retired IR builder legacy fallbacks; `IrBuilder.build()` and `IRValidator.validate_document()` now require typed payloads and reject synthesized raw data.
 
 ### Documentation
 - Documented the legacy wrapper removal across runbooks, contributor guidance, and operations checklists.
 - Archived CLI migration roadmaps and linked the documentation archive from active guides.
+- Added typed IR construction examples and clarified metadata validation requirements in the IR guide.
 
 ## [2.0.0] - 2025-10-03
 ### Removed

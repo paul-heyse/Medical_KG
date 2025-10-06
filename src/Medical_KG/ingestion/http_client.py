@@ -13,6 +13,7 @@ from typing import (
     AsyncIterator,
     Callable,
     Generic,
+    Iterable,
     Literal,
     Mapping,
     MutableMapping,
@@ -338,11 +339,8 @@ class AsyncHttpClient:
             for host, handler in telemetry.items():
                 self._register_telemetry_for_host(handler, host=host)
             return
-        if isinstance(telemetry, Sequence) and not isinstance(telemetry, (str, bytes)):
-            for handler in telemetry:
-                self._register_telemetry_for_host(handler)
-            return
-        self._register_telemetry_for_host(telemetry)
+        for handler in self._iter_handlers(telemetry):
+            self._register_telemetry_for_host(handler)
 
     def _register_telemetry_for_host(
         self,
@@ -352,16 +350,22 @@ class AsyncHttpClient:
     ) -> None:
         if telemetry is None:
             return
+        for handler in self._iter_handlers(telemetry):
+            self._register_callback("request", getattr(handler, "on_request", None), host=host)
+            self._register_callback("response", getattr(handler, "on_response", None), host=host)
+            self._register_callback("retry", getattr(handler, "on_retry", None), host=host)
+            self._register_callback("backoff", getattr(handler, "on_backoff", None), host=host)
+            self._register_callback("error", getattr(handler, "on_error", None), host=host)
+
+    @staticmethod
+    def _iter_handlers(
+        telemetry: HttpTelemetry | Sequence[HttpTelemetry],
+    ) -> Iterable[HttpTelemetry]:
         if isinstance(telemetry, Sequence) and not isinstance(telemetry, (str, bytes)):
             for handler in telemetry:
-                self._register_telemetry_for_host(handler, host=host)
-            return
-        handler = telemetry
-        self._register_callback("request", getattr(handler, "on_request", None), host=host)
-        self._register_callback("response", getattr(handler, "on_response", None), host=host)
-        self._register_callback("retry", getattr(handler, "on_retry", None), host=host)
-        self._register_callback("backoff", getattr(handler, "on_backoff", None), host=host)
-        self._register_callback("error", getattr(handler, "on_error", None), host=host)
+                yield handler
+        else:
+            yield telemetry
 
     @staticmethod
     def _resolve_request_headers(headers: Mapping[str, str] | None) -> dict[str, str]:

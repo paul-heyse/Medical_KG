@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import json
 import os
 import shutil
 import sys
@@ -226,6 +227,68 @@ if "httpx" not in sys.modules:
         httpx_module.Request = Request
 
         sys.modules["httpx"] = httpx_module
+elif not hasattr(sys.modules["httpx"], "BaseTransport"):
+    existing = sys.modules.pop("httpx")
+    try:  # pragma: no cover - executed only when dependency installed after stubbing
+        import httpx as _real_httpx
+    except ImportError:  # pragma: no cover
+        sys.modules["httpx"] = existing
+    else:
+        sys.modules["httpx"] = _real_httpx
+
+if "jsonschema" not in sys.modules:
+    jsonschema_module = types.ModuleType("jsonschema")
+
+    class ValidationError(Exception):
+        def __init__(self, message: str = "", **kwargs: Any) -> None:
+            super().__init__(message)
+            self.message = message
+            self.validator = kwargs.get("validator")
+            self.validator_value = kwargs.get("validator_value")
+            self.schema = kwargs.get("schema")
+
+    class FormatChecker:
+        def __init__(self) -> None:
+            self._checks: dict[str, Callable[[Any], bool]] = {}
+
+        def checks(self, name: str) -> Callable[[Callable[[Any], bool]], Callable[[Any], bool]]:
+            def _register(func: Callable[[Any], bool]) -> Callable[[Any], bool]:
+                self._checks[name] = func
+                return func
+
+            return _register
+
+    def validator_for(_schema: Any) -> type:
+        class _Validator:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                return None
+
+            @staticmethod
+            def check_schema(_schema: Any) -> None:
+                return None
+
+            def iter_errors(self, _instance: Any) -> list[Any]:
+                return []
+
+        return _Validator
+
+    jsonschema_module.FormatChecker = FormatChecker
+    jsonschema_module.ValidationError = ValidationError
+    validators_module = types.ModuleType("jsonschema.validators")
+    validators_module.validator_for = validator_for
+    jsonschema_module.validators = validators_module
+    sys.modules["jsonschema"] = jsonschema_module
+    sys.modules["jsonschema.validators"] = validators_module
+
+if "yaml" not in sys.modules:
+    yaml_module = types.ModuleType("yaml")
+
+    def _identity(value: Any, *args: Any, **kwargs: Any) -> Any:
+        return value
+
+    yaml_module.safe_load = _identity
+    yaml_module.safe_dump = lambda value, *args, **kwargs: json.dumps(value)  # type: ignore[assignment]
+    sys.modules["yaml"] = yaml_module
 
 
 import pytest  # noqa: E402

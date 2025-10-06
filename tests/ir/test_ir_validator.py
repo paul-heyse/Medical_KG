@@ -2,8 +2,18 @@ from __future__ import annotations
 
 import pytest
 
+from Medical_KG.ingestion.types import PubMedDocumentPayload
 from Medical_KG.ir.models import Block, DocumentIR, SpanMap, Table
 from Medical_KG.ir.validator import IRValidator, ValidationError
+
+PUBMED_RAW: PubMedDocumentPayload = {
+    "pmid": "12345",
+    "title": "Heading",
+    "abstract": "Content",
+    "authors": [],
+    "mesh_terms": [],
+    "pub_types": [],
+}
 
 
 def _make_document() -> DocumentIR:
@@ -26,13 +36,22 @@ def _make_document() -> DocumentIR:
     )
     document.span_map = SpanMap()
     document.span_map.add(0, len(document.raw_text), 0, len(document.text), "normalize", page=1)
-    document.provenance["source"] = "fixture"
+    document.provenance["pubmed"] = {"pmid": PUBMED_RAW["pmid"]}
+    document.metadata.update(
+        {
+            "payload_family": "literature",
+            "payload_type": "pubmed",
+            "identifier": PUBMED_RAW["pmid"],
+            "title": PUBMED_RAW["title"],
+            "summary": PUBMED_RAW["abstract"],
+        }
+    )
     return document
 
 
 def test_ir_validator_accepts_valid_document() -> None:
     validator = IRValidator()
-    validator.validate_document(_make_document())
+    validator.validate_document(_make_document(), raw=PUBMED_RAW)
     assert "document" in validator.schema_store
 
 
@@ -40,21 +59,21 @@ def test_ir_validator_requires_doc_id() -> None:
     document = _make_document()
     document.doc_id = ""
     with pytest.raises(ValidationError, match="doc_id"):
-        IRValidator().validate_document(document)
+        IRValidator().validate_document(document, raw=PUBMED_RAW)
 
 
 def test_ir_validator_requires_uri() -> None:
     document = _make_document()
     document.uri = ""
     with pytest.raises(ValidationError, match="uri"):
-        IRValidator().validate_document(document)
+        IRValidator().validate_document(document, raw=PUBMED_RAW)
 
 
 def test_ir_validator_enforces_language_pattern() -> None:
     document = _make_document()
     document.language = "english"
     with pytest.raises(ValidationError, match="language"):
-        IRValidator().validate_document(document)
+        IRValidator().validate_document(document, raw=PUBMED_RAW)
 
 
 def test_ir_validator_rejects_extra_document_fields() -> None:
@@ -139,7 +158,7 @@ def test_ir_validator_rejects_span_map_page_floor() -> None:
     end = len(document.text)
     document.span_map.add(end, end + 1, end, end + 1, "normalize", page=0)
     with pytest.raises(ValidationError, match="page numbers"):
-        IRValidator().validate_document(document)
+        IRValidator().validate_document(document, raw=PUBMED_RAW)
 
 
 def test_ir_validator_rejects_block_offset_overflow() -> None:
@@ -149,7 +168,7 @@ def test_ir_validator_rejects_block_offset_overflow() -> None:
     document.blocks[1].start = overflow
     document.blocks[1].end = overflow + 1
     with pytest.raises(ValidationError, match="exceeds"):
-        IRValidator().validate_document(document)
+        IRValidator().validate_document(document, raw=PUBMED_RAW)
 
 
 def test_ir_validator_document_missing_required_field() -> None:

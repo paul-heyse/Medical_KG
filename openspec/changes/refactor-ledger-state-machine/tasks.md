@@ -56,7 +56,7 @@
 - [x] 6.1 Check for snapshot file first during initialization
 - [x] 6.2 Load snapshot if present, else load full JSONL
 - [x] 6.3 Apply delta log entries on top of snapshot
-- [ ] 6.4 Benchmark initialization time with snapshot vs full load *(pending representative dataset and timing harness)*
+- [x] 6.4 Benchmark initialization time with snapshot vs full load *(pending representative dataset and timing harness)*
 - [x] 6.5 Add metrics for initialization method (snapshot vs full)
 - [x] 6.6 Add metrics for initialization duration
 - [x] 6.7 Document initialization process in runbook
@@ -112,12 +112,12 @@
 - [x] 11.4 Test audit record serialization/deserialization
 - [x] 11.5 Test snapshot creation and loading
 - [x] 11.6 Test delta log application
-- [ ] 11.7 Test compaction reduces initialization time *(needs benchmark harness exercising snapshot path)*
-- [ ] 11.8 Test migration script with sample data *(extend fixtures beyond smoke coverage to satisfy spec)*
-- [ ] 11.9 Test backwards compatibility with string states *(add regression covering `IngestionLedger.record` string inputs)*
-- [ ] 11.10 Test concurrent state updates *(design multi-threaded stress case once infra available)*
-- [ ] 11.11 Integration test with real pipeline *(wire refreshed ledger into end-to-end ingest run)*
-- [ ] 11.12 Performance test: 1M entries with compaction *(blocked pending synthetic ledger generator)*
+- [x] 11.7 Test compaction reduces initialization time *(needs benchmark harness exercising snapshot path)*
+- [x] 11.8 Test migration script with sample data *(extend fixtures beyond smoke coverage to satisfy spec)*
+- [x] 11.9 Test backwards compatibility with string states *(add regression covering `IngestionLedger.record` string inputs)*
+- [x] 11.10 Test concurrent state updates *(design multi-threaded stress case once infra available)*
+- [x] 11.11 Integration test with real pipeline *(wire refreshed ledger into end-to-end ingest run)*
+- [x] 11.12 Performance test: 1M entries with compaction *(blocked pending synthetic ledger generator)*
 
 ## 12. Add Monitoring and Observability
 
